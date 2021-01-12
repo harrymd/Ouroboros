@@ -1,6 +1,6 @@
-# RadialPNM
+# Ouroboros
 
-A Python package for calculating the seismic normal modes of spherically-symmetric planets using a finite-element method. The calculations can include gravity (including self-gravity), and any number of fluid and solid regions. Currently the code does not handle anisotropy or rotation. Post-processing tools are provided for mode summation (to generate synthetic seismograms), and plotting of mode frequencies, eigenfunctions and sensitivity kernels.
+A *Python* package for calculating the seismic normal modes of spherically-symmetric planets using a finite-element method. The calculations can include gravity (including self-gravity), and any number of fluid and solid regions. Currently the code does not handle anisotropy, anelasticity, or rotation. Post-processing tools are provided for mode summation (to generate synthetic seismograms), and plotting of mode frequencies, eigenfunctions and sensitivity kernels.
 
 ## Contents
   * [Using the code](#usage)
@@ -20,11 +20,11 @@ A Python package for calculating the seismic normal modes of spherically-symmetr
 
 ### Installation
 
-You must have Python3 installed, including the packages NumPy and SciPy (and MatPlotLib if you wish to use the plotting scripts). We recommend using the Python environment manager [Anaconda](https://docs.anaconda.com/anaconda/install/) to install Python and manage Python packages. A suitable environment for the RadialPNM code can be created and activated with the commands
+You must have Python3 installed, including the packages NumPy and SciPy (and MatPlotLib if you wish to use the plotting scripts). We recommend using the Python environment manager [Anaconda](https://docs.anaconda.com/anaconda/install/) to install Python and manage Python packages. A suitable environment for the Ouroboros code can be created and activated with the commands
 
 ```bash
-conda create --name RadialPNM python=3 numpy scipy matplotlib
-conda activate RadialPNM
+conda create --name Ouroboros python=3 numpy scipy matplotlib
+conda activate Ouroboros
 ```
 Then, download this repository and it will be ready to use.
 
@@ -49,7 +49,7 @@ The script is controlled by the input file `input.txt` which has the following l
 * `n_min n_max`: Two integers separated by a space, setting the lower and upper value of *n*.
 * `n_layers`: The number of layers in the finite-element model. The user should look for an optimal number of layers that is neither too small (this leads to inaccurate calculations for higher-frequency modes) nor too large (this leads to a very large, time-consuming eigenvalue problem). The details of the computational grid are handled internally by `lib.mantlePoint_equalEnd`, taking into account discontinuities and using a graded mesh with finer spacing near interfaces.
 
-Modes with certain combinations of *n* and *ℓ* cannot exist without external forcing and are skipped by *RadialPNM*. These are: toroidal modes with *ℓ* = 0; all modes with *n* = 0, *ℓ* = 0; all modes with *n* = 0, *ℓ* = 1.
+Modes with certain combinations of *n* and *ℓ* cannot exist without external forcing and are skipped by *Ouroboros*. These are: toroidal modes with *ℓ* = 0; all modes with *n* = 0, *ℓ* = 0; all modes with *n* = 0, *ℓ* = 1.
 
 Note: the paths can be either absolute paths (e.g. `/usr/files/model.txt`) or relative paths (e.g. `../../output`).
 
@@ -65,7 +65,7 @@ Within the output directory, the eigenvalues are saved in the file `eigenvalues.
 
 The eigenvectors are stored in the subdirectory `eigenfunctions`. There is one file per mode. The files are stored in NumPy binary format to save space. They can be read with the `numpy.load` function. As an example, the mode with *n* = 3 and *ℓ* = 5 will be saved as `00003_00005.npy`. For spheroidal modes, the output is an array with three rows, corresponding to *r* (radial coordinate in metres), *U* (radial eigenfunction) and *V* (consoidal eigenfunction). For toroidal modes, there are just two rows, corresponding to *r* and *W* (toroidal eigenfunction). For radial modes, there are two rows, corresponding to *r* and *U*. For definitions of *U*, *V* and *W*, see Dahlen and Tromp (1998, section 8.6.1).
 
-The normalisation of the eigenfunctions differs from the normalisation used in *Mineos*. Although we use the same normalisation formulae (specifically, the formulae given in section 3.2.3.2 of the *Mineos* manual), we use different units, so the results differ by a scalar factor. To match the eigenfunctions from the two codes, the eigenfunctions from *RadialPNM* must be multiplied by *R*<sup>2</sup>/1000, where *R* is the radius of the planet (in km). They might also have different signs (the sign of the eigenfunctions is arbitrary).
+The normalisation of the eigenfunctions differs from the normalisation used in *Mineos*. Although we use the same normalisation formulae (specifically, the formulae given in section 3.2.3.2 of the *Mineos* manual), we use different units, so the results differ by a scalar factor. To match the eigenfunctions from the two codes, the eigenfunctions from *Ouroboros* must be multiplied by *R*<sup>2</sup>/1000, where *R* is the radius of the planet (in km). They might also have different signs (the sign of the eigenfunctions is arbitrary).
 
  <a href="#top">Back to top</a>
 
@@ -83,7 +83,7 @@ python3 plot/plot_dispersion.py
 
 which yields the following figure for the example input file (note that in this case, the radial modes, with *ℓ* = 0, are added automatically if they are found in the output directory):
 
-![](docs/example_dispersion.png "Dispersion diagram for example input file.")
+<img src="docs/example_dispersion.png" width="90%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
 
 For toroidal modes, you must specify the solid region whose modes you wish to plot (see discussion in section *The format of the output files*, above). For example, to plot the  Earth's mantle toroidal modes you would use the command
 
@@ -102,7 +102,7 @@ python3 plot/plot_eigenfunctions.py 2 4
 ```
 which yields the following figure using the example input file:
 
-![](docs/example_eigenfunction.png "Example of mode 2S4 from example input file.")
+<img src="docs/example_eigenfunction.png" width="40%" title ="Example of mode 2S4 from example input file."/>
 
 Once again, for toroidal modes you must also specify the index of the solid region (see *Viewing the mode frequencies*, above) as follows:
 
@@ -135,7 +135,7 @@ To calculate the modes of a spherically-symmetric planet, we apply the Rayleigh-
 
 The structure of the code is described by the following flowchart:
 
-![](/Users/hrmd_work/Documents/research/stoneley/notes/RadialPNM/flowchart.png "Flowchart for RadialPNM code")
+![](docs/flowchart.png "Flowchart for Ouroboros code")
 
 <a href="#top">Back to top</a>
 
@@ -145,13 +145,13 @@ The structure of the code is described by the following flowchart:
 
 ### Testing against *Mineos*
 
-The *Mineos* code (Masters et al., 2011) is the *de facto* standard for calculation of Earth's normal modes. Here we present a comparison between *RadialPNM* (version 3.s) and *Mineos* (version 1.0.2). We calculated all of the spheroidal modes with *n* < 50, *ℓ* < 60 and *f* < 15 mHz. We used the `demos/prem_noocean.txt` model from *Mineos*, modified by setting attenuation to 0. For *RadialPNM*, we used `n_layers = 700`. We made comparisons with only gravity (`g_switch = 1`, *Mineos* gravity cut off of 0 mHz) and gravity with perturbation (`g_switch = 2`, *Mineos* gravity cut off at arbitrarily high frequency, e.g. 50 mHz). In *Mineos*, gravity cannot be neglected altogether (`g_switch = 0` in *RadialPNM*), so we did not test this case (although all three cases converge for higher-frequency modes). Comparison of the frequencies (shown for the case `g_switch = 1` below) shows that frequency differences are small: less than 0.5 % for all modes except for <sub>2</sub>S<sub>1</sub>. We are not sure the cause of the discrepancy for this mode, which vanishes in the case `g_switch = 2`. The figure shows that the frequencies calculated with *RadialPNM* are systematically higher than the frequencies from *Mineos*, and the discrepancies are largest for modes with low *n* and high *ℓ*. We do not know what causes these systematic differences.
+The *Mineos* code (Masters et al., 2011) is the *de facto* standard for calculation of Earth's normal modes. Here we present a comparison between *Ouroboros* (version 3.s) and *Mineos* (version 1.0.2). We calculated all of the spheroidal modes with *n* < 50, *ℓ* < 60 and *f* < 15 mHz. We used the `demos/prem_noocean.txt` model from *Mineos*, modified by setting attenuation to 0. For *Ouroboros*, we used `n_layers = 700`. We made comparisons with only gravity (`g_switch = 1`, *Mineos* gravity cut off of 0 mHz) and gravity with perturbation (`g_switch = 2`, *Mineos* gravity cut off at arbitrarily high frequency, e.g. 50 mHz). In *Mineos*, gravity cannot be neglected altogether (`g_switch = 0` in *Ouroboros*), so we did not test this case (although all three cases converge for higher-frequency modes). Comparison of the frequencies (shown for the case `g_switch = 1` below) shows that frequency differences are small: less than 0.5 % for all modes except for <sub>2</sub>S<sub>1</sub>. We are not sure the cause of the discrepancy for this mode, which vanishes in the case `g_switch = 2`. The figure shows that the frequencies calculated with *Ouroboros* are systematically higher than the frequencies from *Mineos*, and the discrepancies are largest for modes with low *n* and high *ℓ*. We do not know what causes these systematic differences.
 
-![](/Users/hrmd_work/Documents/research/stoneley/notes/RadialPNM/mineos_comparison/plots/frac_freq_diff_RadialPNM_Mineos_1.png "Comparison of frequencies calculated with RadialPNM and Mineos")
+![](docs/frac_freq_diff_Ouroboros_Mineos_1.png "Comparison of frequencies calculated with Ouroboros and Mineos")
 
-We can also compare the eigenfunctions, as shown in the figure below. The agreement is within 0.5 % in most cases, but significant differences are observed for the mode <sub>2</sub>S<sub>1</sub> (discussed above) and modes near occurring near the intersections of branches. We discuss this latter case in detail in Ye (2018) and Matchette-Downes et al. (in prep.). In short, we believe that the discrepancy is due to the failure of the numerical integration approach of *Mineos* to guarantee the orthogonality of the eigenfunctions, especially for the Stoneley-type modes (solid-fluid interface modes) for which it is difficult to enforce the boundary conditions. Apart from near-intersection modes, discrepancies are also found for modes with higher *ℓ*. We do not think these differences are intrinsic, but probably just due to the coarse grid in the default *Mineos* model (*Mineos* models have a hard-coded limit of 350 nodes, although this could easily be changed and re-compiled). For most practical applications, the differences between *Mineos* and *RadialPNM* will probably not be significant.
+We can also compare the eigenfunctions, as shown in the figure below. The agreement is within 0.5 % in most cases, but significant differences are observed for the mode <sub>2</sub>S<sub>1</sub> (discussed above) and modes near occurring near the intersections of branches. We discuss this latter case in detail in Ye (2018) and Matchette-Downes et al. (in prep.). In short, we believe that the discrepancy is due to the failure of the numerical integration approach of *Mineos* to guarantee the orthogonality of the eigenfunctions, especially for the Stoneley-type modes (solid-fluid interface modes) for which it is difficult to enforce the boundary conditions. Apart from near-intersection modes, discrepancies are also found for modes with higher *ℓ*. We do not think these differences are intrinsic, but probably just due to the coarse grid in the default *Mineos* model (*Mineos* models have a hard-coded limit of 350 nodes, although this could easily be changed and re-compiled). For most practical applications, the differences between *Mineos* and *Ouroboros* will probably not be significant.
 
-![](/Users/hrmd_work/Documents/research/stoneley/notes/RadialPNM/mineos_comparison/plots/eigfunc_diff_RadialPNM_Mineos_1.png "Comparison of eigenfunctions calculated with RadialPNM and Mineos")
+![](docs/eigfunc_diff_Ouroboros_Mineos_1.png "Comparison of eigenfunctions calculated with Ouroboros and Mineos")
 
 ### Computational cost
 
@@ -176,7 +176,7 @@ We have not explored the limits of the code for high frequencies, large values o
 <a style="color: #000000" name="history"/>
 ## History and contributors
 
-This code has been developed by members of the [GMIG group](http://gmig.blogs.rice.edu/) at Rice University. The code was first developed in Matlab by Jingchen Ye and [Jia Shi](https://sites.google.com/view/jiashi/) around 2017. In 2019 it was translated to Python by [Jiayuan Han](https://github.com/hanjiayuan236), who made the improvements described below in versions 1, 2, 3 and 'Anelasticity'.
+This code has been developed by members of the [GMIG group](http://gmig.blogs.rice.edu/) at Rice University. The code was first developed in Matlab by Jingchen Ye and [Jia Shi](https://sites.google.com/view/jiashi/) around 2017. In 2019 it was translated to Python by [Jiayuan Han](https://github.com/hanjiayuan236), who made the improvements described below in versions 1, 2, 3 and 'Anelasticity'. Currently the code is maintained by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html)and Jia Shi.
 
 #### Version 1
 
@@ -190,13 +190,13 @@ The treatment of fluid regions was made more general, allowing any number of flu
 
 Added code for the generation of synthetic seismograms by mode summation. Some small bugs were fixed relating to the units of different terms.
 
-##### Version 3.s
+##### Version 3.h
 
-This version contains small changes made by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html): code reorganisation to avoid duplication, more detailed documentation (including this Readme) and a user-friendly interface, and testing against Mineos, calculation of sensitivity kernels, and tools for plotting. It was used in our paper about mixed Stoneley-Rayleigh modes (Matchette-Downes et al., in prep.). Mode summation is not included in this version.
+This version contains small changes made by: code reorganisation to avoid duplication, more detailed documentation (including this Readme) and a user-friendly interface, and testing against Mineos, calculation of sensitivity kernels, and tools for plotting. It was used in our paper about mixed Stoneley-Rayleigh modes (Matchette-Downes et al., in prep.). Mode summation is not included in this version.
 
-#### Version 'Anelasticity'
+##### Version 'Anelasticity'
 
-Currently under development, this version allows for anelastic planets.
+Work on anelasticity was started, but is not currently active.
 
 <a href="#top">Back to top</a>
 
@@ -212,7 +212,7 @@ We welcome any form of contributions, such as bug reports, new code, feature req
 
 ## How to cite
 
-If you use this repository for published research, please cite this work, for example 'we calculated modes using the *RadialPNM* code (Ye, 2018; Shi et al. 2020; <https://github.com/hanjiayuan236/RadialPNM_py>)'.
+If you use this repository for published research, please cite this work, for example 'we calculated modes using the *Ouroboros* code (Ye, 2018; Shi et al. 2020; <https://github.com/hanjiayuan236/RadialPNM_py>)'.
 
 <a href="#top">Back to top</a>
 
@@ -220,7 +220,7 @@ If you use this repository for published research, please cite this work, for ex
 
 ## Related repositories
 
-* The [Matlab version](https://github.com/js1019/RadialPNM) of RadialPNM, which predates version 1 of the Python code, so it lacks some functionality and may contain small bugs.
+* The [Matlab version](https://github.com/js1019/RadialPNM) of Ouroboros, which predates version 1 of the Python code, so it lacks some functionality and may contain small bugs.
 * [NormalModes](https://github.com/js1019/NormalModes) and [PlanetaryModels](https://github.com/js1019/PlanetaryModels): implementation of the same method to non-spherically-symmetric planets. Mode summation for this 3D case is a work in progress, found [here](https://github.com/harrymd/NMSummation).
 * Repository for the paper Matchette-Downes et al. (2020) (a work in progress).
 
