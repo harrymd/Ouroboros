@@ -1,7 +1,0 @@
-model/prem_noq_noocean.txt
-../../output/RadialPNM
-1
-S
-0 5 
-0 10 
-700

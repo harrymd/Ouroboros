@@ -21,31 +21,10 @@ from scipy.linalg import block_diag
 from scipy.interpolate import interp1d
 import scipy.sparse as sps
 
-from common import load_model
+from common import mkdir_if_not_exist, load_model
 import FEM
 import lib
 import setup
-
-# Use jit if it is installed and requested.
-use_jit = False
-def identity_decorator(obj):
-
-    return obj
-
-if use_jit:
-    
-    try:
-
-        from numba import jit
-
-    except ImportError:
-
-        print('Could not import jit. Will not use jit.')
-        jit = identity_decorator
-        
-else:
-
-    jit = identity_decorator
 
 # Set G value (units of cm^3 g^(-1)s^(-2)*e-6). 
 ## G value updated to current value based on Wikipedia.
@@ -54,10 +33,18 @@ else:
 G = 6.6723e-2
 
 # Toroidal modes. -------------------------------------------------------------
-def toroidal_modes(model_path, dir_output, lmin,lmax,nmin,nmax,num_elmt):
+def toroidal_modes(run_info):
     '''
     Get toroidal modes of each layer from inside to outside(inner core to mantle for earth), returning with several layers of modes.
     '''
+
+    # Unpack input.
+    model_path  = run_info['path_model']
+    dir_output  = run_info['dir_output']
+    dir_type    = run_info['dirs_type']['T']
+    lmin, lmax  = run_info['l_lims']
+    nmin, nmax  = run_info['n_lims']
+    num_elmt    = run_info['n_layers']
     
     # Set the gravity control variable.
     switch = 'T'
@@ -71,7 +58,7 @@ def toroidal_modes(model_path, dir_output, lmin,lmax,nmin,nmax,num_elmt):
     rho, radius,
     block_type, brk_radius, brk_num, layers,
     dir_eigenfunc_list, path_eigenvalues_list) = \
-        prep_fem(model_path, dir_output, num_elmt, switch)
+        prep_fem(model_path, dir_type, num_elmt, switch)
 
     for l in range(lmin,lmax+1):
         
@@ -177,7 +164,15 @@ def build_matrices_toroidal_and_solve(model, count_thick, i, invV, order, Dr):
     return eigvals, eigvecs
 
 # Radial modes. ---------------------------------------------------------------
-def radial_modes(model_path, dir_output, nmin,nmax,num_elmt, switch):
+def radial_modes(run_info):
+
+    # Unpack input.
+    model_path  = run_info['path_model']
+    dir_output  = run_info['dir_output']
+    dir_type    = run_info['dirs_type']['R']
+    nmin, nmax  = run_info['n_lims']
+    num_elmt    = run_info['n_layers']
+    switch      = run_info['switch']
     
     # Set up the model and various finite-element parameters.
     (model, vs, count_thick, thickness, essen,
@@ -188,7 +183,7 @@ def radial_modes(model_path, dir_output, nmin,nmax,num_elmt, switch):
     rho, radius,
     block_type, brk_radius, brk_num, layers,
     dir_eigenfunc, path_eigenvalues) = \
-        prep_fem(model_path, dir_output, num_elmt, switch)
+        prep_fem(model_path, dir_type, num_elmt, switch)
 
     print('radial_modes (switch = {:})'.format(switch))
         
@@ -425,7 +420,17 @@ def helmholtz_R_GP(
     return A_singularity, B_singularity, A0_inv, E_singularity, B_eqv_pressure
 
 # Spheroidal modes. -----------------------------------------------------------
-def spheroidal_modes(model_path, dir_output, lmin, lmax, nmin, nmax, num_elmt, switch): 
+def spheroidal_modes(run_info):
+
+    # Unpack input.
+    model_path  = run_info['path_model']
+    dir_output  = run_info['dir_output']
+    dir_type    = run_info['dirs_type']['S']
+    lmin, lmax  = run_info['l_lims']
+    nmin, nmax  = run_info['n_lims']
+    num_elmt    = run_info['n_layers']
+    switch      = run_info['switch']
+
     # Set up the model and various finite-element parameters.
     (model, vs, count_thick, thickness, essen,
     invV, invV_p, invV_V, invV_P,
@@ -435,7 +440,7 @@ def spheroidal_modes(model_path, dir_output, lmin, lmax, nmin, nmax, num_elmt, s
     rho, radius,
     block_type, brk_radius, brk_num, layers,
     dir_eigenfunc, path_eigenvalues) = \
-        prep_fem(model_path, dir_output, num_elmt, switch)
+        prep_fem(model_path, dir_type, num_elmt, switch)
 
     # Loop over angular order.
     for l in range(lmin, lmax + 1):
@@ -1011,8 +1016,21 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
     order_P = set_if_needed(2, switch, ['R_GP', 'S_GP'])
 
     # Load model data.
-    model_data, shape, radius, rho, vp, vs, mu, ka = load_model(model_path)
-
+    model = load_model(model_path)
+    # Unpack.
+    r   = model['r']
+    rho = model['rho']
+    vp = model['v_p']
+    vs = model['v_s']
+    # Convert to units used internally by Ouroboros.
+    r   = r/1.0E6   # Million meters.
+    rho = rho/1.0E3 # g/cm3.
+    vp = vp/1.0E3 # km/s.
+    vs = vs/1.0E3 # km/s.
+    # Calculate bulk and shear moduli (units of GPa).
+    mu = rho*(vs**2.0)
+    ka = rho*((vp**2.0) - (4.0/3.0)*(vs**2.0))
+    
     # brk_num:      Records the position of solid-liquid boundary.
     # layers:       Number of 'layers' (continuous regions of solid or fluid).
     # Thickness:    Thickness of each layer.
@@ -1209,13 +1227,6 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
             dir_eigenfunc, path_eigenvalues)
 
 # Generic utilities. ----------------------------------------------------------
-def mkdir_if_not_exist(dir_):
-
-    if not os.path.isdir(dir_):
-        
-        print('Creating directory {:}'.format(dir_))
-        os.mkdir(dir_)
-
 def rm_file_if_exist(path):
 
     if os.path.exists(path):

@@ -78,10 +78,16 @@ Scripts are provided in the directory `plot/` to make simple plots of mode frequ
 Without moving away from the top-level directory, you can plot the mode frequencies with the command
 
 ```bash
-python3 plot/plot_dispersion.py
+plot_dispersion.py -h --toroidal LAYER_NUMBER --mineos path_to_input_file
 ```
 
-which yields the following figure for the example input file (note that in this case, the radial modes, with *ℓ* = 0, are added automatically if they are found in the output directory):
+so, for example
+
+```
+plot_dispersion.py example_inputs/input_Ouroboros.txt
+```
+
+yields the following plot of spheroidal modes generated with the example input file (note that in this case, the radial modes, with *ℓ* = 0, are added automatically if they are found in the output directory):
 
 <img src="docs/example_dispersion.png" width="90%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
 
@@ -89,29 +95,42 @@ For toroidal modes, you must specify the solid region whose modes you wish to pl
 
 ```bash
 # Plot toroidal modes from second solid region.
-python3 plot/plot_dispersion.py 1
+python3 plot/plot_dispersion.py --toroidal 1 path_to_input_file
 ```
+
+To plot dispersion from *Mineos* output, use the `--mineos` flag.
 
 #### Viewing the mode displacement patterns
 
-Similarly, eigenfunctions can be plotted from the command line, specifying *n* and *ℓ*:
+Similarly, eigenfunctions can be plotted from the command line, specifying the mode type (R, S or T) as well as *n* and *ℓ*:
+
+```
+plot_eigenfunctions.py -h --toroidal LAYER_NUMBER --mineos
+	path_to_input_file mode_type n l
+```
+
+so, for example
 
 ```bash
-# Plot mode with n = 2, l = 4.
-python3 plot/plot_eigenfunctions.py 2 4
+# Plot spheroidal mode with n = 2, l = 4.
+python3 plot/plot_eigenfunctions.py example_inputs/input_Ouroboros S 2 4
 ```
-which yields the following figure using the example input file:
+
+yields the following figure using the example input file:
 
 <img src="docs/example_eigenfunction.png" width="40%" title ="Example of mode 2S4 from example input file."/>
 
 Once again, for toroidal modes you must also specify the index of the solid region (see *Viewing the mode frequencies*, above) as follows:
 
 ```bash
-# Plot mode with n = 2, l = 4, from the second solid region.
-python3 plot/plot_eigenfunctions.py 2 4 1
+# Plot toroidal mode with n = 2, l = 4, from the second solid region.
+python3 plot/plot_eigenfunctions.py example_inputs/input_Ouroboros
+	--toroidal 1 T 2 4
 ```
 
-#### Sensitivity kernels
+For radial modes, *ℓ* must be 0. To plot modes from *Mineos* output, use the `--mineos` flag.
+
+#### Calculating sensitivity kernels
 
 Sensitivity kernels are calculated using the formulae from Dahlen and Tromp (1998, section 9.3) derived using Rayleigh's principle.
 

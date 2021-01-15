@@ -6,110 +6,9 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import load_model, mkdir_if_not_exist, read_Mineos_input_file, read_RadialPNM_input_file
-from plot.plot_common import get_r_fluid_solid_boundary, prep_run_info
-from post.read_output import get_dir_eigval_RadialPNM, load_eigenfreq_RadialPNM, load_eigenfunc_RadialPNM
+from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_model, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file
+from post.read_output import load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros
 from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
-
-def plot_RadialPNM_old(RadialPNM_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True): 
-
-    k = np.sqrt((l*(l + 1.0)))
-
-    # Get model information for axis limits, scaling and horizontal lines.
-    model_data, shape, radius, rho, vp, vs, mu, ka = load_model(RadialPNM_info['path_model'])
-    # Convert to km.
-    radius = radius*1.0E3
-    # r_srf Radius of planet.
-    # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
-    r_srf = radius[-1]
-    i_fluid, r_solid_fluid_boundary = get_r_fluid_solid_boundary(radius, vs)
-
-    # Get frequency information for title.
-    f_RadialPNM = load_eigenfreq_RadialPNM(RadialPNM_info, mode_type, n_q = n, l_q = l, i_toroidal = i_toroidal)
-    if mode_type == 'S': 
-
-        r_RadialPNM, U_RadialPNM, V_RadialPNM = load_eigenfunc_RadialPNM(RadialPNM_info, mode_type, n, l)
-
-    elif mode_type == 'T':
-
-        r_RadialPNM, W_RadialPNM = load_eigenfunc_RadialPNM(RadialPNM_info, mode_type, n, l, i_toroidal = i_toroidal)
-
-    # Convert to Mineos normalisation.
-    ratio = 1.0E-3*(r_srf**2.0)
-    if mode_type == 'S':
-
-        U_RadialPNM = U_RadialPNM*ratio
-        V_RadialPNM = k*V_RadialPNM*ratio
-
-    elif mode_type == 'T':
-
-        W_RadialPNM = k*W_RadialPNM*ratio
-
-    #title = '$_{{{:d}}}${:}$_{{{:d}}}$, {:.4f} mHz'.format(n, mode_type, l, f_RadialPNM)
-    title = '$_{{{:d}}}${:}$_{{{:d}}}$'.format(n, mode_type, l)
-
-    # Find axis limits.
-    if mode_type == 'S':
-
-        vals = np.concatenate([U_RadialPNM, V_RadialPNM])
-
-    else:
-
-        vals = W_RadialPNM
-
-    max_ = np.max(np.abs(vals))
-
-
-    
-    if ax is None:
-        
-        r_range = np.max(r_RadialPNM) - np.min(r_RadialPNM)
-        r_frac = r_range/r_srf
-        #fig = plt.figure(figsize = (5.5, 8.5))
-        fig = plt.figure(figsize = (5.5, 11.0*r_frac))
-        ax  = plt.gca()
-
-    common_args = {'ax' : ax, 'show' : False, 'title' : title}
-    
-    if mode_type == 'S':
-
-        plot_eigenfunc_S(r_RadialPNM, U_RadialPNM, V_RadialPNM,
-                h_lines = r_solid_fluid_boundary, **common_args)
-
-    elif mode_type == 'T':
-        
-        plot_eigenfunc_T(r_RadialPNM, W_RadialPNM, ax = ax, show = False)
-
-    #ax.set_title(title, fontsize = 20) 
-    #ax.set_xlim([-1.1*max_, 1.1*max_])
-    
-    if transparent:
-
-        set_patch_facecolors(fig, ax) 
-
-    plt.tight_layout()
-    
-    if save:
-        
-        dir_out = get_dir_eigval_RadialPNM(RadialPNM_info, mode_type)
-        dir_plot_RadialPNM = os.path.join(dir_out, 'plots')
-        if mode_type in ['S', 'R']:
-
-            fig_name = 'eigfunc_RadialPNM_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(n, mode_type, l, RadialPNM_info['g_switch'])
-
-        else:
-
-            fig_name = 'eigfunc_RadialPNM_{:>05d}_{:}{:1d}_{:>05d}_{:1d}.png'.format(n, mode_type, i_toroidal, l, RadialPNM_info['g_switch'])
-
-        fig_path = os.path.join(dir_plot_RadialPNM, fig_name)
-        print('Saving figure to {:}'.format(fig_path))
-        plt.savefig(fig_path, dpi = 300, bbox_inches = 'tight')
-
-    if show:
-
-        plt.show()
-
-    return ax
 
 def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True): 
 
@@ -118,13 +17,13 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     # Get model information for axis limits, scaling and horizontal lines.
     print(run_info['path_model'])
-    model_data, shape, radius, rho, vp, vs, mu, ka = load_model(run_info['path_model'])
+    model = load_model(run_info['path_model'])
     # Convert to km.
-    radius = radius*1.0E3
+    model['r'] = model['r']*1.0E-3
     # r_srf Radius of planet.
     # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
-    r_srf = radius[-1]
-    i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(radius, vs)
+    r_srf = model['r'][-1]
+    i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(model['r'], model['v_s'])
 
     # Get frequency information for title.
     if run_info['use_mineos']:
@@ -135,7 +34,11 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         f = load_eigenfreq_Mineos(run_info, mode_type, n_q = n, l_q = l)
 
-        if mode_type == 'S': 
+        if mode_type == 'R':
+
+            raise NotImplementedError
+
+        elif mode_type == 'S': 
 
             r, U, _, V, _, _, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l)
 
@@ -148,19 +51,28 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     else:
 
-        f = load_eigenfreq_RadialPNM(run_info, mode_type, n_q = n, l_q = l, i_toroidal = i_toroidal)
+        f = load_eigenfreq_Ouroboros(run_info, mode_type, n_q = n, l_q = l, i_toroidal = i_toroidal)
 
-        if mode_type == 'S': 
+        if mode_type == 'R':
 
-            r, U, V = load_eigenfunc_RadialPNM(run_info, mode_type, n, l)
+            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
+            U[0] = 0.0 # Value of U at planet core appears to be buggy for R modes.
+
+        elif mode_type == 'S': 
+
+            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
 
         elif mode_type == 'T':
 
-            r, W = load_eigenfunc_RadialPNM(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal)
 
         # Convert to Mineos normalisation.
         ratio = 1.0E-3*(r_srf**2.0)
-        if mode_type == 'S':
+        if mode_type == 'R':
+            
+            U = U*ratio
+
+        elif mode_type == 'S':
 
             U = U*ratio
             V = k*V*ratio
@@ -169,11 +81,36 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
             W = k*W*ratio
 
-    #title = '$_{{{:d}}}${:}$_{{{:d}}}$, {:.4f} mHz'.format(n, mode_type, l, f_RadialPNM)
-    title = '$_{{{:d}}}${:}$_{{{:d}}}$'.format(n, mode_type, l)
+    #print(r.shape)
+    #print(U.shape)
+    #print(r[0:10])
+    #print(U[0:10])
+    #import sys
+    #sys.exit()
+
+    #title = '$_{{{:d}}}${:}$_{{{:d}}}$, {:.4f} mHz'.format(n, mode_type, l, f_Ouroboros)
+    if mode_type in ['R', 'S']:
+
+        mode_type_for_title = 'S'
+
+    else:
+
+        if i_toroidal == 0:
+            
+            mode_type_for_title = 'I'
+        
+        else:
+            
+            mode_type_for_title = 'T'
+
+    title = '$_{{{:d}}}${:}$_{{{:d}}}$'.format(n, mode_type_for_title, l)
 
     # Find axis limits.
-    if mode_type == 'S':
+    if mode_type == 'R':
+
+        vals = U
+
+    elif mode_type == 'S':
 
         vals = np.concatenate([U, V])
 
@@ -183,8 +120,6 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     max_ = np.max(np.abs(vals))
 
-
-    
     if ax is None:
         
         r_range = np.max(r) - np.min(r)
@@ -194,15 +129,19 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         ax  = plt.gca()
 
     common_args = {'ax' : ax, 'show' : False, 'title' : title}
+
+    if mode_type == 'R':
+
+        plot_eigenfunc_R_or_T(r, U, h_lines = r_solid_fluid_boundary, label = 'U', **common_args)
     
-    if mode_type == 'S':
+    elif mode_type == 'S':
 
         plot_eigenfunc_S(r, U, V,
                 h_lines = r_solid_fluid_boundary, **common_args)
 
     elif mode_type == 'T':
         
-        plot_eigenfunc_T(r, W, ax = ax, show = False)
+        plot_eigenfunc_R_or_T(r, W, h_lines = None, label = 'W', **common_args)
 
     #ax.set_title(title, fontsize = 20) 
     #ax.set_xlim([-1.1*max_, 1.1*max_])
@@ -223,9 +162,11 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         else:
 
-            fig_name = 'eigfunc_RadialPNM'
-            dir_out = get_dir_eigval_RadialPNM(run_info, mode_type)
+            fig_name = 'eigfunc_Ouroboros'
+            _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
             dir_plot = os.path.join(dir_out, 'plots')
+
+        mkdir_if_not_exist(dir_plot)
 
         if mode_type in ['S', 'R']:
 
@@ -325,6 +266,19 @@ def set_patch_facecolors(fig, ax):
 
     return
 
+def plot_eigenfunc_R_or_T(r, U_or_W, ax = None, show = False, h_lines = None, add_legend = True, legend_loc = 'best', title = None, label = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km'):
+
+    ax.plot(U_or_W, r, label = label)
+
+    #ax.axhline(3480.0, color = 'k', linestyle = ':')
+    ax.axvline(0.0, color = 'k', linestyle = ':')
+
+    max_abs_U_or_W_plot = np.max(np.abs(U_or_W))
+    
+    tidy_axes(ax, r, max_abs_U_or_W_plot, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label)
+
+    return
+
 def plot_eigenfunc_T(r, W, ax = None, show = False):
 
     ax.plot(W, r, label = 'W')
@@ -340,15 +294,40 @@ def main():
 
     # Read input arguments.
     parser = argparse.ArgumentParser()
+    parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
+    parser.add_argument("mode_type", choices = ['R', 'S', 'T'], help = 'Mode type (radial, spheroidal or toroidal).')
     parser.add_argument("n", type = int, help = "Plot mode with radial order n.")
-    parser.add_argument("l", type = int, help = "Plot mode with angular order l.")
+    parser.add_argument("l", type = int, help = "Plot mode with angular order l (must be 0 for radial modes).")
     parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell).", type = int)
-    parser.add_argument("--mineos", action = "store_true", help = "Plot Mineos modes (default: RadialPNM).")
+    parser.add_argument("--mineos", action = "store_true", help = "Plot Mineos modes (default: Ouroboros).")
     args = parser.parse_args()
 
+    # Rename input arguments.
+    path_input = args.path_to_input_file
+    mode_type  = args.mode_type
+    n           = args.n
+    l           = args.l
+    i_toroidal = args.layer_number
+    use_mineos = args.mineos
+
+    if mode_type == 'R':
+
+        assert l == 0, 'Must have l = 0 for radial modes.'
+
+    # Check input arguments.
+    if mode_type in ['R', 'S']:
+
+        assert i_toroidal is None, 'The --toroidal flag should not be used for mode types R or S.'
+
+    else:
+
+        assert i_toroidal is not None, 'Must use the --toroidal flag for mode type T.'
+
     # Read the input file and command-line arguments.
-    #RadialPNM_info, mode_type, n, l, i_toroidal = prep_RadialPNM_info()
-    run_info, mode_type, n, l, i_toroidal = prep_run_info(args)
+    run_info = read_Ouroboros_input_file(path_input)
+    run_info['use_mineos'] = use_mineos
+    #Ouroboros_info, mode_type, n, l, i_toroidal = prep_Ouroboros_info()
+    #run_info, mode_type, n, l, i_toroidal = prep_run_info(args)
 
     # Plot.
     plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None) 

@@ -6,19 +6,20 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import mkdir_if_not_exist, read_Mineos_input_file, read_RadialPNM_input_file 
+from common import mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
 from stoneley.code.common.Mineos import load_eigenfreq_Mineos
-from post.read_output import get_dir_eigval_RadialPNM, load_eigenfreq_RadialPNM
-#from stoneley.code.mineos.process_mineos import read_minos_bran_output
+from post.read_output import load_eigenfreq_Ouroboros
 
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell).", type = int)
-    parser.add_argument("--mineos", action = "store_true", help = "Plot Mineos modes (default: RadialPNM).")
+    parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
+    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
+    parser.add_argument("--mineos", action = "store_true", help = "Plot Mineos modes (default: Ouroboros).")
     args = parser.parse_args()
 
     # Rename input arguments.
+    path_input = args.path_to_input_file
     i_toroidal = args.layer_number
     use_mineos = args.mineos
 
@@ -29,51 +30,50 @@ def main():
         read_Mineos_input_file()
 
     else:
+        
+        run_info = read_Ouroboros_input_file(path_input)
+        #path_model, dir_output, g_switch, mode_type, l_min, l_max, n_min, n_max, n_layers = \
+        #read_Ouroboros_input_file()
 
-        path_model, dir_output, g_switch, mode_type, l_min, l_max, n_min, n_max, n_layers = \
-        read_RadialPNM_input_file()
+    run_info['use_mineos'] = use_mineos
 
-    if mode_type == 'R':
+    ## Get the name of the model from the file.
+    #name_model = os.path.splitext(os.path.basename(run_info['path_model']))[0]
 
-        print('Cannot plot dispersion (l versus f) for radial modes (which all have l = 0). However, try changing mode_type to \'S\', radial modes will be included in the plot.')
-        raise ValueError
+    ## Store n- and l- limits as arrays.
+    #n_lims      = [n_min, n_max]
+    #l_lims      = [l_min, l_max]
 
-    #if mode_type == 'T':
+    #run_info = {        'dir_output': dir_output, 
+    #                    'path_model' : path_model,
+    #                    'model'     : name_model,
+    #                    'n_lims'    : n_lims,
+    #                    'l_lims'    : l_lims,
+    #                    'g_switch'  : g_switch,
+    #                    'use_mineos': use_mineos}
 
-    #    assert len(sys.argv) == 2, 'Usage for plotting toroidal modes: python3 plot/plot_dispersion.py 0, where 0 is the layer number.'
+    #if not use_mineos:
 
-    #    i_toroidal = int(sys.argv[1])
+    #    run_info['n_layers'] = n_layers
 
-    #else:
+    if i_toroidal is not None:
 
-    #    assert len(sys.argv) == 1, 'Usage for plotting spheroidal modes: python3 plot/plot_dispersion.py'
-    #    i_toroidal = None
+        mode_type = 'T'
 
-    # Get the name of the model from the file.
-    name_model = os.path.splitext(os.path.basename(path_model))[0]
+    elif run_info['mode_types'] == ['R']:
+        
+        print('Cannot plot dispersion diagram for only radial modes. Try including spheroidal modes in input file.')
 
-    # Store n- and l- limits as arrays.
-    n_lims      = [n_min, n_max]
-    l_lims      = [l_min, l_max]
+    else:
 
-    run_info = {        'dir_output': dir_output, 
-                        'path_model' : path_model,
-                        'model'     : name_model,
-                        'n_lims'    : n_lims,
-                        'l_lims'    : l_lims,
-                        'g_switch'  : g_switch,
-                        'use_mineos': use_mineos}
-
-    if not use_mineos:
-
-        run_info['n_layers'] = n_layers
+        mode_type = 'S'
 
     plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal)
 
     return
 
 def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = True, i_toroidal = None):
-    
+
     # Get frequency information.
     if run_info['use_mineos']:
 
@@ -94,11 +94,11 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
 
     else:
 
-        n, l, f = load_eigenfreq_RadialPNM(run_info, mode_type, i_toroidal = i_toroidal)
+        n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i_toroidal)
     
     # Try to also load radial modes.
     if mode_type == 'S':
-    
+
         try:
 
             if run_info['use_mineos']:
@@ -113,7 +113,7 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
 
             else:
 
-                nlf_radial = load_eigenfreq_RadialPNM(run_info, 'R')
+                nlf_radial = load_eigenfreq_Ouroboros(run_info, 'R')
     
         except OSError:
 
@@ -145,7 +145,8 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
 
         else:
 
-            dir_out = get_dir_eigval_RadialPNM(run_info, mode_type)
+            _, _, _, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
+            dir_out = dir_type
 
         dir_plot = os.path.join(dir_out, 'plots')
         mkdir_if_not_exist(dir_plot)

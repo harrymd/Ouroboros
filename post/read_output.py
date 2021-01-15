@@ -2,52 +2,30 @@ import os
 
 import numpy as np
 
-# Loading data from RadialPNM. ------------------------------------------------
-def get_dir_eigval_RadialPNM(RadialPNM_info, mode_type):
+from common import get_Ouroboros_out_dirs
+
+# Loading data from Ouroboros. ------------------------------------------------
+def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
     
-    # Unpack the RadialPNM parameters.
-    dir_output  = RadialPNM_info['dir_output']
-    model       = RadialPNM_info['model']
-    n_layers    = RadialPNM_info['n_layers']
-    n_max       = RadialPNM_info['n_lims'][1]
-    l_max       = RadialPNM_info['l_lims'][1]
-    g_switch    = RadialPNM_info['g_switch']
+    ## Unpack the Ouroboros parameters.
+    #dir_output  = Ouroboros_info['dir_output']
+    #n_layers    = Ouroboros_info['n_layers']
+    #n_max       = Ouroboros_info['n_lims'][1]
+    #l_max       = Ouroboros_info['l_lims'][1]
+    #g_switch    = Ouroboros_info['g_switch']
 
-    # By default, the toroidal modes have g_switch = 0.
-    if mode_type == 'T':
+    ## By default, the toroidal modes have g_switch = 0.
+    #if mode_type == 'T':
 
-        g_switch = 0
-
-    # Find the output file.
-    name_model_with_layers  = '{:}_{:>05d}'.format(model, n_layers)
-    dir_model               = os.path.join(dir_output, name_model_with_layers)
-    name_run                = '{:>05d}_{:>05d}_{:1d}'.format(n_max, l_max, g_switch)
-    dir_run                 = os.path.join(dir_model, name_run)
-    dir_type                = os.path.join(dir_run, mode_type)
-
-    return dir_type
-
-def load_eigenfreq_RadialPNM(RadialPNM_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
-    
-    # Unpack the RadialPNM parameters.
-    dir_output  = RadialPNM_info['dir_output']
-    n_layers    = RadialPNM_info['n_layers']
-    n_max       = RadialPNM_info['n_lims'][1]
-    l_max       = RadialPNM_info['l_lims'][1]
-    g_switch    = RadialPNM_info['g_switch']
-
-    # By default, the toroidal modes have g_switch = 0.
-    if mode_type == 'T':
-
-        g_switch = 0
+    #    g_switch = 0
 
     if mode_type == 'T':
 
         assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
 
-    # Generate the name of the output directory based on the RadialPNM
+    # Generate the name of the output directory based on the Ouroboros
     # parameters.
-    dir_eigval  = get_dir_eigval_RadialPNM(RadialPNM_info, mode_type)
+    _, _, _, dir_eigval  = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
 
     # Generate the name of the output file.
     if i_toroidal is None:
@@ -86,14 +64,14 @@ def load_eigenfreq_RadialPNM(RadialPNM_info, mode_type, n_q = None, l_q = None, 
 
         return n, l, f
 
-def load_eigenfunc_RadialPNM(RadialPNM_info, mode_type, n, l, i_toroidal = None):
+def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None):
 
-    # Unpack the RadialPNM parameters.
-    dir_output  = RadialPNM_info['dir_output']
-    n_layers    = RadialPNM_info['n_layers']
-    n_max       = RadialPNM_info['n_lims'][1]
-    l_max       = RadialPNM_info['l_lims'][1]
-    g_switch    = RadialPNM_info['g_switch']
+    # Unpack the Ouroboros parameters.
+    dir_output  = Ouroboros_info['dir_output']
+    n_layers    = Ouroboros_info['n_layers']
+    n_max       = Ouroboros_info['n_lims'][1]
+    l_max       = Ouroboros_info['l_lims'][1]
+    g_switch    = Ouroboros_info['g_switch']
 
     # By default, the toroidal modes have g_switch = 0.
     if mode_type == 'T':
@@ -115,8 +93,8 @@ def load_eigenfunc_RadialPNM(RadialPNM_info, mode_type, n, l, i_toroidal = None)
         dir_eigenfuncs = 'eigenfunctions_{:>03d}'.format(i_toroidal)
 
     # Find the directory containing the eigenfunctions (which is contained
-    # within the eigenvalue directory) based on the RadialPNM parameters.
-    dir_eigval      = get_dir_eigval_RadialPNM(RadialPNM_info, mode_type)
+    # within the eigenvalue directory) based on the Ouroboros parameters.
+    _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
     dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
     file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
     path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
@@ -149,18 +127,18 @@ def load_eigenfunc_RadialPNM(RadialPNM_info, mode_type, n, l, i_toroidal = None)
 
         raise NotImplementedError
 
-def get_kernel_dir(dir_output, RadialPNM_info, mode_type):
+def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     
-    # Unpack the RadialPNM run information.
-    name_model  = RadialPNM_info['model']
-    n_layers    = RadialPNM_info['n_layers']
-    n_max       = RadialPNM_info['n_lims'][1]
-    l_max       = RadialPNM_info['l_lims'][1]
-    g_switch    = RadialPNM_info['g_switch']
-    version     = RadialPNM_info['version']
+    # Unpack the Ouroboros run information.
+    name_model  = Ouroboros_info['model']
+    n_layers    = Ouroboros_info['n_layers']
+    n_max       = Ouroboros_info['n_lims'][1]
+    l_max       = Ouroboros_info['l_lims'][1]
+    g_switch    = Ouroboros_info['g_switch']
+    version     = Ouroboros_info['version']
 
     #dir_base = os.path.join(os.sep, 'Users', 'hrmd_work', 'Documents', 'research', 'stoneley')
-    #dir_output = os.path.join(dir_base, 'output', 'RadialPNM_py_v3_hrmd')
+    #dir_output = os.path.join(dir_base, 'output', 'Ouroboros_py_v3_hrmd')
 
     dir_RPNM = os.path.join(dir_output, version)
 
