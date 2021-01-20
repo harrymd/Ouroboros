@@ -81,48 +81,24 @@ def solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, th
     k = np.sqrt(l*(l + 1.0))
     model.set_k(k)
 
-    path_eigenvalues_list = iter(path_eigenvalues_list)
-    dir_eigenfunc_list = iter(dir_eigenfunc_list)
+    #path_eigenvalues_list = iter(path_eigenvalues_list)
+    #dir_eigenfunc_list = iter(dir_eigenfunc_list)
     
     # Loop over the layers of the model.
+    j = 0
     for i in range(layers):
-        
+
         # Toroidal modes only exist in solid layers.
         if vs[brk_num[i]] != 0:
 
             # Build the matrices A and B and solve to get the eigenvalues
             # and eigenvectors.
             eigvals, eigvecs = build_matrices_toroidal_and_solve(model, count_thick, i, invV, order, Dr)
-            
-            # Convert to mHz.
-            temp_omega = np.sqrt(eigvals)/2/np.pi*1000
-            
-            # Get output paths and directories.
-            path_eigenvalues    = next(path_eigenvalues_list)
-            dir_eigenfunc       = next(dir_eigenfunc_list)
-            
-            # Loop over radial order.
-            for n in range(nmin, nmax+1):
 
-                # Skip modes that don't exist without external forcing.
-                if (n == 0) and (l==0 or l==1):
+            # 
+            process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickness, order, x, i, path_eigenvalues_list[j], dir_eigenfunc_list[j], save = True)
 
-                    continue
-
-                # Scale and get radial coordinate. 
-                W_eigen = eigvecs[:,n]/np.sqrt(l*(l+1))/(temp_omega[n]*2*np.pi)
-                xx = lib.sqzx(x[:,count_thick[i]:count_thick[i+1]],thickness[i],order)
-                
-                # Write out the eigenvalues.
-                with open(path_eigenvalues, 'a') as f_out:
-
-                    f_out.write('{:>10d} {:>10d} {:>16.12f}\n'.format(n, l, temp_omega[n]))
-
-                # Write eigenfunction.
-                file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
-                path_eigenfunc = os.path.join(dir_eigenfunc, file_eigenfunc)
-                out_arr = np.array([1000.0*xx, W_eigen])
-                np.save(path_eigenfunc, out_arr)
+            j = j + 1
 
     return
 
@@ -162,6 +138,44 @@ def build_matrices_toroidal_and_solve(model, count_thick, i, invV, order, Dr):
         eigvals,eigvecs = eigh(A,B)
 
     return eigvals, eigvecs
+
+def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickness, order, x, i_layer, path_eigenvalues, dir_eigenfunc, save = True):
+
+    # Transform from eigenvalues (square of angular frequency (rad/s)) to
+    # frequencies (mHz).
+    omega = np.sqrt(eigvals)/(2.0*np.pi)
+    omega = omega*1000.0
+    
+    # Get output paths and directories.
+    #path_eigenvalues    = next(path_eigenvalues_list)
+    #dir_eigenfunc       = next(dir_eigenfunc_list)
+    
+    # Loop over radial order.
+    for n in range(nmin, nmax+1):
+    
+        # Skip modes that don't exist without external forcing.
+        if (n == 0) and (l == 0 or l == 1):
+    
+            continue
+    
+        # Scale and get radial coordinate. 
+        W_eigen = eigvecs[:,n]/np.sqrt(l*(l+1))/(omega[n]*2*np.pi)
+        xx = lib.sqzx(x[:,count_thick[i_layer]:count_thick[i_layer + 1]], thickness[i_layer], order)
+
+        if save:
+        
+            # Write out the eigenvalues.
+            with open(path_eigenvalues, 'a') as f_out:
+    
+                f_out.write('{:>10d} {:>10d} {:>16.12f}\n'.format(n, l, omega[n]))
+    
+            # Write eigenfunction.
+            file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
+            path_eigenfunc = os.path.join(dir_eigenfunc, file_eigenfunc)
+            out_arr = np.array([1000.0*xx, W_eigen])
+            np.save(path_eigenfunc, out_arr)
+    
+    return omega
 
 # Radial modes. ---------------------------------------------------------------
 def radial_modes(run_info):
@@ -1043,7 +1057,7 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
     block_type  = set_if_needed([], switch, ['R_noGP', 'R_G', 'R_GP', 'S_noGP', 'S_G', 'S_GP'])
 
     # Loop through the points in the input model.
-    for i in range(shape[0]-1):
+    for i in range(model['n_layers'] - 1):
 
         # Find solid-fluid boundaries. 
         if vs[i]*vs[i+1]==0 and (vs[i]+vs[i+1])!=0:
@@ -1051,7 +1065,7 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
             # Update the counter variables.
             brk_num.append(i+1)
             layers = layers+1
-            temp_thick = num_elmt*(brk_num[-1]-brk_num[-2])/shape[0]
+            temp_thick = num_elmt*(brk_num[-1]-brk_num[-2])/model['n_layers']
             thickness.append(round(temp_thick))
 
             # Get block type and number of essential spectrum. 
@@ -1093,7 +1107,7 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
 
             block_type.append(1)
 
-    brk_num.append(shape[0])
+    brk_num.append(model['n_layers'])
     #layers = len(brk_num)-1
     VX = []
     #radius of fluid-solid boundaries
@@ -1101,20 +1115,20 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
     #count_thick provide index of boundaries 
     count_thick = [0]
     for i in range(layers):
-        brk_radius.append(model_data[brk_num[i+1]-1,0]/10**6)
+        brk_radius.append(r[brk_num[i+1]-1])
         count_thick.append(count_thick[-1]+thickness[i])
-        temp_VX = lib.mantlePoint_equalEnd(radius[brk_num[i]:brk_num[i+1]],thickness[i]+1,brk_radius[i],brk_radius[i+1])
+        temp_VX = lib.mantlePoint_equalEnd(r[brk_num[i]:brk_num[i+1]],thickness[i]+1,brk_radius[i],brk_radius[i+1])
         VX = np.hstack((VX,temp_VX))
     
-    new_rho = lib.model_para_inv(radius,rho,VX) #interpolate rho in nodal points
-    new_mu = lib.model_para_inv(radius,mu,VX) #interpolate mu in nodal points
-    new_ka = lib.model_para_inv(radius,ka,VX) #interpolate ka in nodal points
+    new_rho = lib.model_para_inv(r,rho,VX) #interpolate rho in nodal points
+    new_mu = lib.model_para_inv(r,mu,VX) #interpolate mu in nodal points
+    new_ka = lib.model_para_inv(r,ka,VX) #interpolate ka in nodal points
     new_alpha = new_ka-2/3*new_mu #alpha and beta are just parameters
     new_beta = 1/(new_ka+4/3*new_mu)
 
     if switch in ['R_G', 'R_GP', 'S_G', 'S_GP']:
 
-        new_rho_p = lib.model_para_prime_inv(radius,rho,VX) #interpolate prime of rho in nodal points
+        new_rho_p = lib.model_para_prime_inv(r,rho,VX) #interpolate prime of rho in nodal points
         #model.add_rho_p(new_rho_p)
     
     VX = lib.remDiscon(VX,0)
@@ -1222,7 +1236,7 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
             order, order_p, order_V, order_P,
             Dr, Dr_p, Dr_V, Dr_P,
             x, x_V, x_P, VX,
-            rho, radius,
+            rho, r,
             block_type, brk_radius, brk_num, layers,
             dir_eigenfunc, path_eigenvalues)
 

@@ -188,6 +188,7 @@ def load_model(model_path, skiprows = 3):
     model['rho'] = rho
     model['v_p'] = v_p
     model['v_s'] = v_s
+    model['n_layers'] = len(r)
 
     return model
 

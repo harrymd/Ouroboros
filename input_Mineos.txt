@@ -1,6 +1,0 @@
-../../input/mineos/models/prem_noocean.txt
-../../output/mineos
-2
-S
-0 30 
-0 15 

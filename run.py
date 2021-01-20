@@ -14,7 +14,7 @@ def main():
     in the directory containing this script.
     '''
     
-    # Make announcement and start timer.
+    # Make announcement.
     print('Ouroboros')
 
     # Parse input arguments.
