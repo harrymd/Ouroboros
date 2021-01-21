@@ -298,8 +298,8 @@ def kernel_radial_or_spheroidal_single(
     # calculate the new frequency.
     n_freqs = len(omega_ref)
     omega_ptb = np.zeros((num_elmt, n_freqs))
-    #for i in range(num_elmt):
-    for i in range(1):
+    for i in range(num_elmt):
+    #for i in range(1):
         
         print('element: {:>5d}'.format(i)) # Apply the perturbation to the i_th layer.
 
@@ -532,10 +532,8 @@ def kernel_toroidal_single(
         num_elmt_layer = i_end[layer_i] - i_start[layer_i]
         omega_ptb = np.zeros((num_elmt_layer, n_freqs))
 
-        #for i in range(num_elmt):
-        #for i in range(1):
-        #for i in range(i_start[layer_i], i_end[layer_i]):
-        for ii, i in enumerate(range(i_start[layer_i], i_start[layer_i] + 2)):
+        for ii, i in enumerate(range(i_start[layer_i], i_end[layer_i])):
+        #for ii, i in enumerate(range(i_start[layer_i], i_start[layer_i] + 2)):
             
             #print('element: {:>5d}'.format(i)) # Apply the perturbation to the i_th layer.
 
