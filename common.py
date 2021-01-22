@@ -172,15 +172,25 @@ def load_model(model_path, skiprows = 3):
 
         model_data = np.loadtxt(model_path, skiprows = skiprows) 
 
-    # Extract the variables.
-    # r         Radial coordinate in m.
-    # rho       Density in kg/m3.
-    # v_p       Simple isotropic mean P-wave speed in m/s.
-    # v_s       Simple isotropic mean S-wave speed in m/s.
-    r   =  model_data[:,0]
-    rho =  model_data[:,1]
-    v_p = (model_data[:, 2] + model_data[:, 6])/2.0
-    v_s = (model_data[:, 3] + model_data[:, 7])/2.0
+    print(model_data.shape)
+
+    # Simple format.
+    if model_data.shape[1] == 4: 
+
+        r, rho, v_p, v_s = model_data.T
+
+    # Mineos format.
+    elif model_data.shape[1] == 9:
+
+        # Extract the variables.
+        # r         Radial coordinate in m.
+        # rho       Density in kg/m3.
+        # v_p       Simple isotropic mean P-wave speed in m/s.
+        # v_s       Simple isotropic mean S-wave speed in m/s.
+        r   =  model_data[:,0]
+        rho =  model_data[:,1]
+        v_p = (model_data[:, 2] + model_data[:, 6])/2.0
+        v_s = (model_data[:, 3] + model_data[:, 7])/2.0
     
     # Store in a dictionary.
     model = dict()
