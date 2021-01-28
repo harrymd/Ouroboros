@@ -105,6 +105,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None)
     if mode_type == 'R':
 
         r, U = np.load(path_eigenfunc)
+        U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
 
         return r, U
     

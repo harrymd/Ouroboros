@@ -1,157 +1,118 @@
+import argparse
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-from common import load_model
-from kernels import get_kernels_spheroidal, get_gravity_info
-from plot.plot_common import get_r_fluid_solid_boundary, prep_RadialPNM_info
-from post.read_output import load_eigenfreq_RadialPNM, load_eigenfunc_RadialPNM
+from plot.plot_kernels_brute import get_kernel_brute
+from common import get_Ouroboros_out_dirs, read_Ouroboros_input_file
 
-def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_boundary_model):
-
-    n_parts = len(i_fluid_solid_boundary) + 1
-    assert n_parts == (len(i_fluid_solid_boundary_model) + 1)
-    
-    i_fluid_solid_boundary = list(i_fluid_solid_boundary)
-    i_fluid_solid_boundary.insert(0, 0)
-    i_fluid_solid_boundary.append(None)
-
-    i_fluid_solid_boundary_model = list(i_fluid_solid_boundary_model)
-    i_fluid_solid_boundary_model.insert(0, 0)
-    i_fluid_solid_boundary_model.append(None)
-    
-    x_list = []
-    for i in range(n_parts):
-
-        i0 = i_fluid_solid_boundary[i]
-        i1 = i_fluid_solid_boundary[i + 1]
-
-        i0_model = i_fluid_solid_boundary_model[i]
-        i1_model = i_fluid_solid_boundary_model[i + 1]
-
-        x_i = np.interp(r[i0 : i1], r_model[i0_model : i1_model], x_model[i0_model : i1_model])
-        x_list.append(x_i)
-
-    x = np.concatenate(x_list)
-
-    #print(i_solid_fluid_boundary)
-    #print(r[0 : i_solid_fluid_boundary[0]])
-    #print(r[i_solid_fluid_boundary[0] : i_solid_fluid_boundary[1]])
-    #print(r[i_solid_fluid_boundary[1] : ])
-
-    #print('\n')
-    ## Interpolate the model parameters at the eigenfunction nodes.
-    ##vs  = interp_3_parts(r, r_model, vs_model,  i_icb, i_cmb, i_icb_model, i_cmb_model)
-    ##print(vs_model[0 : i_solid_fluid_boundary[0]])
-    ##print(vs_model[i_solid_fluid_boundary[0]: i_solid_fluid_boundary[1]])
-    ##print(vs_model[i_solid_fluid_boundary[1]:])
-
-    #x_inner_core    = np.interp(r[0     : i_icb], r_model[0           : i_icb_model], x_model[0           : i_icb_model])
-    #x_outer_core    = np.interp(r[i_icb : i_cmb], r_model[i_icb_model : i_cmb_model], x_model[i_icb_model : i_cmb_model])
-    #x_mantle        = np.interp(r[i_cmb :      ], r_model[i_cmb_model :            ], x_model[i_cmb_model :])
-
-    #x = np.concatenate([x_inner_core, x_outer_core, x_mantle])
-
-    return x
-
-# -----------------------------------------------------------------------------
-def plot_kernel(RadialPNM_info, mode_type, n, l, i_toroidal = None, ax = None):
-
-    # Get model information for axis limits, scaling and horizontal lines.
-    model_data, shape, r_model, rho_model, vp_model, vs_model, mu_model, ka_model = load_model(RadialPNM_info['path_model'])
-    # Convert to km.
-    r_model = r_model*1.0E3
-    
-    # r_srf Radius of planet.
-    # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
-    r_srf = r_model[-1]
-    if np.all(vs_model == 0.0):
-
-        raise NotImplementedError
-
-    elif np.all(vs_model > 0.0):
-
-        raise NotImplementedError
-
-    i_fluid_model, r_solid_fluid_boundary_model, i_fluid_solid_boundary_model =\
-        get_r_fluid_solid_boundary(r_model, vs_model)
-    
-    # Get frequency information.
-    f = load_eigenfreq_RadialPNM(RadialPNM_info, mode_type, n_q = n, l_q = l, i_toroidal = i_toroidal)
-
-    # Get eigenfunction information.
-    if mode_type == 'S': 
-
-        r, U, V = load_eigenfunc_RadialPNM(RadialPNM_info, mode_type, n, l)
-
-    elif mode_type == 'T':
-
-        r, W = load_eigenfunc_RadialPNM(RadialPNM_info, mode_type, n, l, i_toroidal = i_toroidal)
-
-    
-    # Find indices of solid-fluid boundaries.
-    i_fluid_solid_boundary = (np.where(np.diff(r) == 0.0))[0] + 1
-
-    # Interpolate from the model grid to the output grid.
-    rho = interp_n_parts(r, r_model, rho_model, i_fluid_solid_boundary, i_fluid_solid_boundary_model)
-    vp  = interp_n_parts(r, r_model, vp_model,  i_fluid_solid_boundary, i_fluid_solid_boundary_model)
-    vs  = interp_n_parts(r, r_model, vs_model,  i_fluid_solid_boundary, i_fluid_solid_boundary_model)
-
-    fig = plt.figure()
-    ax = plt.gca()
-
-    ax.plot(r, rho)
-    ax.plot(r, vp)
-    ax.plot(r, vs)
-
-    plt.show()
-
-    #print(i_solid_fluid_boundary)
-    #print(r[0 : i_solid_fluid_boundary[0]])
-    #print(r[i_solid_fluid_boundary[0] : i_solid_fluid_boundary[1]])
-    #print(r[i_solid_fluid_boundary[1] : ])
-
-    #print('\n')
-    ## Interpolate the model parameters at the eigenfunction nodes.
-    ##vs  = interp_3_parts(r, r_model, vs_model,  i_icb, i_cmb, i_icb_model, i_cmb_model)
-    ##print(vs_model[0 : i_solid_fluid_boundary[0]])
-    ##print(vs_model[i_solid_fluid_boundary[0]: i_solid_fluid_boundary[1]])
-    ##print(vs_model[i_solid_fluid_boundary[1]:])
-
-    # Get fluid-solid boundaries for r.
-    import sys
-    sys.exit()
-
-    # Convert to Mineos normalisation.
-    ratio = 1.0E-3*(r_srf**2.0)
-    if mode_type == 'S':
-
-        U = U*ratio
-        V = V*ratio
-
-    elif mode_type == 'T':
-
-        W= W*ratio
-
-    # Calculate the kernels.
-    if mode_type == 'S':
-
-        g_model, g, P = get_gravity_info(r_model, rho_model, r, U, V, l, rho)
-        K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop = \
-            get_kernels_spheroidal(f, r, U, V, l, g, rho, vp, vs, P, i_fluid = i_fluid)
-
-    # Create the title.
-    title = '$_{{{:d}}}${:}$_{{{:d}}}$'.format(n, mode_type, l)
-
-    return
-
-# Main. -----------------------------------------------------------------------
 def main():
 
-    # Read the input file and command-line arguments.
-    RadialPNM_info, mode_type, n, l, i_toroidal = prep_RadialPNM_info()
+    # Parse the command-line arguments.
+    parser = argparse.ArgumentParser()
+    #
+    parser.add_argument('path_to_input_file', help = 'File path (relative or absolute) to Ouroboros input file.')
+    parser.add_argument('mode_type', choices = ['R', 'S', 'T'], help = 'Mode type (radial, spheroidal, or toroidal).')
+    parser.add_argument('n', type = int, help = 'Radial order.')
+    parser.add_argument('l', type = int, help = 'Angular order.')
+    #parser.add_argument('param', choices = ['ka', 'mu', 'rho'], help = 'Plot sensitivity to bulk modulus (ka), shear modulus (mu), density (rho)')
+    #parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
+    parser.add_argument('--include_brute_force', action = 'store_true', help = 'Also include brute-force kernels in the plots.')
+    args = parser.parse_args()
 
-    # Plot the kernel.
-    plot_kernel(RadialPNM_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None)
+    # Rename input arguments.
+    path_input = args.path_to_input_file
+    mode_type = args.mode_type
+    n = args.n
+    l = args.l
+    #param = args.param
+    include_brute_force = args.include_brute_force
+    #i_toroidal = args.layer_number
+
+    # Read the input file.
+    run_info = read_Ouroboros_input_file(path_input)
+
+    # Load the kernels for this mode.
+    _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
+    dir_kernels = os.path.join(dir_out, 'kernels')
+    #
+    #out_arr = np.array([r, g, P, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop])
+    name_kernel_file = 'kernels_{:>05d}_{:>05d}.npy'.format(n, l)
+    path_kernel = os.path.join(dir_kernels, name_kernel_file)
+    print('Loading {:}'.format(path_kernel))
+    kernel_arr = np.load(path_kernel)
+
+    # Unpack the array.
+    #r, g, P, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop = kernel_arr
+    r, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop = kernel_arr
+    # Convert from m to km.
+    r = r*1.0E-3
+
+    # Multiply the kernel by a fixed constant to give a value close to 1.
+    #param_scale_exponent_dict = {'ka' : 6, 'mu' : 6, 'rho' : 3}
+    param_scale_exponent_dict = {'ka' : 7, 'mu' : 7, 'rho' : 4}
+    #param_scale_exponent_dict = {'ka' : 0, 'mu' : 0, 'rho' : 0}
+
+    # Get the label string for this parameter.
+    param_unit_dict = {'ka' : 'GPa', 'mu' : 'GPa', 'rho' : '(g cm$^{-3}$)'}
+
+    #
+    param_symbol_dict = {'ka' : 'kappa', 'mu' : 'mu', 'rho' : 'rho'}
+
+    font_size_label = 12
+
+    fig, ax_arr = plt.subplots(1, 3, figsize = (11.0, 8.5), sharey = True)
+    array_list = np.array([K_ka, K_mu, K_rho])
+    param_list = ['ka', 'mu', 'rho']
+    for i in range(3):
+        
+        param = param_list[i]
+
+        param_exponent = param_scale_exponent_dict[param]
+        param_scale = 10.0**param_exponent
+        #
+        param_unit = param_unit_dict[param]
+        #
+        param_symbol = param_symbol_dict[param]
+
+        K_plt = array_list[i]
+        K_plt = K_plt*param_scale
+        #if param == 'rho':
+        #    K_plt = K_plt*1.0E-12
+        #scale = (4.0/np.pi)**2.0
+        #scale = ((1.0E3*np.pi)**2.0)
+        #scale = 1.04E7
+        #K_plt = K_plt/scale
+        #K_plt = K_plt/scale
+        #K_plt = K_plt/(((np.pi)**2.0)/6.0)
+        #
+        K_label = '$K_{{\{:}}}$ (10$^{{{:d}}}$ mHz {:}$^{{-1}}$ km$^{{-1}})$'.format(param_symbol, param_exponent, param_unit)
+
+        ax = ax_arr[i]
+        
+        ax.plot(K_plt, r, label = 'Analytical')
+
+        if include_brute_force:
+            
+            r_bf, K_bf = get_kernel_brute(path_input, mode_type, n, l, param)
+            K_bf = K_bf*param_scale
+
+            ax.plot(K_bf, r_bf, label = 'Brute force')
+
+            ax.legend()
+
+        ax.set_xlabel(K_label, fontsize = font_size_label)
+
+        print(param, np.max(np.abs(K_plt))/np.nanmax(np.abs(K_bf)))
+
+    ax = ax_arr[0]
+    ax.set_ylabel('Radius (km)', fontsize = font_size_label)
+
+    plt.tight_layout()
+    plt.show()
+
+    return
 
 if __name__ == '__main__':
 

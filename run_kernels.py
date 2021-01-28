@@ -3,8 +3,8 @@ import os
 
 import numpy as np
 
-from common import get_r_fluid_solid_boundary, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
-from kernels import get_kernels_spheroidal, gravitational_acceleration, potential
+from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
+from kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
 from post.read_output import load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros
 
 def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_boundary_model):
@@ -41,44 +41,61 @@ def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_bo
 
 def kernels_wrapper(run_info, mode_type, model):
 
-    if mode_type == 'S':
+    if mode_type in ['R', 'S']:
 
-        kernels_wrapper_S(run_info, model)
+        kernels_wrapper_R_or_S(run_info, model, mode_type)
+
+    elif mode_type == 'T':
+
+        kernels_wrapper_T(run_info, model)
+
+    else:
+
+        raise ValueError
 
     return
 
-def kernels_wrapper_S(run_info, model):
+def kernels_wrapper_R_or_S(run_info, model, mode_type):
 
     # Get a list of all the modes calculated by Ouroboros.
-    n_list, l_list, f_list = load_eigenfreq_Ouroboros(run_info, 'S') 
+    n_list, l_list, f_mHz_list = load_eigenfreq_Ouroboros(run_info, mode_type) 
     num_modes = len(n_list)
-
+    
     # Find the fluid-solid boundary points in the model.
     i_fluid_model, r_solid_fluid_boundary_model, i_fluid_solid_boundary_model =\
         get_r_fluid_solid_boundary(model['r'], model['v_s'])
 
-    #for i in range(num_modes):
-    for i in [0]:
+    for i in range(num_modes):
+    #for i in [0]:
         
         # Give shorter names to current n, l and f.
         n = n_list[i]
         l = l_list[i]
-        f = f_list[i]
+        f_mHz = f_mHz_list[i]
+        f_Hz = f_mHz/1.0E3
+        omega_rad_per_s = f_Hz*(2.0*np.pi)
 
         # Make announcement.
-        print('Calculating kernels for mode {:>5d} of {:>5d}, n = {:>5d}, l = {:>5d}'.format(i + 1, num_modes, n, l))
+        print('Calculating kernels for mode type {:} number {:>5d} of {:>5d}, n = {:>5d}, l = {:>5d}'.format(mode_type, i + 1, num_modes, n, l))
 
         # Load eigenfunctions. On the first mode, also interpolate the model
         # properties at the eigenfunction grid points and calculate gravity.
         if i == 0:
-
+            
             # Load first eigenfunction.
-            r, U, V = load_eigenfunc_Ouroboros(run_info, 'S', n, l)
+            if mode_type == 'R':
 
-            # Get planetary radius in km.
-            r_srf_km = r[-1]
-            # Calculate ratio for conversion to Mineos normalisation.
-            ratio = 1.0E-3*(r_srf_km**2.0)
+                r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
+                V = np.zeros(U.shape)
+
+            else:
+
+                r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
+
+            ## Get planetary radius in km.
+            #r_srf_km = r[-1]
+            ## Calculate ratio for conversion to Mineos normalisation.
+            #ratio = 1.0E-3*(r_srf_km**2.0)
 
             # Convert from km to m.
             r = r*1.0E3
@@ -92,65 +109,175 @@ def kernels_wrapper_S(run_info, model):
             v_s  = interp_n_parts(r, model['r'], model['v_s'], i_fluid_solid_boundary, i_fluid_solid_boundary_model)
             i_fluid = np.where(v_s == 0.0)[0]
 
-            # Calculate the gravitational acceleration.
-            # (SI units m/s2)
-            g_model      = gravitational_acceleration(model['r'], model['rho'])
+            if run_info['g_switch'] in [1, 2]:
 
-            # Interpolate the gravitational acceleration at the nodal points.
-            g = np.interp(r, model['r'], g_model)
+                # Calculate the gravitational acceleration.
+                # (SI units m/s2)
+                g_model      = gravitational_acceleration(model['r'], model['rho'])
+
+                # Interpolate the gravitational acceleration at the nodal points.
+                g = np.interp(r, model['r'], g_model)
+
+            else:
+
+                g = None
 
         else:
 
             # Load eigenfunction.
-            _, U, V = load_eigenfunc_Ouroboros(run_info, 'S', n, l)
+            if mode_type == 'R':
 
-        # Convert to Mineos normalisation.
-        U = U*ratio
-        V = V*ratio
+                _, U = load_eigenfunc_Ouroboros(run_info, 'R', n, l)
+                V = np.zeros(U.shape)
 
-        # Calculate gravitational potential.
-        P = potential(r, U, V, l, rho)
+            else:
 
+                _, U, V = load_eigenfunc_Ouroboros(run_info, 'S', n, l)
+
+        ## Convert to Mineos normalisation.
+        #U = U*ratio
+        #V = V*ratio
+
+        # Convert to D&T normalisation.
+        U = U*omega_rad_per_s
+        V = V*omega_rad_per_s
+
+        if run_info['g_switch'] == 2:
+
+            # Calculate gravitational potential.
+            P = potential(r, U, V, l, rho)
+
+        else:
+
+            P = None
+
+        # Calculate the kernels.
         K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop = \
-            get_kernels_spheroidal(f, r, U, V, l, g, rho, v_p, v_s, P, i_fluid = i_fluid)
+            get_kernels_spheroidal(omega_rad_per_s, r, U, V, l, v_p, v_s, run_info['g_switch'],
+                g = g,
+                rho = rho,
+                P = P,
+                i_fluid = i_fluid)
 
-    import matplotlib.pyplot as plt
+        # Save the kernels.
+        if i == 0:
 
-    for v in [v_p, v_s, rho]:
+            _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
+            dir_kernels = os.path.join(dir_out, 'kernels')
+            mkdir_if_not_exist(dir_kernels)
+    
+        #out_arr = np.array([r, g, P, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop])
+        out_arr = np.array([r, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop])
+        name_out = 'kernels_{:>05d}_{:>05d}.npy'.format(n, l)
+        path_out = os.path.join(dir_kernels, name_out)
+        print('Saving to {:}'.format(path_out))
+        np.save(path_out, out_arr)
 
-        print(np.min(v), np.max(v))
+    #import matplotlib.pyplot as plt
+
+    #for v in [v_p, v_s, rho]:
+
+    #    print(np.min(v), np.max(v))
 
     #fig = plt.figure()
     #ax = plt.gca()
     #ax.plot(g, r)
     #plt.show()
     
-    fig = plt.figure()
-    ax = plt.gca()
+    #fig = plt.figure()
+    #ax = plt.gca()
 
-    for E, E_label in zip([U, V, P], ['U', 'V', 'P']):
+    #for E, E_label in zip([U, V, P], ['U', 'V', 'P']):
 
-        ax.plot(E, r, label = E_label)
+    #    ax.plot(E, r, label = E_label)
 
-    #ax.legend()
+    ##ax.legend()
 
+    ##plt.show()
+
+    #for K in [K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop]:
+
+    #    print(np.max(np.abs(K)))
+
+    #fig, ax_arr  = plt.subplots(1, 3, figsize = (10.0, 6.0), sharey = True)
+    #ax_arr[0].plot(K_ka, r)
+    #ax_arr[1].plot(K_mu,  r)
+    #ax_arr[2].plot(K_rho,  r)
     #plt.show()
 
-    for K in [K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop]:
+    ##fig, ax_arr  = plt.subplots(1, 3, figsize = (10.0, 6.0))
+    ##ax_arr[0].plot(K_alpha, r, label = 'vp')
+    ##ax_arr[1].plot(K_beta,  r, label = 'vs')
+    ##ax_arr[2].plot(K_rhop,  r, label = 'rho')
+    ##plt.show()
 
-        print(np.max(np.abs(K)))
+    return
 
-    fig, ax_arr  = plt.subplots(1, 3, figsize = (10.0, 6.0), sharey = True)
-    ax_arr[0].plot(K_ka, r)
-    ax_arr[1].plot(K_mu,  r)
-    ax_arr[2].plot(K_rho,  r)
-    plt.show()
+def kernels_wrapper_T(run_info, model):
 
-    #fig, ax_arr  = plt.subplots(1, 3, figsize = (10.0, 6.0))
-    #ax_arr[0].plot(K_alpha, r, label = 'vp')
-    #ax_arr[1].plot(K_beta,  r, label = 'vs')
-    #ax_arr[2].plot(K_rhop,  r, label = 'rho')
-    #plt.show()
+    mode_type = 'T'
+    
+    # Find the fluid-solid boundary points in the model.
+    i_fluid_model, r_solid_fluid_boundary_model, i_fluid_solid_boundary_model =\
+        get_r_fluid_solid_boundary(model['r'], model['v_s'])
+    n_solid_regions = len(i_fluid_solid_boundary_model)
+
+    # Get planetary radius in km.
+    r_srf_km = model['r'][-1]*1.0E-3
+    # Calculate ratio for conversion to Mineos normalisation.
+    ratio = 1.0E-3*(r_srf_km**2.0)
+
+    for i_toroidal in range(n_solid_regions):
+        
+        # Get a list of all the modes calculated by Ouroboros.
+        n_list, l_list, f_list = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i_toroidal) 
+        num_modes = len(n_list)
+
+        #for i in range(num_modes):
+        for i in [0]:
+            
+            # Give shorter names to current n, l and f.
+            n = n_list[i]
+            l = l_list[i]
+            f = f_list[i]
+
+            # Make announcement.
+            mode_key = 'T{:}'.format(i_toroidal)
+            print('Calculating kernels for mode type {:} number {:>5d} of {:>5d}, n = {:>5d}, l = {:>5d}'.format(mode_key, i + 1, num_modes, n, l))
+
+            if i == 0:
+
+                # Load eigenfunctions. On the first mode, also interpolate the model
+                # properties at the eigenfunction grid points and calculate gravity.
+                r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+
+                rho = np.interp(r, model['r'], model['rho']) 
+                #v_p = np.interp(r, model['r'], model['v_p']) 
+                v_s = np.interp(r, model['r'], model['v_s']) 
+            
+            else:
+
+                _, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+
+
+            # Convert to Mineos normalisation.
+            W = W*ratio
+
+            K_mu, K_rho, K_beta, K_rhop = \
+                get_kernels_toroidal(f, r, W, l, rho, v_s)
+
+        import matplotlib.pyplot as plt
+
+        fig, ax_arr  = plt.subplots(1, 2, figsize = (6.0, 6.0), sharey = True)
+        ax_arr[0].plot(K_mu,  r)
+        ax_arr[1].plot(K_rho,  r)
+        plt.show()
+
+        #fig, ax_arr  = plt.subplots(1, 3, figsize = (10.0, 6.0))
+        #ax_arr[0].plot(K_alpha, r, label = 'vp')
+        #ax_arr[1].plot(K_beta,  r, label = 'vs')
+        #ax_arr[2].plot(K_rhop,  r, label = 'rho')
+        #plt.show()
 
     return
 
@@ -173,7 +300,9 @@ def main():
     model = load_model(Ouroboros_info['path_model'])
 
     ##for mode_type in Ouroboros_info['mode_types']:
-    for mode_type in ['S']:
+    ##for mode_type in ['S']:
+    for mode_type in ['R']:
+    #for mode_type in ['T']:
 
         kernels_wrapper(Ouroboros_info, mode_type, model)
     
