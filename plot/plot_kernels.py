@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from plot.plot_kernels_brute import get_kernel_brute
-from common import get_Ouroboros_out_dirs, read_Ouroboros_input_file
+from common import get_Ouroboros_out_dirs, mkdir_if_not_exist, read_Ouroboros_input_file
 
 def main():
 
@@ -103,11 +103,44 @@ def main():
             ax.legend()
 
         ax.set_xlabel(K_label, fontsize = font_size_label)
+        ax.axvline(linestyle = ':', color = 'k')
 
-        print(param, np.max(np.abs(K_plt))/np.nanmax(np.abs(K_bf)))
+        #print(param, np.max(np.abs(K_plt))/np.nanmax(np.abs(K_bf)))
 
     ax = ax_arr[0]
     ax.set_ylabel('Radius (km)', fontsize = font_size_label)
+    ax.set_ylim([r[0], r[-1]])
+
+    save = True
+    if save:
+        
+        run_info['use_mineos'] = False
+        if run_info['use_mineos']:
+            
+            raise NotImplementedError
+            #fig_name = 'eigfunc_Mineos'
+            #dir_out = run_info['dir_output']
+            #dir_plot = os.path.join(dir_out, 'plots')
+
+        else:
+
+            fig_name = 'eigfunc_Ouroboros'
+            _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
+            dir_plot = os.path.join(dir_out, 'plots')
+
+        mkdir_if_not_exist(dir_plot)
+
+        if mode_type in ['S', 'R']:
+
+            fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, l, run_info['g_switch'])
+
+        else:
+
+            fig_name = '{:}_{:>05d}_{:}{:1d}_{:>05d}.png'.format(fig_name, n, mode_type, i_toroidal, l)
+
+        fig_path = os.path.join(dir_plot, fig_name)
+        print('Saving figure to {:}'.format(fig_path))
+        plt.savefig(fig_path, dpi = 300, bbox_inches = 'tight')
 
     plt.tight_layout()
     plt.show()

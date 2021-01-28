@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_model, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file
-from post.read_output import load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros
+from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, load_model, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file
 from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
 
 def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True): 

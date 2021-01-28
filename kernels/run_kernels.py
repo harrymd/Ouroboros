@@ -3,9 +3,8 @@ import os
 
 import numpy as np
 
-from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
+from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
 from kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
-from post.read_output import load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros
 
 def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_boundary_model):
     '''
@@ -233,8 +232,8 @@ def kernels_wrapper_T(run_info, model):
         n_list, l_list, f_list = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i_toroidal) 
         num_modes = len(n_list)
 
-        #for i in range(num_modes):
-        for i in [0]:
+        for i in range(num_modes):
+        #for i in [0]:
             
             # Give shorter names to current n, l and f.
             n = n_list[i]
@@ -266,12 +265,12 @@ def kernels_wrapper_T(run_info, model):
             K_mu, K_rho, K_beta, K_rhop = \
                 get_kernels_toroidal(f, r, W, l, rho, v_s)
 
-        import matplotlib.pyplot as plt
+        #import matplotlib.pyplot as plt
 
-        fig, ax_arr  = plt.subplots(1, 2, figsize = (6.0, 6.0), sharey = True)
-        ax_arr[0].plot(K_mu,  r)
-        ax_arr[1].plot(K_rho,  r)
-        plt.show()
+        #fig, ax_arr  = plt.subplots(1, 2, figsize = (6.0, 6.0), sharey = True)
+        #ax_arr[0].plot(K_mu,  r)
+        #ax_arr[1].plot(K_rho,  r)
+        #plt.show()
 
         #fig, ax_arr  = plt.subplots(1, 3, figsize = (10.0, 6.0))
         #ax_arr[0].plot(K_alpha, r, label = 'vp')
@@ -299,9 +298,9 @@ def main():
     # Load the planetary model.
     model = load_model(Ouroboros_info['path_model'])
 
-    ##for mode_type in Ouroboros_info['mode_types']:
+    for mode_type in Ouroboros_info['mode_types']:
     ##for mode_type in ['S']:
-    for mode_type in ['R']:
+    #for mode_type in ['R']:
     #for mode_type in ['T']:
 
         kernels_wrapper(Ouroboros_info, mode_type, model)

@@ -6,9 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
+from common import load_eigenfreq_Ouroboros, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
 from stoneley.code.common.Mineos import load_eigenfreq_Mineos
-from post.read_output import load_eigenfreq_Ouroboros
 
 def main():
 
