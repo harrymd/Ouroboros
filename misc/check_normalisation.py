@@ -2,9 +2,8 @@ import argparse
 
 import numpy as np
 
-from common import get_r_fluid_solid_boundary, load_model, read_Ouroboros_input_file
-from post.read_output import load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros
-from run_kernels import interp_n_parts
+from common import get_r_fluid_solid_boundary, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, load_model, read_Ouroboros_input_file
+from kernels.run_kernels import interp_n_parts
 
 def main():
 

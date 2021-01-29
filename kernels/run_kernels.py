@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
-from kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
+from kernels.kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
 
 def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_boundary_model):
     '''

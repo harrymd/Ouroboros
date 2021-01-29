@@ -58,6 +58,17 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
 
     return dir_model, dir_run, dir_g, dir_type
 
+def get_Mineos_out_dirs(run_info):
+    '''
+    Returns the directory containing the Mineos eigenvalue output.
+    '''
+
+    dir_model = os.path.join(run_info['dir_output'], run_info['name_model'])
+    name_run = '{:>05d}_{:>05d}_{:1d}'.format(run_info['n_lims'][1], run_info['l_lims'][1], run_info['grav_switch'])
+    dir_run = os.path.join(dir_model, name_run)
+
+    return dir_model, dir_run
+
 # Reading input files. --------------------------------------------------------
 def read_Ouroboros_input_file(path_input_file):
     '''
@@ -74,8 +85,8 @@ def read_Ouroboros_input_file(path_input_file):
         dir_output      = in_id.readline().split()[1]
         g_switch        = int(in_id.readline().split()[1])
         mode_types      = in_id.readline().split()[1:]
-        l_min, l_max    = [int(x) for x in in_id.readline().split()[1:]]
         n_min, n_max    = [int(x) for x in in_id.readline().split()[1:]]
+        l_min, l_max    = [int(x) for x in in_id.readline().split()[1:]]
         n_layers        = int(in_id.readline().split()[1])
 
     name_model = os.path.splitext(os.path.basename(path_model))[0]
@@ -118,29 +129,43 @@ def read_Ouroboros_input_file(path_input_file):
 
     return Ouroboros_info
 
-def read_Mineos_input_file():
+def read_Mineos_input_file(path_input_file):
     '''
     Reads the Mineos input file.
     '''
 
-    input_file = 'input_Mineos.txt'
-    print('Reading input file, {:}'.format(input_file))
+    print('Reading input file, {:}'.format(path_input_file))
     
     # Read line by line.
-    with open(input_file, 'r') as in_id:
+    with open(path_input_file, 'r') as in_id:
         
-        path_model      = in_id.readline().strip()
-        dir_output      = in_id.readline().strip()
-        g_switch        = int(in_id.readline())
-        mode_type       = in_id.readline().strip()
-        l_min, l_max    = [int(x) for x in in_id.readline().split()]
-        n_min, n_max    = [int(x) for x in in_id.readline().split()]
+        path_model      = in_id.readline().split()[-1]
+        dir_output      = in_id.readline().split()[-1]
+        grav_switch     = int(in_id.readline().split()[-1])
+        mode_types      = [x for x in in_id.readline().split()[1:]]
+        n_min, n_max    = [int(x) for x in in_id.readline().split()[1:]]
+        l_min, l_max    = [int(x) for x in in_id.readline().split()[1:]]
+        f_min, f_max    = [float(x) for x in in_id.readline().split()[1:]]
+        eps             = float(in_id.readline().split()[-1])
+        max_depth_str   = in_id.readline().split()[-1]
+        if max_depth_str == 'all':
+
+            max_depth = 'all'
+
+        else:
+
+            max_depth = float(max_depth)
+
+    name_model = os.path.splitext(os.path.basename(path_model))[0]
 
     # Check values.
     assert os.path.isfile(path_model), 'Model file ({:}) does not exist'.format(path_model)
-    assert os.path.isdir(dir_output), 'Output directory ({:}) does not exist'.format(dir_output)
-    assert g_switch in [0, 1, 2], 'g_switch variable ({:}) should be 0, 1 or 2'.format(g_switch)
-    assert mode_type in ['R', 'S', 'T'], 'mode_type variable ({:}) should be R, S or T'.format(mode_type)
+    #assert os.path.isdir(dir_output), 'Output directory ({:}) does not exist'.format(dir_output)
+    assert grav_switch in [1, 2], 'grav_switch variable ({:}) should be 1 or 2 (Mineos does not support grav_switch == 0).'.format(grav_switch)
+    for mode_type in mode_types:
+        assert mode_type in ['R', 'S', 'T', 'I'],  'mode_type variable ({:}) should be R, S, T or I'.format(mode_type)
+    assert f_min < f_max, 'f_min ({:} mHz) should be less than f_max ({:} mHz)'.format(f_min, f_max)
+    assert f_min >= 0.0, 'f_min ({:} mHz) should be greater than zero.'
 
     if mode_type in ['S', 'T']:
 
@@ -151,13 +176,28 @@ def read_Mineos_input_file():
     print('Input file was read successfully:')
     print('Path to model file: {:}'.format(path_model))
     print('Output directory: {:}'.format(dir_output))
-    print('Gravity switch: {:1d}'.format(g_switch))
-    print('Mode type: {:1}'.format(mode_type))
-    if mode_type in ['S', 'T']:
+    print('Gravity switch: {:1d}'.format(grav_switch))
+    print('Mode types:', end = '')
+    for mode_type in mode_types:
+        print(' {:1}'.format(mode_type), end = '')
+    print('\n', end = '')
+    if ('S' in mode_types) or ('T' in mode_types): 
         print('l range: {:d} to {:d}'.format(l_min, l_max))
     print('n range: {:d} to {:d}'.format(n_min, n_max))
 
-    return path_model, dir_output, g_switch, mode_type, l_min, l_max, n_min, n_max 
+    # Store in dictionary.
+    mineos_info = { 'path_model'    : path_model,
+                    'name_model'    : name_model,
+                    'dir_output'    : dir_output,
+                    'grav_switch'   : grav_switch,
+                    'mode_types'    : mode_types,
+                    'n_lims'        : [n_min, n_max],
+                    'l_lims'        : [l_min, l_max],
+                    'f_lims'        : [f_min, f_max],
+                    'eps'           : eps,
+                    'max_depth'     : max_depth}
+
+    return mineos_info
 
 def load_model(model_path, skiprows = 3):
     '''
@@ -377,6 +417,74 @@ def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     dir_kernels = os.path.join(dir_type, 'kernels')
 
     return dir_kernels
+
+# Loading data from Mineos. ---------------------------------------------------
+def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None, return_q = False):
+#def load_eigenfreq_Mineos(ame_model, n_max, l_max, g_switch, mode_type, n_q = None, l_q = None):
+    
+
+    #path_model = get_path_model_Mineos(dir_mineos_models, name_model)
+
+    #if 'dir_eigval' in run_info:
+
+    #    dir_eigval = run_info['dir_eigval']
+
+    #else:
+
+    #    dir_eigval = get_dir_eigval_Mineos(run_info['dir_output'], run_info['model'], run_info['n_lims'][1], run_info['l_lims'][1], run_info['g_switch'])
+
+    
+    # Find the Mineos output directory.
+    _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
+    
+    if n_skip == None:
+
+        with open(run_info['path_model'], 'r') as in_id:
+
+            in_id.readline()
+            in_id.readline()
+            n_layers = int(in_id.readline().split()[0])
+
+        n_skip = n_layers + 11
+    
+    file_eigval = 'minos_bran_out_{:}.txt'.format(mode_type)
+    path_eigval = os.path.join(run_info['dir_run'], file_eigval) 
+    
+    if return_q:
+
+        n, l, f, q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
+
+    else:
+
+        n, l, f = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4)).T
+    
+    n = n.astype(np.int)
+    l = l.astype(np.int)
+    
+    if (n_q is not None) and (l_q is not None):
+
+        i = np.where((n == n_q) & (l == l_q))[0][0]
+
+        f_q = f[i]
+
+        if return_q:
+
+            q_q = q[i]
+            return f_q, q_q
+
+        else:
+
+            return f_q
+
+    else:
+
+        if return_q:
+
+            return n, l, f, q
+
+        else:
+
+            return n, l, f
 
 # Manipulating Earth models. --------------------------------------------------
 def get_r_fluid_solid_boundary(radius, vs):

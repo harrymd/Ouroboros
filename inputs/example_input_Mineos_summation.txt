@@ -1,0 +1,1 @@
+channel_file inputs/example_station_list.txt 

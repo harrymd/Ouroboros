@@ -1,0 +1,2 @@
+ANMO 34.9502 -106.4602 1.6890 ’Albuquerque, New Mexico, USA’
+@ LHZ 89.3000 0.0 0.0

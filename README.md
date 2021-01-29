@@ -32,11 +32,12 @@ Then, download this repository and it will be ready to use.
 
 ### Running the codes
 
-Instructions for using the various codes are given in `README.md` files in the following directories:
+Instructions for using the various codes are given in separate `README.md` files in the following directories:
 
  * `modes/` Calculating the normal modes of a given model.
  * `kernels/` Calculating the sensitivity kernels of modes.
  * `summation/` Calculating synthetic seismograms with mode summation.
+ * `mineos/` Python wrappers for the [*Mineos*](https://geodynamics.org/cig/software/mineos/) normal-mode library, useful for comparison with *Ouroboros*.
 
 
 
@@ -50,7 +51,7 @@ Instructions for using the various codes are given in `README.md` files in the f
 <a style="color: #000000" name="history"/>
 ## History and contributors
 
-This code has been developed by members of the [GMIG group](http://gmig.blogs.rice.edu/) at Rice University. The code was first developed in Matlab by Jingchen Ye and [Jia Shi](https://sites.google.com/view/jiashi/) around 2017. In 2019 it was translated to Python by [Jiayuan Han](https://github.com/hanjiayuan236), who made the improvements described below in versions 1, 2, 3 and 'Anelasticity'. Currently the code is maintained by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html)and Jia Shi.
+This code has been developed by members of the [GMIG group](http://gmig.blogs.rice.edu/) at Rice University. The code was first developed in Matlab by Jingchen Ye and [Jia Shi](https://sites.google.com/view/jiashi/) around 2017. In 2019 it was translated to Python by [Jiayuan Han](https://github.com/hanjiayuan236), who made the improvements described below in versions 1, 2, 3 and 'Anelasticity'. Currently the code is maintained by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html) and Jia Shi.
 
 #### Version 1
 

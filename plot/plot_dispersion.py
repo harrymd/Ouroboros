@@ -6,59 +6,42 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import load_eigenfreq_Ouroboros, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
-from stoneley.code.common.Mineos import load_eigenfreq_Mineos
+from common import load_eigenfreq_Mineos, load_eigenfreq_Ouroboros, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
+#from stoneley.code.common.Mineos import load_eigenfreq_Mineos
 
 def main():
 
+    # Read input arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
     parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
-    parser.add_argument("--mineos", action = "store_true", help = "Plot Mineos modes (default: Ouroboros).")
+    parser.add_argument("--use_mineos", action = "store_true", help = "Plot only Mineos modes (default: only Ouroboros) ")
     args = parser.parse_args()
 
     # Rename input arguments.
     path_input = args.path_to_input_file
     i_toroidal = args.layer_number
-    use_mineos = args.mineos
+    use_mineos = args.use_mineos
 
     # Read the input file.
     if use_mineos:
 
-        path_model, dir_output, g_switch, mode_type, l_min, l_max, n_min, n_max = \
-        read_Mineos_input_file()
+        # Read Mineos input file.
+        run_info = read_Mineos_input_file(path_input)
 
     else:
         
+        # Read Ouroboros input file.
         run_info = read_Ouroboros_input_file(path_input)
-        #path_model, dir_output, g_switch, mode_type, l_min, l_max, n_min, n_max, n_layers = \
-        #read_Ouroboros_input_file()
 
+    # Store whether Mineos is being used.
     run_info['use_mineos'] = use_mineos
 
-    ## Get the name of the model from the file.
-    #name_model = os.path.splitext(os.path.basename(run_info['path_model']))[0]
-
-    ## Store n- and l- limits as arrays.
-    #n_lims      = [n_min, n_max]
-    #l_lims      = [l_min, l_max]
-
-    #run_info = {        'dir_output': dir_output, 
-    #                    'path_model' : path_model,
-    #                    'model'     : name_model,
-    #                    'n_lims'    : n_lims,
-    #                    'l_lims'    : l_lims,
-    #                    'g_switch'  : g_switch,
-    #                    'use_mineos': use_mineos}
-
-    #if not use_mineos:
-
-    #    run_info['n_layers'] = n_layers
-
+    # Set mode type string.
     if i_toroidal is not None:
 
         mode_type = 'T'
-
+    
     elif run_info['mode_types'] == ['R']:
         
         print('Cannot plot dispersion diagram for only radial modes. Try including spheroidal modes in input file.')
@@ -67,6 +50,7 @@ def main():
 
         mode_type = 'S'
 
+    # Plot the dispersion diagram.
     plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal)
 
     return
