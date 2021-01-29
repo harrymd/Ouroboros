@@ -4,7 +4,7 @@ import os
 import subprocess
 
 # Import custom modules.
-from common import get_Mineos_out_dirs, mkdir_if_not_exist, read_Mineos_input_file, load_model
+from common import get_Mineos_out_dirs, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, load_model
 
 # Set default names of files written by wrapper scripts.
 default_in_file_minos_bran = 'minos_bran_in.txt'
@@ -330,12 +330,7 @@ def calculate_modes_with_mineos_wrapper(path_input_file):
         raise ValueError('Value of grav_switch {:} not recognised.'.format(run_info['grav_switch']))
 
     # Set mineos switch controlling which mode types are calculated.
-    run_info['jcoms'] = []
-    for i, mode_type in enumerate(['R', 'T', 'S', 'I']):
-
-        if mode_type in run_info['mode_types']:
-
-            run_info['jcoms'].append(i + 1)
+    run_info['jcoms'] = mode_types_to_jcoms(run_info['mode_types'])
 
     # Find the numerical value of the cut-off depth if 'all' flag was used
     # (i.e. not cut-off, store eigenfunctions for entire planet).

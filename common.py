@@ -242,6 +242,17 @@ def load_model(model_path, skiprows = 3):
 
     return model
 
+def mode_types_to_jcoms(mode_types):
+
+    jcoms = []
+    for i, mode_type in enumerate(['R', 'T', 'S', 'I']):
+
+        if mode_type in mode_types:
+
+            jcoms.append(i + 1)
+
+    return jcoms
+
 # Loading data from Ouroboros. ------------------------------------------------
 def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
     
