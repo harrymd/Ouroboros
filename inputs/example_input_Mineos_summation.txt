@@ -1,4 +1,4 @@
-channel_file inputs/example_station_list.txt 
+path_channels inputs/example_station_list.txt 
 path_cmt inputs/example_cmt_china.txt
 f_lims same
 n_samples 1000

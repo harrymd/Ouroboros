@@ -4,7 +4,7 @@ import os
 import subprocess
 
 # Import custom modules.
-from common import get_Mineos_out_dirs, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, load_model
+from common import get_Mineos_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, load_model
 
 # Set default names of files written by wrapper scripts.
 default_in_file_minos_bran = 'minos_bran_in.txt'
@@ -22,19 +22,11 @@ def jcom_to_minos_bran_out_file(dir_project, jcom, file_out_name):
     '''
     Get the path to the minos bran output file.
     '''
+
+    mode_type_char = jcom_to_mode_type_dict[jcom]
+    file_out_plain = '{:}_{:}.txt'.format(file_out_name, mode_type_char)
+    file_out_bin = '{:}_{:}.bin'.format(file_out_name, mode_type_char)
     
-    # Toroidal modes.
-    if jcom == 2:
-        
-        file_out_plain  = '{}_T.txt'.format(file_out_name)
-        file_out_bin    = '{}_T.bin'.format(file_out_name)
-    
-    # Spheroidal modes.
-    elif jcom == 3:
-        
-        file_out_plain  = '{}_S.txt'.format(file_out_name)
-        file_out_bin    = '{}_S.bin'.format(file_out_name)
-        
     # Get paths from directory and file name.
     file_out_plain  = os.path.join(dir_project, file_out_plain)
     file_out_bin    = os.path.join(dir_project, file_out_bin)
@@ -158,19 +150,9 @@ def jcom_to_eigcon_db_path(dir_project, jcom, db_name):
     For a given mode type (jcom), returns the path to the database file
     created by eigcon.
     '''
-    
-    # Get the mode string from the mode-type switch (jcom).
-    if jcom == 2:
-        
-        db_file = '{}T'.format(db_name)
-    
-    elif jcom == 3:
-        
-        db_file = '{}S'.format(db_name)
 
-    else:
-
-        raise NotImplementedError
+    mode_type_char = jcom_to_mode_type_dict[jcom]
+    db_file = '{:}{:}'.format(db_name, mode_type_char)
     
     # Get the path from directory and file name.
     db_path = os.path.join(dir_project, db_file)
@@ -255,14 +237,8 @@ def jcom_to_eigen2asc_out_dir(dir_project, jcom):
     Returns path to directory containing eigen2asc output.
     '''
     
-    # Determine directory name based on mode type (jcom).
-    if jcom == 2:
-        
-        eigen2asc_out_dir = 'eigen_txt_T'
-    
-    elif jcom == 3:
-        
-        eigen2asc_out_dir = 'eigen_txt_S'
+    mode_type_char = jcom_to_mode_type_dict[jcom]
+    eigen2asc_out_dir = 'eigen_txt_{:}'.format(mode_type_char)
     
     # Get path to directory.
     eigen2asc_out_dir = os.path.join(dir_project, eigen2asc_out_dir)
@@ -397,9 +373,6 @@ def calculate_modes_with_mineos(run_info, skip = False):
     # Run eigen2asc, which converts binary eigenfunction database into
     # text files.
     run_eigen2asc(run_info, run_info['jcoms'], skip = skip)
-
-    import sys
-    sys.exit()
 
     return
 

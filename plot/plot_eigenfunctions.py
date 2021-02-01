@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, load_model, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file
-from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
+from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Mineos, load_eigenfreq_Ouroboros, load_eigenfunc_Mineos, load_eigenfunc_Ouroboros, load_model, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file
+#from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
 
 def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True): 
 
@@ -35,7 +35,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         if mode_type == 'R':
 
-            raise NotImplementedError
+            r, U, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l)
 
         elif mode_type == 'S': 
 
@@ -169,11 +169,11 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         if mode_type in ['S', 'R']:
 
-            fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, l, run_info['g_switch'])
+            fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, l, run_info['grav_switch'])
 
         else:
 
-            fig_name = '{:}_{:>05d}_{:}{:1d}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, i_toroidal, l, run_info['g_switch'])
+            fig_name = '{:}_{:>05d}_{:}{:1d}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, i_toroidal, l, run_info['grav_switch'])
 
         fig_path = os.path.join(dir_plot, fig_name)
         print('Saving figure to {:}'.format(fig_path))
@@ -323,8 +323,15 @@ def main():
         assert i_toroidal is not None, 'Must use the --toroidal flag for mode type T.'
 
     # Read the input file and command-line arguments.
-    run_info = read_Ouroboros_input_file(path_input)
+    if use_mineos:
+
+        run_info = read_Mineos_input_file(path_input)
+
+    else:
+
+        run_info = read_Ouroboros_input_file(path_input)
     run_info['use_mineos'] = use_mineos
+
     #Ouroboros_info, mode_type, n, l, i_toroidal = prep_Ouroboros_info()
     #run_info, mode_type, n, l, i_toroidal = prep_run_info(args)
 

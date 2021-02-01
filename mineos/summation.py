@@ -5,7 +5,7 @@ from shutil import copyfile
 import subprocess
 
 # Import custom modules.
-from common import get_Mineos_out_dirs, mode_types_to_jcoms, read_Mineos_input_file
+from common import get_Mineos_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, read_Mineos_summation_input_file
 
 # Set default names of files written by wrapper scripts.
 default_file_green_in = 'green_in.txt'
@@ -48,9 +48,8 @@ def write_green_parameter_file(run_info, summation_info):
                 summation_info['path_green_out_db']]
 
     # Write the parameter file.
-    in_path_green = os.path.join(run_info['dir_run'], summation_info['file_green_in'])
-    print('Writing {:}'.format(in_path_green))
-    with open(in_path_green, 'w') as param_file:
+    print('Writing {:}'.format(summation_info['in_path_green']))
+    with open(summation_info['in_path_green'], 'w') as param_file:
         
         for line in lines:
             
@@ -62,21 +61,16 @@ def write_eigen_db_list_file(run_info, summation_info):
         #dir_project, jcoms, eigen_db_list_file):
     '''
     Writes a text file listing the normal-mode database files to be
-    used in mode summation.
+    used in calculating Green's functions during mode summation.
     '''
-    
-    #eigen_db_list_path = os.path.join(dir_project, eigen_db_list_file)
 
-    # Define mapping between jcom switch and mode type string.
-    jcom_dict = {2 : 'T', 3 : 'S'}
-    
     # Write one line per jcom.
     print('Writing {:}'.format(summation_info['path_eigen_db_list']))
     with open(summation_info['path_eigen_db_list'], 'w') as out_ID:
         
         for jcom in run_info['jcoms']:
             
-            out_ID.write(os.path.join(run_info['dir_run'], jcom_dict[jcom]) + '\n')
+            out_ID.write(os.path.join(run_info['dir_run'], jcom_to_mode_type_dict[jcom]) + '\n')
 
     return
             
@@ -100,15 +94,16 @@ def run_green(run_info, summation_info, skip = False):
     
     # Convert a text file which lists stations and channels into a CSS
     # database format used by Mineos.
-    run_simpledit(summation_info['channel_file'], summation_info['path_channel_db'])
+    run_simpledit(summation_info['path_channels'], summation_info['path_channel_db'])
 
     # Define the path to the file which lists the normal mode databases to
     # be included.
     file_eigen_db_list = 'eigen_db_list.txt'
     summation_info['path_eigen_db_list'] = \
-        os.path.join(run_info['dir_run'], file_eigen_db_list)
+        os.path.join(summation_info['dir_cmt'], file_eigen_db_list)
 
     # Write the input file for the green function. 
+    summation_info['in_path_green'] = os.path.join(summation_info['dir_cmt'], summation_info['file_green_in'])
     write_green_parameter_file(run_info, summation_info)
         #dir_project,
         #path_eigen_db_list,
@@ -123,8 +118,7 @@ def run_green(run_info, summation_info, skip = False):
     write_eigen_db_list_file(run_info, summation_info)
 
     # Run green. 
-    in_path_green = os.path.join(run_info['dir_run'], summation_info['file_green_in'])
-    cmd = '{} < {}'.format(executable_green, in_path_green)
+    cmd = '{} < {}'.format(executable_green, summation_info['in_path_green'])
     print(cmd)
     subprocess.call(cmd, shell = True)
 
@@ -242,39 +236,7 @@ def run_cucss2sac(dir_name, name_syndat_db, name_syndat_sac = 'sac', skip = Fals
 
     return
 
-# -----------------------------------------------------------------------------
-def read_Mineos_summation_input_file(path_input):
-    
-    # Read the summation input file.
-    print('Reading {:}'.format(path_input))
-    with open(path_input, 'r') as in_id:
-
-        channel_file = in_id.readline().split()[1]
-        path_cmt = in_id.readline().split()[1]
-        f_lims_line = in_id.readline().split()
-        if len(f_lims_line) == 2:
-
-            if f_lims_line[1] == 'same':
-
-                f_lims = 'same'
-        else:
-
-            f_lims = [float(x) for x in f_lims_line[1:]]
-        n_samples = int(in_id.readline().split()[1])
-        data_type = int(in_id.readline().split()[1])
-        plane = int(in_id.readline().split()[1])
-
-    # Store the information in a dictionary.
-    summation_info = dict()
-    summation_info['channel_file'] = channel_file
-    summation_info['path_cmt'] = path_cmt
-    summation_info['f_lims'] = f_lims
-    summation_info['n_samples'] = n_samples
-    summation_info['data_type'] = data_type
-    summation_info['plane'] = plane
-
-    return summation_info
-
+# Wrapper scripts. ------------------------------------------------------------
 def summation_wrapper(path_mode_input, path_summation_input, skip = False):
 
     # Read the mode input file.
@@ -303,12 +265,20 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False):
     #                       Path to the binary .wfdisc database which stores
     #                       the Green's functions.
     run_info['dir_model'], run_info['dir_run'] = get_Mineos_out_dirs(run_info) 
-    summation_info['path_channel_db'] = os.path.join(run_info['dir_model'], 'channel_db')
-    summation_info['path_green_out_db'] = os.path.join(run_info['dir_run'], 'green')
+    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], 'summation')
+    summation_info['dir_channels'] = os.path.join(summation_info['dir_summation'], summation_info['name_channels'])
+    summation_info['dir_cmt'] = os.path.join(summation_info['dir_channels'], summation_info['name_cmt'])
+    
+    for dir_key in ['dir_summation', 'dir_channels', 'dir_cmt']:
+    
+        mkdir_if_not_exist(summation_info[dir_key])
+
+    summation_info['path_channel_db'] = os.path.join(summation_info['dir_channels'], 'channel_db')
+    summation_info['path_green_out_db'] = os.path.join(summation_info['dir_cmt'], 'green')
     summation_info['file_green_in'] = default_file_green_in
-    summation_info['path_syndat_in'] = os.path.join(run_info['dir_run'], default_file_syndat_in)
+    summation_info['path_syndat_in'] = os.path.join(summation_info['dir_cmt'], default_file_syndat_in)
     summation_info['name_syndat_out'] = default_file_syndat_out
-    summation_info['path_syndat_out'] = os.path.join(run_info['dir_run'], summation_info['name_syndat_out'])
+    summation_info['path_syndat_out'] = os.path.join(summation_info['dir_cmt'], summation_info['name_syndat_out'])
 
     # pannel_channel_ascii  Text database file storing ???
     # green_out_db_path     Bindary database file ???
@@ -343,8 +313,9 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False):
 
     # Run cucss2sac, which converts the CSS database of synthetic seismograms
     # into text files.
-    copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(run_info['dir_run'], '{:}.site'.format(summation_info['name_syndat_out'])))
-    run_cucss2sac(run_info['dir_run'], summation_info['name_syndat_out'], skip = skip)
+    print('cp {:}.site {:}'.format(summation_info['path_channel_db'], os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['name_syndat_out']))))
+    copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['name_syndat_out'])))
+    run_cucss2sac(summation_info['dir_cmt'], summation_info['name_syndat_out'], skip = skip)
 
     return
 

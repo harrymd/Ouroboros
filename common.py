@@ -4,6 +4,9 @@ from operator import itemgetter
 
 import numpy as np
 
+# Define mapping between Mineos jcom switch and mode-type character.
+jcom_to_mode_type_dict = {1 : 'R', 2 : 'T', 3 : 'S', 4 : 'I'}
+
 # Manipulating directories. ---------------------------------------------------
 def mkdir_if_not_exist(dir_):
     '''
@@ -198,6 +201,43 @@ def read_Mineos_input_file(path_input_file):
                     'max_depth'     : max_depth}
 
     return mineos_info
+
+def read_Mineos_summation_input_file(path_input):
+    
+    # Read the summation input file.
+    print('Reading {:}'.format(path_input))
+    with open(path_input, 'r') as in_id:
+
+        path_channels = in_id.readline().split()[1]
+        path_cmt = in_id.readline().split()[1]
+        f_lims_line = in_id.readline().split()
+        if len(f_lims_line) == 2:
+
+            if f_lims_line[1] == 'same':
+
+                f_lims = 'same'
+        else:
+
+            f_lims = [float(x) for x in f_lims_line[1:]]
+        n_samples = int(in_id.readline().split()[1])
+        data_type = int(in_id.readline().split()[1])
+        plane = int(in_id.readline().split()[1])
+
+    name_channels = os.path.splitext(os.path.basename(path_channels))[0]
+    name_cmt = os.path.splitext(os.path.basename(path_cmt))[0]
+
+    # Store the information in a dictionary.
+    summation_info = dict()
+    summation_info['path_channels'] = path_channels
+    summation_info['name_channels'] = os.path.splitext(os.path.basename(path_channels))[0]
+    summation_info['path_cmt'] = path_cmt
+    summation_info['name_cmt'] = os.path.splitext(os.path.basename(path_cmt))[0]
+    summation_info['f_lims'] = f_lims
+    summation_info['n_samples'] = n_samples
+    summation_info['data_type'] = data_type
+    summation_info['plane'] = plane
+
+    return summation_info
 
 def load_model(model_path, skiprows = 3):
     '''
@@ -496,6 +536,65 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
         else:
 
             return n, l, f
+
+def load_eigenfunc_Mineos(run_info, mode_type, n, l):
+#def load_eigenfunc_Mineos(name_model, n_max, l_max, g_switch, mode_type, n, l):
+    
+    #if 'dir_eigval' in run_info:
+
+    #    dir_eigval = run_info['dir_eigval']
+
+    #else:
+
+    #    name_model = run_info['model']
+    #    n_max = run_info['n_lims'][1]
+    #    l_max = run_info['l_lims'][1]
+    #    g_switch = run_info['g_switch']
+
+    #    dir_eigval = get_dir_eigval_Mineos(run_info['dir_output'], name_model, n_max, l_max, g_switch)
+
+    # Find the Mineos output directory.
+    _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
+
+    dir_eig_funcs = os.path.join(run_info['dir_run'], 'eigen_txt_{:}'.format(mode_type))
+
+    # Syndat uses a slightly different naming convention. Radial modes are
+    # prefixed with 'S' instead of 'R'.
+    # Note: Need to check the naming convention for inner-core toroidal
+    # modes.
+    if mode_type == 'I':
+
+        raise NotImplementedError
+
+    mode_type_to_mode_type_str_dict = {'R' : 'S', 'S' : 'S', 'T' : 'T', 'I' : None}
+    mode_type_str = mode_type_to_mode_type_str_dict[mode_type]
+
+    # Get the path of the eigenfunction file.
+    file_eig_func = '{:}.{:>07d}.{:>07d}.ASC'.format(mode_type_str, n, l)
+    path_eig_func = os.path.join(dir_eig_funcs, file_eig_func)
+
+    # Load the data.
+    data = np.loadtxt(path_eig_func, skiprows = 1).T
+
+    # Unpack and return
+    if mode_type == 'R':
+
+        r, U, Up = data
+        return r, U, Up
+
+    elif mode_type == 'S':
+
+        r, U, Up, V, Vp, P, Pp  = data
+        return r, U, Up, V, Vp, P, Pp
+
+    elif mode_type == 'T':
+
+        r, W, Wp = data
+        return r, W, Wp
+
+    elif mode_type == 'I':
+
+        raise NotImplementedError
 
 # Manipulating Earth models. --------------------------------------------------
 def get_r_fluid_solid_boundary(radius, vs):

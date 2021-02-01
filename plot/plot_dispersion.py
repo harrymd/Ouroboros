@@ -92,7 +92,7 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
                 #l_R = mode_data_R['l']
                 #f_R = mode_data_R['w'] # Freq in mHz.
                 #nlf_radial = (n_R, l_R, f_R)
-                nlf_R = load_eigenfreq_Mineos(run_info, 'R')
+                nlf_radial = load_eigenfreq_Mineos(run_info, 'R')
 
             else:
 

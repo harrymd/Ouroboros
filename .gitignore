@@ -1,5 +1,7 @@
 __pycache__/
 __init__.py
 inputs/input*
+inputs/CMTs
 old/
+very_old/
 *.sbatch
