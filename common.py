@@ -72,6 +72,31 @@ def get_Mineos_out_dirs(run_info):
 
     return dir_model, dir_run
 
+def get_Mineos_summation_out_dirs(run_info, summation_info, file_green_in = None, file_syndat_in = None, file_syndat_out = None):
+
+    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], 'summation')
+    summation_info['dir_channels'] = os.path.join(summation_info['dir_summation'], summation_info['name_channels'])
+    summation_info['dir_cmt'] = os.path.join(summation_info['dir_channels'], summation_info['name_cmt'])
+    
+    summation_info['path_channel_db'] = os.path.join(summation_info['dir_channels'], 'channel_db')
+    summation_info['path_green_out_db'] = os.path.join(summation_info['dir_cmt'], 'green')
+
+    if file_green_in is not None:
+
+        summation_info['file_green_in'] = file_green_in
+
+    if file_syndat_in is not None:
+
+        summation_info['path_syndat_in'] = os.path.join(summation_info['dir_cmt'], file_syndat_in)
+
+
+    if file_syndat_out is not None:
+
+        summation_info['file_syndat_out'] = file_syndat_out
+        summation_info['path_syndat_out'] = os.path.join(summation_info['dir_cmt'], summation_info['file_syndat_out'])
+
+    return summation_info
+
 # Reading input files. --------------------------------------------------------
 def read_Ouroboros_input_file(path_input_file):
     '''

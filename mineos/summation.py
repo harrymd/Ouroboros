@@ -5,7 +5,7 @@ from shutil import copyfile
 import subprocess
 
 # Import custom modules.
-from common import get_Mineos_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, read_Mineos_summation_input_file
+from common import get_Mineos_out_dirs, get_Mineos_summation_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, read_Mineos_summation_input_file
 
 # Set default names of files written by wrapper scripts.
 default_file_green_in = 'green_in.txt'
@@ -265,20 +265,14 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False):
     #                       Path to the binary .wfdisc database which stores
     #                       the Green's functions.
     run_info['dir_model'], run_info['dir_run'] = get_Mineos_out_dirs(run_info) 
-    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], 'summation')
-    summation_info['dir_channels'] = os.path.join(summation_info['dir_summation'], summation_info['name_channels'])
-    summation_info['dir_cmt'] = os.path.join(summation_info['dir_channels'], summation_info['name_cmt'])
-    
+    summation_info = get_Mineos_summation_out_dirs(run_info, summation_info,
+                        file_green_in = default_file_green_in,
+                        file_syndat_in = default_file_syndat_in,
+                        file_syndat_out = default_file_syndat_out)
+
     for dir_key in ['dir_summation', 'dir_channels', 'dir_cmt']:
     
         mkdir_if_not_exist(summation_info[dir_key])
-
-    summation_info['path_channel_db'] = os.path.join(summation_info['dir_channels'], 'channel_db')
-    summation_info['path_green_out_db'] = os.path.join(summation_info['dir_cmt'], 'green')
-    summation_info['file_green_in'] = default_file_green_in
-    summation_info['path_syndat_in'] = os.path.join(summation_info['dir_cmt'], default_file_syndat_in)
-    summation_info['name_syndat_out'] = default_file_syndat_out
-    summation_info['path_syndat_out'] = os.path.join(summation_info['dir_cmt'], summation_info['name_syndat_out'])
 
     # pannel_channel_ascii  Text database file storing ???
     # green_out_db_path     Bindary database file ???
@@ -313,9 +307,9 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False):
 
     # Run cucss2sac, which converts the CSS database of synthetic seismograms
     # into text files.
-    print('cp {:}.site {:}'.format(summation_info['path_channel_db'], os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['name_syndat_out']))))
-    copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['name_syndat_out'])))
-    run_cucss2sac(summation_info['dir_cmt'], summation_info['name_syndat_out'], skip = skip)
+    print('cp {:}.site {:}'.format(summation_info['path_channel_db'], os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['file_syndat_out']))))
+    copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['file_syndat_out'])))
+    run_cucss2sac(summation_info['dir_cmt'], summation_info['file_syndat_out'], skip = skip)
 
     return
 
