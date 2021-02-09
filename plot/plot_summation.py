@@ -6,8 +6,8 @@ import numpy as np
 from obspy import read
 from obspy.realtime.signal import scale
 
-from common import get_Mineos_out_dirs, get_Mineos_summation_out_dirs, read_Mineos_input_file, read_Mineos_summation_input_file
-from misc.cmt_io import read_mineos_cmt
+from Ouroboros.common import get_Mineos_out_dirs, get_Mineos_summation_out_dirs, mkdir_if_not_exist, read_Mineos_input_file, read_Mineos_summation_input_file
+from Ouroboros.misc.cmt_io import read_mineos_cmt
 
 font_size_label = 12
 
@@ -30,7 +30,10 @@ def unpack_trace(trace, trace_comparison = None):
 
     return t, x, t_c, x_c
 
-def plot_seismograph(trace, trace_comparison = None):
+def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None, show = True):
+    '''
+    Trace input units assumed to be nm/s.
+    '''
 
     t, x, t_c, x_c = unpack_trace(trace, trace_comparison = trace_comparison)
 
@@ -38,9 +41,11 @@ def plot_seismograph(trace, trace_comparison = None):
 
     t_scale_dict = {'hours' : 1.0/3600.0}
     t_scale = t_scale_dict[t_units]
+    
+    if ax is None:
 
-    fig = plt.figure(figsize = (8.5, 5.0), constrained_layout = True)
-    ax  = plt.gca()
+        fig = plt.figure(figsize = (8.5, 5.0), constrained_layout = True)
+        ax  = plt.gca()
 
     ax.plot(t*t_scale, x, label = 'Synthetic')
 
@@ -57,7 +62,14 @@ def plot_seismograph(trace, trace_comparison = None):
 
     ax.axhline(linestyle = '-', alpha = 0.5)
 
-    plt.show()
+    if path_out is not None:
+        
+        print('Saving figure to {:}'.format(path_out))
+        plt.savefig(path_out, dpi = 300, bbox_inches = 'tight')
+
+    if show:
+
+        plt.show()
 
     return
 
@@ -70,10 +82,15 @@ def do_fft(t, x):
     # Get frequencies and do Fourier transform.
     f = np.fft.rfftfreq(n_t, d = d_t)
     X = np.fft.rfft(x)
+    # Convert to X per Hz.
+    X = X*d_t
 
     return f, X
 
-def plot_spectrum(trace, trace_comparison = None):
+def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None, show = True):
+    '''
+    Trace input units assumed to be nm/s.
+    '''
 
     # Get time and displacement arrays.
     t, x, t_c, x_c = unpack_trace(trace, trace_comparison = trace_comparison)
@@ -96,7 +113,17 @@ def plot_spectrum(trace, trace_comparison = None):
 
     abs_X_all_max = np.max([abs_X_max, abs_X_c_max])
 
-    fig, ax_arr = plt.subplots(2, 1, figsize = (8.5, 6.0), sharex = True, gridspec_kw={'height_ratios': [1, 2]})
+    if ax_arr is None:
+
+        fig, ax_arr = plt.subplots(2, 1,
+                        figsize = (8.5, 6.0),
+                        sharex = True,
+                        gridspec_kw = {'height_ratios': [1, 2]},
+                        constrained_layout = True)
+
+    else:
+
+        ax_arr[0].get_shared_x_axes().join(*ax_arr)
 
     f_scale = 1.0E3
     f_lims = [0.0, 5.0]
@@ -148,17 +175,56 @@ def plot_spectrum(trace, trace_comparison = None):
     ax.set_ylabel('Spectral amplitude (nm s$^{-1}$ mHz$^{-1}$)', fontsize = font_size_label)
 
     y_lim_buff = 0.05
-    y_lims = [0.0, (1.0 + y_lim_buff)*abs_X_all_max*X_scale]
-    ax.set_ylim(y_lims)
+    y_log = False
+    if y_log:
+
+
+        ax.set_yscale('log')
+
+    else:
+
+        y_lims = [0.0, (1.0 + y_lim_buff)*abs_X_all_max*X_scale]
+        ax.set_ylim(y_lims)
 
     ax.set_xlim(f_lims)
     ax.set_xlabel('Frequency (mHz)', fontsize = font_size_label)
 
-    plt.tight_layout()
 
-    plt.show()
+
+    if path_out is not None:
+        
+        print('Saving figure to {:}'.format(path_out))
+        plt.savefig(path_out, dpi = 300, bbox_inches = 'tight')
+
+    if show:
+
+        plt.show()
 
     return
+
+def plot_seismograph_and_spectrum(trace, path_out = None, show = True):
+
+    fig, ax_arr = plt.subplots(3, 1,
+                    figsize = (10.0, 8.0),
+                    gridspec_kw = {'height_ratios': [2, 1, 2]},
+                    constrained_layout = True)
+
+    ax = ax_arr[0]
+    plot_seismograph(trace, ax = ax, show = False)
+
+    sub_ax_arr = ax_arr[1:]
+    plot_spectrum(trace, ax_arr = sub_ax_arr, show = False)
+
+    if path_out is not None:
+        
+        print('Saving figure to {:}'.format(path_out))
+        plt.savefig(path_out, dpi = 300, bbox_inches = 'tight')
+
+    if show:
+
+        plt.show()
+
+    return fig, ax_arr
 
 def main():
 
@@ -202,6 +268,8 @@ def main():
         run_info['dir_model'], run_info['dir_run'] = get_Mineos_out_dirs(run_info) 
         summation_info = get_Mineos_summation_out_dirs(run_info, summation_info)
 
+        dir_plot = os.path.join(run_info['dir_run'], 'plots')
+
         dir_sac = os.path.join(summation_info['dir_cmt'], 'sac')
 
         # Read moment tensor file.
@@ -232,12 +300,16 @@ def main():
     trace = stream[0]
 
     if spectrum:
-
-        plot_spectrum(trace, trace_comparison = trace_comparison)
+        
+        path_out = os.path.join(dir_plot, 'spectrum.png')
+        plot_spectrum(trace, trace_comparison = trace_comparison,
+                path_out = path_out)
 
     else:
-
-        plot_seismograph(trace, trace_comparison = trace_comparison)
+        
+        path_out = os.path.join(dir_plot, 'seismograph.png')
+        plot_seismograph(trace, trace_comparison = trace_comparison,
+                path_out = path_out)
     
     return
 

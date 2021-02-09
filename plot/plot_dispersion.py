@@ -9,51 +9,7 @@ import numpy as np
 from common import load_eigenfreq_Mineos, load_eigenfreq_Ouroboros, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
 #from stoneley.code.common.Mineos import load_eigenfreq_Mineos
 
-def main():
 
-    # Read input arguments.
-    parser = argparse.ArgumentParser()
-    parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
-    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
-    parser.add_argument("--use_mineos", action = "store_true", help = "Plot only Mineos modes (default: only Ouroboros) ")
-    args = parser.parse_args()
-
-    # Rename input arguments.
-    path_input = args.path_to_input_file
-    i_toroidal = args.layer_number
-    use_mineos = args.use_mineos
-
-    # Read the input file.
-    if use_mineos:
-
-        # Read Mineos input file.
-        run_info = read_Mineos_input_file(path_input)
-
-    else:
-        
-        # Read Ouroboros input file.
-        run_info = read_Ouroboros_input_file(path_input)
-
-    # Store whether Mineos is being used.
-    run_info['use_mineos'] = use_mineos
-
-    # Set mode type string.
-    if i_toroidal is not None:
-
-        mode_type = 'T'
-    
-    elif run_info['mode_types'] == ['R']:
-        
-        print('Cannot plot dispersion diagram for only radial modes. Try including spheroidal modes in input file.')
-
-    else:
-
-        mode_type = 'S'
-
-    # Plot the dispersion diagram.
-    plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal)
-
-    return
 
 def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = True, i_toroidal = None):
 
@@ -223,6 +179,52 @@ def plot_dispersion(n, l, f, ax = None, x_lim = None, y_lim = 'auto', x_label = 
         plt.show()
         
     return ax
+
+def main():
+
+    # Read input arguments.
+    parser = argparse.ArgumentParser()
+    parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
+    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
+    parser.add_argument("--use_mineos", action = "store_true", help = "Plot only Mineos modes (default: only Ouroboros) ")
+    args = parser.parse_args()
+
+    # Rename input arguments.
+    path_input = args.path_to_input_file
+    i_toroidal = args.layer_number
+    use_mineos = args.use_mineos
+
+    # Read the input file.
+    if use_mineos:
+
+        # Read Mineos input file.
+        run_info = read_Mineos_input_file(path_input)
+
+    else:
+        
+        # Read Ouroboros input file.
+        run_info = read_Ouroboros_input_file(path_input)
+
+    # Store whether Mineos is being used.
+    run_info['use_mineos'] = use_mineos
+
+    # Set mode type string.
+    if i_toroidal is not None:
+
+        mode_type = 'T'
+    
+    elif run_info['mode_types'] == ['R']:
+        
+        print('Cannot plot dispersion diagram for only radial modes. Try including spheroidal modes in input file.')
+
+    else:
+
+        mode_type = 'S'
+
+    # Plot the dispersion diagram.
+    plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal)
+
+    return
 
 if __name__ == '__main__':
 
