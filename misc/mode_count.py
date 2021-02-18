@@ -24,7 +24,7 @@ def main():
 
     # Read the input file.
     if use_mineos:
-
+    
         raise NotImplementedError
         # Read Mineos input file.
         run_info = read_Mineos_input_file(path_input)
@@ -84,8 +84,15 @@ def main():
         multiplicity = ((2*mode_info[mode_key]['l']) + 1)
         n_modes = len(i)
         multiplicities = np.sum(multiplicity[i]) 
-    
-        print('Mode type {:>2}: {:>5d} modes (multiplicity {:>5d})'.format(mode_key, n_modes, multiplicities))
+        
+        if n_modes > 0:
+
+            maximum_l = np.max(mode_info[mode_key]['l'][i])
+            print('Mode type {:>2}: {:>5d} modes (multiplicity: {:>5d}), max. l: {:>5d}'.format(mode_key, n_modes, multiplicities, maximum_l))
+
+        else:
+
+            print('Mode type {:>2}: {:>5d} modes (multiplicity: {:>5d})'.format(mode_key, n_modes, multiplicities))
 
         sum_n_modes = sum_n_modes + n_modes
         sum_multiplicities = sum_multiplicities + multiplicities

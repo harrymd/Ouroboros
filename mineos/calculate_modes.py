@@ -312,9 +312,9 @@ def calculate_modes_with_mineos_wrapper(path_input_file):
     # (i.e. not cut-off, store eigenfunctions for entire planet).
     if run_info['max_depth'] == 'all':
 
+        raise ValueError('Mineos has a bug when summing radial modes if max_depth is too large (the exact value is not known).')
         model = load_model(run_info['path_model'])
         r_srf_km = model['r'][-1]*1.0E-3 
-        run_info['max_depth'] = r_srf_km
 
     # Set directory names.
     dir_model_out, run_info['dir_run'] = get_Mineos_out_dirs(run_info)

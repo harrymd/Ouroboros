@@ -9,9 +9,7 @@ import numpy as np
 from common import load_eigenfreq_Mineos, load_eigenfreq_Ouroboros, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
 #from stoneley.code.common.Mineos import load_eigenfreq_Mineos
 
-
-
-def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = True, i_toroidal = None):
+def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = True, i_toroidal = None, f_lims = 'auto'):
 
     # Get frequency information.
     if run_info['use_mineos']:
@@ -70,7 +68,7 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
         fig = plt.figure(figsize = (9.5, 5.5))
         ax  = plt.gca()
      
-    ax = plot_dispersion(n, l, f, ax = ax, show = False, color = 'b', c_scatter = 'k', alpha = alpha, add_legend = False, nlf_radial = nlf_radial)
+    ax = plot_dispersion(n, l, f, ax = ax, show = False, color = 'b', c_scatter = 'k', alpha = alpha, add_legend = False, nlf_radial = nlf_radial, f_lims = f_lims)
 
     #ax.set_ylim([0.0, 14.0])
     #ax.set_xlim([0.0, 60.0])
@@ -97,7 +95,7 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
     
         plt.show()
 
-def plot_dispersion(n, l, f, ax = None, x_lim = None, y_lim = 'auto', x_label = 'Angular order, $\ell$', y_label = 'Frequency / mHz', title = None, h_lines = None, path_fig = None, show = True, color = 'k', c_scatter = 'k', alpha = 1.0, label = None, add_legend = False, nlf_radial = None):
+def plot_dispersion(n, l, f, ax = None, x_lim = None, f_lims = 'auto', x_label = 'Angular order, $\ell$', y_label = 'Frequency / mHz', title = None, h_lines = None, path_fig = None, show = True, color = 'k', c_scatter = 'k', alpha = 1.0, label = None, add_legend = False, nlf_radial = None):
 
     n_list = sorted(list(set(n)))
     
@@ -126,22 +124,23 @@ def plot_dispersion(n, l, f, ax = None, x_lim = None, y_lim = 'auto', x_label = 
 
     font_size_label = 18
     
+    print(x_lim)
     if x_lim is not None:
 
         ax.set_xlim(x_lim)
 
     ax.xaxis.set_major_locator(MaxNLocator(integer = True))
 
-    if y_lim is not None:
+    if f_lims is not None:
 
-        if y_lim == 'auto':
+        if f_lims == 'auto':
 
             f_min = 0.0
             f_max = np.max(f)
             buff = (f_max - f_min)*0.05
-            y_lim = [f_min, f_max + buff]
+            f_lims = [f_min, f_max + buff]
 
-        ax.set_ylim(y_lim)
+        ax.set_ylim(f_lims)
 
     if x_label is not None:
 
@@ -187,12 +186,16 @@ def main():
     parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
     parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
     parser.add_argument("--use_mineos", action = "store_true", help = "Plot only Mineos modes (default: only Ouroboros) ")
+    parser.add_argument("--f_lims", type = float, nargs = 2, help = "Specify frequency limits (mHz) of plot axes (default: limits are found automatically).")
     args = parser.parse_args()
 
     # Rename input arguments.
     path_input = args.path_to_input_file
     i_toroidal = args.layer_number
     use_mineos = args.use_mineos
+    f_lims = args.f_lims
+    if f_lims is None:
+        f_lims = 'auto'
 
     # Read the input file.
     if use_mineos:
@@ -222,7 +225,7 @@ def main():
         mode_type = 'S'
 
     # Plot the dispersion diagram.
-    plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal)
+    plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal, f_lims = f_lims)
 
     return
 

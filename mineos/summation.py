@@ -4,8 +4,12 @@ import os
 from shutil import copyfile
 import subprocess
 
+# Import third-party modules.
+from obspy import read
+
 # Import custom modules.
-from common import get_Mineos_out_dirs, get_Mineos_summation_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, read_Mineos_summation_input_file
+from common import get_Mineos_out_dirs, get_Mineos_summation_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, read_Mineos_summation_input_file, read_channel_file
+from misc.cmt_io import read_mineos_cmt
 
 # Set default names of files written by wrapper scripts.
 default_file_green_in = 'green_in.txt'
@@ -24,6 +28,8 @@ def run_simpledit(channel_ascii_path, channel_db_path):
     '''
     Wrapper for the simpledit script, which converts a text station/channel
     listing into a CSS database format used by mineos.
+
+    channel_ascii_path The staname field cannot contain interior apostrophes.
     '''
 
     # Run the command.
@@ -214,6 +220,7 @@ def run_cucss2sac(dir_name, name_syndat_db, name_syndat_sac = 'sac', skip = Fals
     # Change directory because it doesn't seem to work with absolute
     # paths.
     return_dir = os.getcwd()
+    print('cd {:}'.format(dir_name))
     os.chdir(dir_name)
     
     try:
@@ -236,8 +243,53 @@ def run_cucss2sac(dir_name, name_syndat_db, name_syndat_sac = 'sac', skip = Fals
 
     return
 
+def path_to_sac(dir_output, path_cmt, station, channel):
+
+    dir_sac = os.path.join(dir_output, 'sac')
+
+    # Read moment tensor file.
+    cmt_info = read_mineos_cmt(path_cmt)
+
+    # Get path to SAC file.
+    src_time_year_day_str = cmt_info['datetime_ref'].strftime('%Y%j')
+    src_time_hms_str = cmt_info['datetime_ref'].strftime('%H:%M:%S').replace('0', ' ')
+    file_sac = 'syndat_out.{:}:{:}.{:}.{:}.SAC'.format(src_time_year_day_str,
+                src_time_hms_str, station, channel)
+    path_sac = os.path.join(dir_sac, file_sac)
+
+    return path_sac
+
+def sac2mseed(dir_output, path_cmt, path_channel):
+    
+    station_list = read_channel_file(path_channel)
+
+    first_iteration = True
+
+    for station in station_list:
+
+        channel_list = station_list[station]
+        for channel in channel_list:
+
+            path_sac = path_to_sac(dir_output, path_cmt, station, channel)
+            stream_new = read(path_sac)
+
+            if first_iteration:
+
+                stream = stream_new
+                first_iteration = False
+
+            else:
+
+                stream = stream + stream_new
+
+    path_out = os.path.join(dir_output, 'sac', 'stream.mseed')
+    print('Writing {:}'.format(path_out))
+    stream.write(path_out)
+
+    return
+
 # Wrapper scripts. ------------------------------------------------------------
-def summation_wrapper(path_mode_input, path_summation_input, skip = False):
+def summation_wrapper(path_mode_input, path_summation_input, skip = False, green2sac = False):
 
     # Read the mode input file.
     run_info = read_Mineos_input_file(path_mode_input)
@@ -295,6 +347,14 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False):
     # Green's functions database.
     run_creat_origin(summation_info['path_cmt'], summation_info['path_green_out_db'])
 
+    if green2sac:
+    
+        print('cp {:}.site {:}'.format(summation_info['path_channel_db'], os.path.join(summation_info['dir_cmt'], '{:}.site'.format('green'))))
+        copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(summation_info['dir_cmt'], '{:}.site'.format('green')))
+        run_cucss2sac(summation_info['dir_cmt'],
+                'green',
+                name_syndat_sac = 'green_sac')
+
     # Run syndat, which convolves Green's functions with moment tensor.
     #path_syndat_in = os.path.join(dir_project, 'syndat_in.txt')
     #path_syndat_out = os.path.join(dir_project, 'syndat_out')
@@ -311,6 +371,9 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False):
     copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['file_syndat_out'])))
     run_cucss2sac(summation_info['dir_cmt'], summation_info['file_syndat_out'], skip = skip)
 
+    ## For convenience, store the SAC output in a miniSEED file.
+    sac2mseed(summation_info['dir_cmt'], summation_info['path_cmt'], summation_info['path_channels'])
+
     return
 
 def main():
@@ -324,7 +387,7 @@ def main():
     path_summation_input = input_args.path_summation_input
     
     # Do the summation.
-    summation_wrapper(path_mode_input, path_summation_input)
+    summation_wrapper(path_mode_input, path_summation_input, green2sac = True)
 
     return
 

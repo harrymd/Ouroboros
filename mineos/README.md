@@ -26,6 +26,8 @@ eps 1.0E-10
 max_depth all
 ```
 
+Warning: *Mineos* has a bug when doing mode summation including radial modes if the eigenfunctions are saved with a large value of `max_depth` (including `max_depth = 'all'`).
+
 ### Plotting mode eigenfrequencies
 
 ```
@@ -71,3 +73,8 @@ The time interval between samples in the synthetic seismograms is also controlle
 
 * Plotting eigenfunctions.
 * Plotting synthetic seismograms and Green's functions.
+* Maybe re-grid comparison trace to assure phase alignment
+
+```
+python3 plot/plot_summation.py --use_mineos ../../input/mineos/input_Mineos_stoneley.txt ../../input/mineos/input_Mineos_summation_stoneley.txt PAYG VHZ
+```

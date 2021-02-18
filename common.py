@@ -3,6 +3,10 @@ from itertools import groupby
 from operator import itemgetter
 
 import numpy as np
+try:
+    from    obspy.geodetics             import gps2dist_azimuth
+except ModuleNotFoundError:
+    print('Could not import obspy. Synthetic seismograms will not be available.')
 
 # Define mapping between Mineos jcom switch and mode-type character.
 jcom_to_mode_type_dict = {1 : 'R', 2 : 'T', 3 : 'S', 4 : 'I'}
@@ -157,6 +161,28 @@ def read_Ouroboros_input_file(path_input_file):
 
     return Ouroboros_info
 
+def read_Ouroboros_summation_input_file(path_input):
+
+    # Announcement
+    print('Reading input file, {:}'.format(path_input))
+    
+    # Read line by line.
+    with open(path_input, 'r') as in_id:
+        
+        mode_types = in_id.readline().split()[1:]
+        f_lims = [float(x) for x in in_id.readline().split()[1:]]
+        path_channels = in_id.readline().split()[-1]
+        path_cmt = in_id.readline().split()[-1]
+
+    # Store in dictionary.
+    summation_info = dict()
+    summation_info['mode_types'] = mode_types
+    summation_info['f_lims'] = f_lims
+    summation_info['path_channels'] = path_channels
+    summation_info['path_cmt'] = path_cmt
+
+    return summation_info
+
 def read_Mineos_input_file(path_input_file):
     '''
     Reads the Mineos input file.
@@ -182,7 +208,7 @@ def read_Mineos_input_file(path_input_file):
 
         else:
 
-            max_depth = float(max_depth)
+            max_depth = float(max_depth_str)
 
     name_model = os.path.splitext(os.path.basename(path_model))[0]
 
@@ -317,6 +343,47 @@ def mode_types_to_jcoms(mode_types):
             jcoms.append(i + 1)
 
     return jcoms
+
+def read_channel_file(path_channel):
+    
+    inventory = dict()
+    
+    first_row = True
+    with open(path_channel, 'r') as in_id:
+        
+        lines = in_id.readlines()
+
+        for line in lines:
+        
+            if not line[0] == '@':
+                
+                if not first_row:
+
+                    inventory[station] = dict()
+                    inventory[station]['channels'] = channels
+                    inventory[station]['coords'] = coords
+
+                else:
+
+                    first_row = False
+
+                station, lat_str, lon_str, ele_str = line.split()[0:4]
+                lat = float(lat_str)
+                lon = float(lon_str)
+                ele = float(ele_str)*1.0E3 # Convert to km.
+                coords = {'latitude' : lat, 'longitude' : lon, 'elevation' : ele}
+                channels = []
+
+            else:
+                
+                channel = line.split()[1]
+                channels.append(channel)
+
+            inventory[station] = dict()
+            inventory[station]['channels'] = channels
+            inventory[station]['coords'] = coords
+
+    return inventory
 
 # Loading data from Ouroboros. ------------------------------------------------
 def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
@@ -498,7 +565,6 @@ def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
 def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None, return_q = False):
 #def load_eigenfreq_Mineos(ame_model, n_max, l_max, g_switch, mode_type, n_q = None, l_q = None):
     
-
     #path_model = get_path_model_Mineos(dir_mineos_models, name_model)
 
     #if 'dir_eigval' in run_info:
@@ -508,7 +574,6 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
     #else:
 
     #    dir_eigval = get_dir_eigval_Mineos(run_info['dir_output'], run_info['model'], run_info['n_lims'][1], run_info['l_lims'][1], run_info['g_switch'])
-
     
     # Find the Mineos output directory.
     _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
@@ -645,3 +710,38 @@ def get_r_fluid_solid_boundary(radius, vs):
     r_solid_fluid_boundary = [radius[i] for i in i_solid_fluid_boundary]
 
     return i_fluid, r_solid_fluid_boundary, i_solid_fluid_boundary
+
+# Manipulating waveform data. -------------------------------------------------
+def add_epi_dist_and_azim(inv, cmt, stream):
+
+    # Calculate epicentral distance and azimuth for each station, and
+    # assign to trace.
+    for trace in stream:
+        
+        if isinstance(inv, dict):
+
+            station_coords = inv[trace.stats.station]['coords']
+
+        else:
+
+            station_coords = inv.get_coordinates(trace.id)
+
+        try:
+
+            epi_dist_m, az_ev_sta, az_sta_ev = \
+                    gps2dist_azimuth(   cmt['lat_hypo'], cmt['lon_hypo'],
+                                        station_coords['latitude'], station_coords['longitude'])
+
+        except KeyError:
+
+            epi_dist_m, az_ev_sta, az_sta_ev = \
+                    gps2dist_azimuth(   cmt['lat_centroid'], cmt['lon_centroid'],
+                                        station_coords['latitude'], station_coords['longitude'])
+
+        station_rel_coords = {  'epi_dist_m' : epi_dist_m,
+                                'az_ev_sta' : az_ev_sta,
+                                'az_sta_ev' : az_sta_ev}
+
+        trace.stats['rel_coords'] = station_rel_coords
+
+    return stream
