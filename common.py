@@ -76,9 +76,9 @@ def get_Mineos_out_dirs(run_info):
 
     return dir_model, dir_run
 
-def get_Mineos_summation_out_dirs(run_info, summation_info, file_green_in = None, file_syndat_in = None, file_syndat_out = None):
+def get_Mineos_summation_out_dirs(run_info, summation_info, file_green_in = None, file_syndat_in = None, file_syndat_out = None, name_summation_dir = 'summation'):
 
-    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], 'summation')
+    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], name_summation_dir) 
     summation_info['dir_channels'] = os.path.join(summation_info['dir_summation'], summation_info['name_channels'])
     summation_info['dir_cmt'] = os.path.join(summation_info['dir_channels'], summation_info['name_cmt'])
     
@@ -173,6 +173,11 @@ def read_Ouroboros_summation_input_file(path_input):
         f_lims = [float(x) for x in in_id.readline().split()[1:]]
         path_channels = in_id.readline().split()[-1]
         path_cmt = in_id.readline().split()[-1]
+        d_t = float(in_id.readline().split()[-1])
+        n_samples = int(in_id.readline().split()[-1])
+
+    name_channels = os.path.splitext(os.path.basename(path_channels))[0]
+    name_cmt = os.path.splitext(os.path.basename(path_cmt))[0]
 
     # Store in dictionary.
     summation_info = dict()
@@ -180,6 +185,10 @@ def read_Ouroboros_summation_input_file(path_input):
     summation_info['f_lims'] = f_lims
     summation_info['path_channels'] = path_channels
     summation_info['path_cmt'] = path_cmt
+    summation_info['name_channels'] = name_channels
+    summation_info['name_cmt'] = name_cmt
+    summation_info['d_t'] = d_t
+    summation_info['n_samples'] = n_samples
 
     return summation_info
 
@@ -562,7 +571,7 @@ def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     return dir_kernels
 
 # Loading data from Mineos. ---------------------------------------------------
-def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None, return_q = False):
+def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None, return_Q = False):
 #def load_eigenfreq_Mineos(ame_model, n_max, l_max, g_switch, mode_type, n_q = None, l_q = None):
     
     #path_model = get_path_model_Mineos(dir_mineos_models, name_model)
@@ -591,9 +600,9 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
     file_eigval = 'minos_bran_out_{:}.txt'.format(mode_type)
     path_eigval = os.path.join(run_info['dir_run'], file_eigval) 
     
-    if return_q:
+    if return_Q:
 
-        n, l, f, q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
+        n, l, f, Q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
 
     else:
 
@@ -608,10 +617,10 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
 
         f_q = f[i]
 
-        if return_q:
+        if return_Q:
 
-            q_q = q[i]
-            return f_q, q_q
+            Q_q = Q[i]
+            return f_q, Q_q
 
         else:
 
@@ -619,9 +628,9 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
 
     else:
 
-        if return_q:
+        if return_Q:
 
-            return n, l, f, q
+            return n, l, f, Q 
 
         else:
 

@@ -1,18 +1,22 @@
 import argparse
+import os
 
 import numpy as np
-from scipy.special import  (lpmn as associated_Legendre_func_series,
-                            lpmv as associated_Legendre_func)
+from scipy.special import  lpmn as associated_Legendre_func_series
+#from scipy.special import lpmv as associated_Legendre_func
 import pandas
 
-from Ouroboros.common import (  load_eigenfreq_Mineos, load_eigenfunc_Mineos, 
+from Ouroboros.common import (  get_Mineos_out_dirs, get_Mineos_summation_out_dirs, 
+                                load_eigenfreq_Mineos, load_eigenfunc_Mineos, 
                                 load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros,
+                                mkdir_if_not_exist,
                                 read_channel_file,
                                 read_Mineos_input_file,
                                 read_Ouroboros_input_file, read_Ouroboros_summation_input_file)
 from Ouroboros.misc.cmt_io import read_mineos_cmt
 
 mode_type_to_int = {'R' : 0, 'S' : 1, 'T' : 2}
+mode_int_to_type = {0 : 'R', 1 : 'S', 2 : 'T'}
 
 # Geometry. -------------------------------------------------------------------
 def calculate_azimuth(lon_A, lat_A, lon_B, lat_B, io_in_degrees = True):
@@ -334,7 +338,7 @@ def load_mode_info(run_info, summation_info, use_mineos = False):
         # Load file.
         if use_mineos:
 
-            n, l, f, q = load_eigenfreq_Mineos(run_info, mode_type, return_q = True)
+            n, l, f, Q = load_eigenfreq_Mineos(run_info, mode_type, return_Q = True)
         
         else:
 
@@ -347,14 +351,14 @@ def load_mode_info(run_info, summation_info, use_mineos = False):
         n = n[i_freq]
         l = l[i_freq]
         f = f[i_freq]
-        q = q[i_freq]
+        Q = Q[i_freq]
         
         # Store in dictionary.
         mode_info[mode_type] = dict()
         mode_info[mode_type]['n'] = n
         mode_info[mode_type]['l'] = l 
         mode_info[mode_type]['f'] = f 
-        mode_info[mode_type]['q'] = q 
+        mode_info[mode_type]['Q'] = Q 
 
     return mode_info
 
@@ -440,33 +444,35 @@ def load_eigenfunc(run_info, mode_type, n, l, z_source, z_receiver = 0.0, use_mi
 
     return eigfunc_source, eigfunc_receiver, r_planet
 
-def main():
+def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite = False):
 
-    # Parse input arguments.
-    parser = argparse.ArgumentParser()
-    parser.add_argument("path_mode_input", help = "File path (relative or absolute) to Ouroboros mode input file.")
-    parser.add_argument("path_summation_input", help = "File path (relative or absolute) to Ouroboros summation input file.")
-    parser.add_argument("--use_mineos", action = 'store_true', help = "Use Mineos path_mode_input file, eigenfrequencies and eigenfunctions. Note 1: The path_summation_input file should still be in Ouroboros format. Note 2: This option is for testing. For access to the built-in Mineos synthetics, see Ouroboros/mineos/summation.py.")
-    input_args = parser.parse_args()
-    path_mode_input = input_args.path_mode_input
-    path_summation_input = input_args.path_summation_input
-    use_mineos = input_args.use_mineos
+    # Get name of output file.
+    name_coeffs_data_frame = 'coeffs.pkl'
+    name_stations_data_frame = 'stations.pkl'
+    name_modes_data_frame = 'modes.pkl'
+    #
+    path_coeffs_data_frame = os.path.join(summation_info['dir_output'], name_coeffs_data_frame)
+    path_stations_data_frame = os.path.join(summation_info['dir_output'], name_stations_data_frame)
+    path_modes_data_frame = os.path.join(summation_info['dir_output'], name_modes_data_frame)
+    #
+    paths = [path_coeffs_data_frame, path_stations_data_frame, path_modes_data_frame]
+    #
+    paths_exist = [os.path.exists(path) for path in paths]
 
-    # Read the mode input file.
-    if use_mineos:
-        
-        # Read Mineos input file.
-        run_info = read_Mineos_input_file(path_mode_input)
+    if all(paths_exist)and (not overwrite):
 
-    else:
-        
-        # Read Ouroboros input files.
-        run_info = read_Ouroboros_input_file(path_mode_input)
+        print('Coefficient output files already exist.')
 
-    # Read the summation input file.
-    summation_info = read_Ouroboros_summation_input_file(path_summation_input)
-    assert all([(mode_type in run_info['mode_types']) for mode_type in summation_info['mode_types']]), \
-    'The summation input file specifies mode types which are not found in the mode input file.'
+        print('Loading {:}'.format(path_coeffs_data_frame))
+        coeffs = pandas.read_pickle(path_coeffs_data_frame)
+
+        print('Loading {:}'.format(path_stations_data_frame))
+        stations = pandas.read_pickle(path_stations_data_frame)
+
+        print('Loading {:}'.format(path_modes_data_frame))
+        modes = pandas.read_pickle(path_modes_data_frame)
+
+        return coeffs, stations, modes
 
     # Load CMT information.
     cmt = read_mineos_cmt(summation_info['path_cmt'])
@@ -491,17 +497,22 @@ def main():
 
     # Create output arrays.
     num_station = len(channel_dict)
-    type_list    = np.zeros((num_station, num_modes_total), dtype = np.int)
-    n_list       = np.zeros((num_station, num_modes_total), dtype = np.int)
-    l_list       = np.zeros((num_station, num_modes_total), dtype = np.int)
-    f_list       = np.zeros((num_station, num_modes_total), dtype = np.float)
-    q_list       = np.zeros((num_station, num_modes_total), dtype = np.float)
+    type_list    = np.zeros(num_modes_total, dtype = np.int)
+    n_list       = np.zeros(num_modes_total, dtype = np.int)
+    l_list       = np.zeros(num_modes_total, dtype = np.int)
+    f_list       = np.zeros(num_modes_total, dtype = np.float)
+    Q_list       = np.zeros(num_modes_total, dtype = np.float)
     A_r_list     = np.zeros((num_station, num_modes_total), dtype = np.float) 
     A_Theta_list = np.zeros((num_station, num_modes_total), dtype = np.float)
     A_Phi_list   = np.zeros((num_station, num_modes_total), dtype = np.float)
+    Theta_list   = np.zeros(num_station, dtype = np.float)
+    Phi_list     = np.zeros(num_station, dtype = np.float)
 
     # Do summation.
+    station_list = []
     for j, station in enumerate(channel_dict):
+
+        station_list.append(station)
         
         print('Station: {:>8}, lon. : {:>+8.2f},  lat. {:>+8.2f}'.format(station,
                 channel_dict[station]['coords']['longitude'],
@@ -520,6 +531,9 @@ def main():
         # Convert to radians.
         Theta = np.deg2rad(Theta_deg)
         Phi = np.deg2rad(Phi_deg)
+        
+        Theta_list[j] = Theta
+        Phi_list[j] = Phi
 
         # Calculate geometric quantities.
         sinTheta = np.sin(Theta)
@@ -536,7 +550,8 @@ def main():
         Plm_series, Plm_prime_series = \
                 associated_Legendre_func_series_no_CS_phase(
                         2, l_max, cosTheta)
-
+        
+        i_offset = 0
         for mode_type in summation_info['mode_types']:
 
             num_modes = num_modes_dict[mode_type]
@@ -548,7 +563,18 @@ def main():
                 n = mode_info[mode_type]['n'][i]
                 l = mode_info[mode_type]['l'][i]
                 f = mode_info[mode_type]['f'][i]
-                q = mode_info[mode_type]['f'][i]
+                Q = mode_info[mode_type]['Q'][i]
+                
+                if i == (num_modes - 1):
+
+                    str_end = '\n'
+
+                else:
+
+                    str_end = '\r'
+                    
+                print('Mode: {:>5d} of {:>5d}, n = {:>5d}, l = {:>5d}, f = {:>7.3f} mHz'.format(
+                        i + 1, num_modes, n, l, f), end = str_end)
 
                 # Load the eigenfunction information interpolated
                 # at the source and receiver locations.
@@ -561,7 +587,7 @@ def main():
                         z_receiver = 0.0,
                         use_mineos = use_mineos)
 
-                if i == 0:
+                if (i == 0) & (i_offset == 0):
                 
                     # Calculate radial coordinate of event.
                     cmt['r_centroid'] = r_planet - cmt['depth_centroid']
@@ -585,73 +611,253 @@ def main():
                     raise NotImplementedError
 
                 # Store output.
-                type_list[j, i]     = mode_type_to_int[mode_type]
-                n_list[j, i]        = n
-                l_list[j, i]        = l 
-                f_list[j, i]        = f
-                q_list[j, i]        = q
-                A_r_list[j, i]       = coeffs['r']
-                A_Theta_list[j, i]  = coeffs['Theta']
-                A_Phi_list[j, i]    = coeffs['Phi']
+                if j == 0:
+                    
+                    type_list[i + i_offset]     = mode_type_to_int[mode_type]
+                    n_list[i + i_offset]        = n
+                    l_list[i + i_offset]        = l 
+                    f_list[i + i_offset]        = f
+                    Q_list[i + i_offset]        = Q 
 
-    # Store the data in a data frame.
-    print(type_list.shape)
-    #index = pandas.MultiIndex.from_product([type_list, n_list, l_list, f_list, q_list, A_r_list, A_Theta_list, A_Phi_list])
-    data_list = [type_list, n_list, l_list, f_list, q_list, A_r_list, A_Theta_list, A_Phi_list]
-    name_list = ['type', 'n', 'l', 'f', 'q', 'A_r', 'A_Theta', 'A_Phi']
-    num_data_types = len(name_list)
+                A_r_list[j, i + i_offset]       = coeffs['r']
+                A_Theta_list[j, i + i_offset]  = coeffs['Theta']
+                A_Phi_list[j, i + i_offset]    = coeffs['Phi']
 
+            i_offset = i_offset + i
+
+    # Store station data.
+    station_data_frame = pandas.DataFrame(
+            {'Phi' : Phi_list,
+             'Theta' : Theta_list},
+            index = station_list)
+
+    # Store mode data.
+    mode_data_frame = pandas.DataFrame(
+            {'type' : [mode_int_to_type[x] for x in type_list],
+            'n'     : n_list,
+            'l'     : l_list,
+            'f'     : f_list,
+            'Q'     : Q_list},
+            columns = ['type', 'n', 'l', 'f', 'Q'])
+
+    # Store coefficient data.
+    data_list = [A_r_list, A_Theta_list, A_Phi_list]
+    name_list = ['A_r', 'A_Theta', 'A_Phi']
+    #
     data_frame_list = []
-    #for data, name in zip(data_list, name_list):
-
-    #    data_frame_list.append(pandas.DataFrame({name : np.squeeze(data)}))
-
     for i in range(num_station):
         
         data_dict = {x : y[i, :] for x, y in zip(name_list, data_list)}
-        data_frame_list.append(pandas.DataFrame(data_dict))
+        data_frame_list.append(pandas.DataFrame(data_dict, columns = name_list))
+    # 
+    coeff_data_frame = pandas.concat(data_frame_list, keys = station_list) #keys = list(range(num_station)))
+
+    # Save output.
+    print('Saving coefficients to {:}'.format(path_coeffs_data_frame))
+    coeff_data_frame.to_pickle(path_coeffs_data_frame)
+    #
+    print('Saving station information to {:}'.format(path_stations_data_frame))
+    station_data_frame.to_pickle(path_stations_data_frame)
+    #
+    print('Saving mode information to {:}'.format(path_modes_data_frame))
+    mode_data_frame.to_pickle(path_modes_data_frame)
+
+    return coeff_data_frame, station_data_frame, mode_data_frame 
+
+def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
+
+    # Create time span and output arrays.
+    t_max = (num_t - 1)*d_t
+    t = np.linspace(0.0, t_max, num = num_t)
+
+    # Get output path.
+    path_out = os.path.join(dir_out, 's_r_Theta_Phi.npy')
+    if os.path.exists(path_out) and (not overwrite):
+
+        print('Summation file already exists, skipping calculation: {:}'.format(path_out))
+        s_r_Theta_Phi = np.load(path_out)
+
+        return t, s_r_Theta_Phi
+
+    # Get station list.
+    station_list = list(stations.index)
+    num_stations = len(station_list)
+
+
+    # s is displacement in r, Theta, Phi components.
+    s     = np.zeros((3, num_stations, num_t))
+    key_list = ['A_r', 'A_Theta', 'A_Phi']
+
+    # Decide whether to neglect attenuation.
+    if np.any(modes['Q'] == 0.0):
+
+        neglect_attenuation = True
+        assert np.all(modes['Q'] == 0.0), "All modes must have Q = 0 to neglect attenuation."
+
+    else:
+
+        neglect_attenuation = False
+
+    for i in range(num_stations):
+
+        station = station_list[i]
+        print('Summating for station: {:>5}'.format(station))
+        coeffs_station = coeffs.loc[station]
+
+        if i == 0:
+
+            n_modes = len(coeffs_station)
+
+        for j in range(n_modes):
+
+            # Angular frequency, rad per s.
+            omega = modes['f'][j]*1.0E-3*2.0*np.pi
+
+            if neglect_attenuation:
+                
+                k0 = 1.0/(omega**2.0)
+                cos_wt = np.cos(omega*t)    
+
+                for k in range(3):
+
+                    key = key_list[k]
+                    A = coeffs_station[key][j]
+
+                    s[k, i, :] = s[k, i, :] + k0*A*(1.0 - cos_wt)
+
+            else:
+
+                # Gamma (decay rate), 1/s.
+                # Dahlen and Tromp (1998), eq. 9.53.
+                gamma = omega/(2.0*modes['Q'][j])
+                
+                # Evaluate D&T eq. 10.51
+                #
+                # Constants relating to omega and gamma.
+                c0 = (omega**2.0 + gamma**2.0)
+                c1 = (omega**2.0 - gamma**2.0) 
+                c2 = (2.0*omega*gamma)
+                #
+                k0 = 1.0/c0
+                k1 = c1/c0
+                k2 = c2/c0
+                #
+                # Sinusoids and decay.
+                sin_wt = np.sin(omega*t)
+                cos_wt = np.cos(omega*t)
+                exp_wt = np.exp(-1.0*gamma*t)
+                #
+                for k in range(3):
+
+                    key = key_list[k]
+                    A = coeffs_station[key][j]
+
+                    s[k, i, :] = s[k, i, :] + k0*A*(k1*(1.0 - cos_wt*exp_wt) - k2*sin_wt*exp_wt)
+
+    # Save.
+    print('Writing {:}'.format(path_out))
+    np.save(path_out, s)
+
+    return t, s
+
+def rotate_r_Theta_Phi_to_e_n_z(station_info, s_r_Theta_Phi):
+
+    # Get station list.
+    station_list = list(station_info.index)
+    num_stations = len(station_list)
+
+    # Create output array.
+    s_e_n_z = np.zeros(s_r_Theta_Phi.shape)
     
-    data_frame = pandas.concat(data_frame_list, keys = list(range(num_station)))
+    # z-component is simply r-component.
+    s_e_n_z[2, :, :] = s_r_Theta_Phi[0, :, :]
 
-    # Save to pickle.
-    path_data_frame = 'coeffs.pkl'
-    print('Saving coefficients to {:}'.format(path_data_frame))
-    data_frame.to_pickle(path_data_frame)
+    # Loop over stations.
+    for i in range(num_stations):
 
-    print(data_frame)
+        # Get Theta (anticlockwise angle from south to direction of Theta
+        # component).
+        station = station_list[i]
+        Theta = station_info.loc[station]['Phi']
+        # Get Chi (anticlockwise angle from east to direction of Theta
+        # component).
+        Chi = Theta - (np.pi/2.0)
+        cosChi = np.cos(Chi)
+        sinChi = np.sin(Chi)
+        
+        # The east and north components can be found from the Theta and Phi
+        # components using trigonometry.
+        # East component.
+        s_e_n_z[0, i, :] = cosChi*s_r_Theta_Phi[1, i, :] - sinChi*s_r_Theta_Phi[2, i, :]
+        # North component.
+        s_e_n_z[1, i, :] = sinChi*s_r_Theta_Phi[1, i, :] + cosChi*s_r_Theta_Phi[2, i, :]
 
-        #for channel in channel_dict[station]['channels']:
+    return s_e_n_z
 
-        #    print('Channel: {:>5}'.format(channel))
+def main():
 
-        #    for mode_type in summation_info['mode_types']:
+    # Parse input arguments.
+    parser = argparse.ArgumentParser()
+    parser.add_argument("path_mode_input", help = "File path (relative or absolute) to Ouroboros mode input file.")
+    parser.add_argument("path_summation_input", help = "File path (relative or absolute) to Ouroboros summation input file.")
+    parser.add_argument("--use_mineos", action = 'store_true', help = "Use Mineos path_mode_input file, eigenfrequencies and eigenfunctions. Note 1: The path_summation_input file should still be in Ouroboros format. Note 2: This option is for testing. For access to the built-in Mineos synthetics, see Ouroboros/mineos/summation.py.")
+    parser.add_argument("--overwrite", action = 'store_true', help = "Use this flag to overwrite existing output files (default: calculations will be skipped if output files detected.")
+    input_args = parser.parse_args()
+    path_mode_input = input_args.path_mode_input
+    path_summation_input = input_args.path_summation_input
+    use_mineos = input_args.use_mineos
+    overwrite = input_args.overwrite
+
+    # Read the mode input file.
+    if use_mineos:
+        
+        # Read Mineos input file.
+        run_info = read_Mineos_input_file(path_mode_input)
+
+    else:
+        
+        # Read Ouroboros input files.
+        run_info = read_Ouroboros_input_file(path_mode_input)
+
+    # Read the summation input file.
+    summation_info = read_Ouroboros_summation_input_file(path_summation_input)
+    assert all([(mode_type in run_info['mode_types']) for mode_type in summation_info['mode_types']]), \
+    'The summation input file specifies mode types which are not found in the mode input file.'
+
+    # Get information about output dirs.
+    if use_mineos:
+
+        run_info['dir_model'], run_info['dir_run'] = get_Mineos_out_dirs(run_info) 
+        summation_info = get_Mineos_summation_out_dirs(run_info, summation_info,
+                            name_summation_dir = 'summation_Ouroboros')
+
+        for key in ['dir_summation', 'dir_channels', 'dir_cmt']:
+
+            mkdir_if_not_exist(summation_info[key])
+
+        summation_info['dir_output'] = summation_info['dir_cmt']
+
+    else:
+
+        raise NotImplementedError
+
+    # Calculate the coefficients.
+    coeffs, stations, modes = get_coeffs_wrapper(run_info, summation_info,
+                use_mineos = use_mineos, overwrite = overwrite)
+
+    # Do the summation to get r, Theta and Phi components.
+    t, s_r_Theta_Phi = sum_coeffs(stations, modes, coeffs, summation_info['n_samples'],
+                    summation_info['d_t'], summation_info['dir_output'],
+                    overwrite = overwrite)
+
+    # Rotate into specified channels. 
+    s_e_n_z = rotate_r_Theta_Phi_to_e_n_z(stations, s_r_Theta_Phi)
+
+    print(s_e_n_z)
+    print(s_e_n_z.shape)
     
-    #print(run_info)
-    #print(summation_info)
-    #summation_wrapper(path_mode_input, path_summation_input)
-
-    return
-
-def test_associated_Legendre_poly():
-
-    cosTheta = 0.5
-    l_max = 3
-
-    Plm_series, Plm_prime_series = associated_Legendre_func_series(l_max, l_max, cosTheta)
-    Plm_series_no_cs, Plm_prime_series_no_cs = associated_Legendre_func_series_no_CS_phase(l_max, l_max, cosTheta)
-    
-    print('{:>3} {:>3} {:>10} {:>10}'.format('l', 'm', 'lpmv', 'lmpn'))
-    for m in range(0, l_max + 1):
-
-        for l in range(0, l_max + 1):
-
-            Plm = associated_Legendre_func(m, l, cosTheta)
-
-            print('{:>3d} {:>3d} {:>+10.5f} {:>+10.5f} {:>+10.5f}'.format(l, m, Plm, Plm_series[m, l], Plm_series_no_cs[m, l]))
-
     return
 
 if __name__ == '__main__':
 
     main()
-    #test_associated_Legendre_poly()
