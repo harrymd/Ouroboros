@@ -43,7 +43,7 @@ def main():
     
     # Set the 'g_switch' string: 0 -> noG, 1 -> G, 2 -> GP.
     g_switch_strs = ['noGP', 'G', 'GP']
-    g_switch_str = g_switch_strs[Ouroboros_info['g_switch']]
+    g_switch_str = g_switch_strs[Ouroboros_info['grav_switch']]
 
     Ouroboros_info['dirs_type'] = dict()
 

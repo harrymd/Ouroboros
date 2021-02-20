@@ -9,13 +9,12 @@ import numpy as np
 from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Mineos, load_eigenfreq_Ouroboros, load_eigenfunc_Mineos, load_eigenfunc_Ouroboros, load_model, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file
 #from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
 
-def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True): 
+def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', sign = None): 
 
     # Calculate k value.
     k = np.sqrt((l*(l + 1.0)))
 
     # Get model information for axis limits, scaling and horizontal lines.
-    print(run_info['path_model'])
     model = load_model(run_info['path_model'])
     # Convert to km.
     model['r'] = model['r']*1.0E-3
@@ -54,40 +53,92 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         if mode_type == 'R':
 
-            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
+            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                        convert_to_mineos_normalisation = True)
             U[0] = 0.0 # Value of U at planet core appears to be buggy for R modes.
 
         elif mode_type == 'S': 
 
-            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
+            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                        convert_to_mineos_normalisation = True)
 
         elif mode_type == 'T':
 
-            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal,
+                        convert_to_mineos_normalisation = True)
+        
+        ## Convert to Mineos normalisation.
+        #ratio = 1.0E-3*(r_srf**2.0)
+        #if mode_type == 'R':
+        #    
+        #    U = U*ratio
 
-        # Convert to Mineos normalisation.
-        ratio = 1.0E-3*(r_srf**2.0)
-        if mode_type == 'R':
-            
-            U = U*ratio
+        #elif mode_type == 'S':
 
-        elif mode_type == 'S':
+        #    U = U*ratio
+        #    V = k*V*ratio
 
-            U = U*ratio
-            V = k*V*ratio
+        #elif mode_type == 'T':
 
-        elif mode_type == 'T':
+        #    W = k*W*ratio
 
-            W = k*W*ratio
+        #r = r*1.0E3 # Convert from Mm to km.
 
-    #print(r.shape)
-    #print(U.shape)
-    #print(r[0:10])
-    #print(U[0:10])
-    #import sys
-    #sys.exit()
+    # Apply factor of k (used for both Mineos and Ouroboros).
+    if mode_type == 'S':
 
-    #title = '$_{{{:d}}}${:}$_{{{:d}}}$, {:.4f} mHz'.format(n, mode_type, l, f_Ouroboros)
+        V = k*V
+
+    elif mode_type == 'T':
+
+        W = k*V
+
+    # Sign.
+    if mode_type == 'R':
+
+        sign_max_eigfunc = np.sign(U[np.argmax(np.abs(U))]) 
+
+    elif mode_type == 'S':
+        
+        max_abs_U = np.max(np.abs(U))
+        max_abs_V = np.max(np.abs(V))
+        if max_abs_U > max_abs_V:
+
+            sign_max_eigfunc = np.sign(U[np.argmax(np.abs(U))]) 
+
+        else:
+
+            sign_max_eigfunc = np.sign(V[np.argmax(np.abs(V))]) 
+
+    elif mode_type == 'T':
+
+        sign_max_eigfunc = np.sign(W[np.argmax(np.abs(W))]) 
+
+    else:
+
+        raise ValueError
+
+    if sign is not None:
+
+        if sign_max_eigfunc != sign:
+
+            if mode_type == 'R':
+
+                U = U*-1.0
+
+            elif mode_type == 'S':
+
+                U = U*-1.0
+                V = V*-1.0
+
+            elif mode_type == 'T':
+
+                W = W*-1.0
+
+            else:
+
+                raise NotImplementedError
+
     if mode_type in ['R', 'S']:
 
         mode_type_for_title = 'S'
@@ -131,22 +182,23 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     if mode_type == 'R':
 
-        plot_eigenfunc_R_or_T(r, U, h_lines = r_solid_fluid_boundary, label = 'U', **common_args)
+        plot_eigenfunc_R_or_T(r, U, h_lines = r_solid_fluid_boundary, linestyle = linestyle, label = 'U{:}'.format(label_suffix), **common_args)
     
     elif mode_type == 'S':
 
         plot_eigenfunc_S(r, U, V,
-                h_lines = r_solid_fluid_boundary, **common_args)
+                h_lines = r_solid_fluid_boundary, linestyles = [linestyle, linestyle], label_suffix = label_suffix, **common_args)
 
     elif mode_type == 'T':
         
-        plot_eigenfunc_R_or_T(r, W, h_lines = None, label = 'W', **common_args)
+        plot_eigenfunc_R_or_T(r, W, h_lines = None, linestyle = linestyle, label = 'W{:}'.format(label_suffix), **common_args)
 
     #ax.set_title(title, fontsize = 20) 
     #ax.set_xlim([-1.1*max_, 1.1*max_])
     
     if transparent:
-
+        
+        fig = plt.gcf()
         set_patch_facecolors(fig, ax) 
 
     plt.tight_layout()
@@ -183,9 +235,9 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         plt.show()
 
-    return ax
+    return ax, sign_max_eigfunc
 
-def plot_eigenfunc_S(r, U, V, k = None, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_append = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
+def plot_eigenfunc_S(r, U, V, k = None, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
     
     if ax is None:
 
@@ -203,8 +255,8 @@ def plot_eigenfunc_S(r, U, V, k = None, ax = None, h_lines = None, x_label = 'Ei
         U_label = 'U'
         V_label = 'kV'
 
-    U_label = U_label + label_append
-    V_label = V_label + label_append
+    U_label = U_label + label_suffix
+    V_label = V_label + label_suffix
 
     ax.plot(U, r, label = U_label, color = colors[0], linestyle = linestyles[0], alpha = alpha)
     ax.plot(k*V, r, label = V_label, color = colors[1], linestyle = linestyles[1], alpha = alpha)
@@ -265,9 +317,9 @@ def set_patch_facecolors(fig, ax):
 
     return
 
-def plot_eigenfunc_R_or_T(r, U_or_W, ax = None, show = False, h_lines = None, add_legend = True, legend_loc = 'best', title = None, label = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km'):
+def plot_eigenfunc_R_or_T(r, U_or_W, ax = None, show = False, h_lines = None, add_legend = True, legend_loc = 'best', title = None, label = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', linestyle = '-'):
 
-    ax.plot(U_or_W, r, label = label)
+    ax.plot(U_or_W, r, color = 'r', label = label, linestyle = linestyle)
 
     #ax.axhline(3480.0, color = 'k', linestyle = ':')
     ax.axvline(0.0, color = 'k', linestyle = ':')
@@ -297,8 +349,9 @@ def main():
     parser.add_argument("mode_type", choices = ['R', 'S', 'T'], help = 'Mode type (radial, spheroidal or toroidal).')
     parser.add_argument("n", type = int, help = "Plot mode with radial order n.")
     parser.add_argument("l", type = int, help = "Plot mode with angular order l (must be 0 for radial modes).")
-    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell).", type = int)
-    parser.add_argument("--mineos", action = "store_true", help = "Plot Mineos modes (default: Ouroboros).")
+    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal eigenfunction for the solid shell given by LAYER_NUMBER (0 is outermost solid shell).", type = int)
+    parser.add_argument("--use_mineos", action = "store_true", help = "Plot Mineos eigenfunction (default: Ouroboros).")
+    parser.add_argument("--path_input_mineos_compare", help = "Provide Mineos input path to plot both Ouroboros and Mineos eigenfunction (default: Ouroboros only).")
     args = parser.parse_args()
 
     # Rename input arguments.
@@ -307,7 +360,9 @@ def main():
     n           = args.n
     l           = args.l
     i_toroidal = args.layer_number
-    use_mineos = args.mineos
+    use_mineos = args.use_mineos
+    path_input_mineos_compare = args.path_input_mineos_compare
+    assert not (use_mineos and (not(path_input_mineos_compare is None))), 'Only one of --use_mineos and --path_input_mineos_compare may be used.'
 
     if mode_type == 'R':
 
@@ -326,17 +381,30 @@ def main():
     if use_mineos:
 
         run_info = read_Mineos_input_file(path_input)
+        run_info['use_mineos'] = True
 
     else:
 
         run_info = read_Ouroboros_input_file(path_input)
-    run_info['use_mineos'] = use_mineos
+        run_info['use_mineos'] = False
+
+        if path_input_mineos_compare is not None:
+            
+            run_info_mineos = read_Mineos_input_file(path_input_mineos_compare)
+            run_info_mineos['use_mineos'] = True
 
     #Ouroboros_info, mode_type, n, l, i_toroidal = prep_Ouroboros_info()
     #run_info, mode_type, n, l, i_toroidal = prep_run_info(args)
 
     # Plot.
-    plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None) 
+    if path_input_mineos_compare is not None:
+
+        ax, sign = plot_eigenfunc_wrapper(run_info_mineos, mode_type, n, l, i_toroidal = i_toroidal, ax = None, show = False, transparent = False, save = False, linestyle = ':', label_suffix = ' (Mineos)') 
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = ax, show = True, label_suffix = ' (Ouroboros)', sign = sign) 
+
+    else:
+
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None) 
 
     return
 

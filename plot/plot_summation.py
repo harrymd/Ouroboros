@@ -4,11 +4,16 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from obspy import read
+from obspy.core.trace import Trace
 from obspy.core.stream import Stream
 from obspy.realtime.signal import scale
 
-from Ouroboros.common import get_Mineos_out_dirs, get_Mineos_summation_out_dirs, mkdir_if_not_exist, read_Mineos_input_file, read_Mineos_summation_input_file
+from Ouroboros.common import (  get_Mineos_out_dirs, get_Mineos_summation_out_dirs,
+                                mkdir_if_not_exist,
+                                read_Mineos_input_file, read_Mineos_summation_input_file,
+                                read_Ouroboros_input_file, read_Ouroboros_summation_input_file)
 from Ouroboros.misc.cmt_io import read_mineos_cmt
+from Ouroboros.summation.run_summation import load_time_info
 
 font_size_label = 12
 
@@ -313,13 +318,14 @@ def main():
 
     # Parse input arguments.
     parser = argparse.ArgumentParser()
-    parser.add_argument("path_mode_input", help = "File path (relative or absolute) to Mineos mode input file.")
-    parser.add_argument("path_summation_input", help = "File path (relative or absolute) to Mineos summation input file.")
+    parser.add_argument("path_mode_input", help = "File path (relative or absolute) to mode input file.")
+    parser.add_argument("path_summation_input", help = "File path (relative or absolute) to summation input file.")
     parser.add_argument("station", help = "Station code (same as used in station list file).")
     parser.add_argument("channel", help = "Channel code (same as used in station list file).")
     parser.add_argument("--spectrum", action = 'store_true', help = "Plot Fourier spectrum (default: time series).")
     parser.add_argument("--spec_and_trace", action = 'store_true', help = "Plot Fourier spectrum and time series in a single plot (default: time series only).")
     parser.add_argument("--use_mineos", action = 'store_true', help = 'Plot summation result from Mineos (default: Ouroboros).')
+    parser.add_argument("--use_mineos_modes_only", action = 'store_true', help = 'Plot summation results using Ouroboros summation code with Mineos mode output. Note: This option is used only for testing purposes. Not compatible with --use_mineos flag.')
     parser.add_argument("--path_comparison", help = 'Path to a real data trace to be plotted for comparison. Should have units of nm/s, or provide the --comparison_scale flag with a number to multiply the comparison trace so that the units are nm/s.')
     parser.add_argument("--comparison_scale", type = float, default = 1.0)
 
@@ -332,14 +338,12 @@ def main():
     spectrum_and_seismograph = input_args.spec_and_trace
     assert not (spectrum and spectrum_and_seismograph), 'Flags --spectrum and --spec_and_trace cannot be used together.'
     use_mineos = input_args.use_mineos
+    use_mineos_modes_only = input_args.use_mineos_modes_only
+    assert not (use_mineos and use_mineos_modes_only), 'Only one of --use_mineos and --use_mineos_modes_only may be specified.'
     path_comparison = input_args.path_comparison
     comparison_scale = input_args.comparison_scale
 
-    if not use_mineos:
-
-        raise NotImplementedError
-
-    else:
+    if use_mineos:
 
         # Read the mode input file.
         run_info = read_Mineos_input_file(path_mode_input)
@@ -354,30 +358,68 @@ def main():
         run_info['dir_model'], run_info['dir_run'] = get_Mineos_out_dirs(run_info) 
         summation_info = get_Mineos_summation_out_dirs(run_info, summation_info)
 
-        dir_plot = os.path.join(run_info['dir_run'], 'plots')
-        mkdir_if_not_exist(dir_plot)
+        #dir_plot = os.path.join(run_info['dir_run'], 'plots')
+        #mkdir_if_not_exist(dir_plot)
 
         dir_sac = os.path.join(summation_info['dir_cmt'], 'sac')
 
         # Read moment tensor file.
         cmt_info = read_mineos_cmt(summation_info['path_cmt'])
 
-        ## Get path to SAC file.
-        #src_time_year_day_str = cmt_info['datetime_ref'].strftime('%Y%j')
-        #src_time_hms_str = cmt_info['datetime_ref'].strftime('%H:%M:%S').replace('0', ' ')
-        #file_sac = 'syndat_out.{:}:{:}.{:}.{:}.SAC'.format(src_time_year_day_str,
-        #            src_time_hms_str, station, channel)
-        #path_sac = os.path.join(dir_sac, file_sac)
-
-        #stream = read(path_sac)
-
-        path_mseed = os.path.join(dir_sac, 'stream.mseed')
-
         # Read miniSEED file.
+        path_mseed = os.path.join(dir_sac, 'stream.mseed')
         stream = read(path_mseed)
         stream = stream.select(station = station, channel = channel)
 
+    else:
+
+        if use_mineos_modes_only:
+
+            # Read Mineos input file.
+            run_info = read_Mineos_input_file(path_mode_input)
+
+        else:
+
+            raise NotImplementedError
+
+
+
+        # Read the summation input file.
+        summation_info = read_Ouroboros_summation_input_file(path_summation_input)
+
+        # Get information about output dirs.
+        if use_mineos_modes_only:
+
+            run_info['dir_model'], run_info['dir_run'] = get_Mineos_out_dirs(run_info) 
+            summation_info = get_Mineos_summation_out_dirs(run_info, summation_info,
+                                name_summation_dir = 'summation_Ouroboros')
+
+        else:
+            
+            raise NotImplementedError
+
+        summation_info['dir_output'] = summation_info['dir_cmt']
+        
+        # Load trace.
+        name = '{:}_{:}'.format(station, channel)
+        name_trace = '{:}.npy'.format(name)
+        path_trace = os.path.join(summation_info['dir_output'], name_trace)
+        trace_data = np.load(path_trace)
+
+        # Load timing information.
+        name_timing = 'timing.txt'
+        path_timing = os.path.join(summation_info['dir_output'], name_timing)
+        num_t, d_t = load_time_info(path_timing)
+        
+        trace_header = {'delta' : d_t, 'station' : station, 'channel' : channel}
+        trace = Trace(data = trace_data, header = trace_header)
+        
+        stream = Stream([trace])
+
     trace = stream[0]
+
+    dir_plot = os.path.join(run_info['dir_run'], 'plots')
+    mkdir_if_not_exist(dir_plot)
 
     if path_comparison is not None:
 
@@ -397,8 +439,6 @@ def main():
     else:
 
         trace_comparison = None
-    
-
 
     if spectrum:
         

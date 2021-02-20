@@ -80,6 +80,23 @@ def calculate_epicentral_distance(lon_A, lat_A, lon_B, lat_B, io_in_degrees = Tr
 
     return Theta, cos_Theta
 
+def polar_coords_to_unit_vector(theta, phi):
+    '''
+    See diagram in [1] for definitions of angles.
+    theta   Azimuth (radians).
+    phi     Polar angle (radian). 
+
+    Reference:
+    [1] https://mathworld.wolfram.com/SphericalCoordinates.html
+    '''
+
+    # [1], equation 4-6 with r set to 1.
+    x = np.cos(theta)*np.sin(phi)
+    y = np.sin(theta)*np.sin(phi)
+    z = np.cos(phi)
+
+    return x, y, z
+
 #
 def old_calculate_excitation_factor(l, cosTheta, Phi, cmt_info, eigfunc_source, verbose = True):
     '''
@@ -182,7 +199,7 @@ def calculate_source_coefficients_spheroidal(l, cmt_info, eigfunc_source):
     #sinPhi_list = [sin0Phi, sin1Phi, sin2Phi]
 
     # Unpack dictionaries.
-    r = cmt_info['r_centroid']
+    r = cmt_info['r_centroid']*1.0E3 # km to m
     Mrr = cmt_info['Mrr']
     Mtt = cmt_info['Mtt']
     Mpp = cmt_info['Mpp']
@@ -271,25 +288,26 @@ def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Ph
     cos2Phi = np.cos(2.0*Phi)
     sin2Phi = np.sin(2.0*Phi)
 
-    # Calculate k.
+    # Calculate k and L.
     k = np.sqrt(l*(l + 1.0))
+    L = (2.0*l + 1.0)/(4.0*np.pi)
 
     # Calculate the coefficients.
     A = dict()
 
     # Radial component, [1] equation (1).
-    A['r'] = Ur*(       Pl0*(A0*1.0     + B0*0.0)
+    A['r'] = L*Ur*(     Pl0*(A0*1.0     + B0*0.0)
                     +   Pl1*(A1*cosPhi  + B1*sinPhi)
                     +   Pl2*(A2*cos2Phi + B2*sin2Phi))
 
     # Theta component, [1] equation (2).
-    A['Theta'] = (-1.0/k)*Vr*sinTheta*(
+    A['Theta'] = L*(-1.0/k)*Vr*sinTheta*(
                         Pl0_p*(A0*1.0     + B0*0.0)
                     +   Pl1_p*(A1*cosPhi  + B1*sinPhi)
                     +   Pl2_p*(A2*cos2Phi + B2*sin2Phi))
 
     # Phi component, [1] equation (3).
-    A['Phi'] = (1.0/(sinTheta*k))*Vr*(
+    A['Phi'] = L*(1.0/(sinTheta*k))*Vr*(
                             Pl1*(B1*sinPhi  - A1*cosPhi)
                     +   2.0*Pl2*(B2*sin2Phi - A2*cos2Phi))
                             
@@ -376,8 +394,8 @@ def load_eigenfunc(run_info, mode_type, n, l, z_source, z_receiver = 0.0, use_mi
                 r, U, Up, V, Vp, P, Pp = \
                     load_eigenfunc_Mineos(run_info, mode_type, n, l)
 
-                # Convert to km.
-                r = r*1.0E-3
+                ## Convert to km.
+                #r = r*1.0E-3
 
             else:
 
@@ -394,8 +412,8 @@ def load_eigenfunc(run_info, mode_type, n, l, z_source, z_receiver = 0.0, use_mi
                 r, U, Up = \
                     load_eigenfunc_Mineos(run_info, mode_type, n, l)
 
-                # Convert to km.
-                r = r*1.0E-3
+                ## Convert to km.
+                #r = r*1.0E-3
 
             else:
 
@@ -441,7 +459,7 @@ def load_eigenfunc(run_info, mode_type, n, l, z_source, z_receiver = 0.0, use_mi
 
         eigfunc_source[key] = np.interp(  z_source,   z, eigenfunc_dict[key])
         eigfunc_receiver[key] = np.interp(z_receiver, z, eigenfunc_dict[key])
-
+    
     return eigfunc_source, eigfunc_receiver, r_planet
 
 def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite = False):
@@ -575,7 +593,7 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                     
                 print('Mode: {:>5d} of {:>5d}, n = {:>5d}, l = {:>5d}, f = {:>7.3f} mHz'.format(
                         i + 1, num_modes, n, l, f), end = str_end)
-
+                
                 # Load the eigenfunction information interpolated
                 # at the source and receiver locations.
                 # Also get the planet radius.
@@ -583,14 +601,14 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                     load_eigenfunc(run_info, mode_type,
                         n,
                         l,
-                        cmt['depth_centroid'],
+                        cmt['depth_centroid']*1.0E3, # km to m.
                         z_receiver = 0.0,
                         use_mineos = use_mineos)
 
                 if (i == 0) & (i_offset == 0):
                 
-                    # Calculate radial coordinate of event.
-                    cmt['r_centroid'] = r_planet - cmt['depth_centroid']
+                    # Calculate radial coordinate of event (km).
+                    cmt['r_centroid'] = r_planet*1.0E-3 - cmt['depth_centroid']
 
                 # Calculate the coefficients.
                 if mode_type in ['R', 'S']:
@@ -664,20 +682,41 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
 
     return coeff_data_frame, station_data_frame, mode_data_frame 
 
-def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
+def make_time_array(num_t, d_t):
 
     # Create time span and output arrays.
     t_max = (num_t - 1)*d_t
     t = np.linspace(0.0, t_max, num = num_t)
 
-    # Get output path.
-    path_out = os.path.join(dir_out, 's_r_Theta_Phi.npy')
-    if os.path.exists(path_out) and (not overwrite):
+    return t
 
-        print('Summation file already exists, skipping calculation: {:}'.format(path_out))
+def load_time_info(path_timing):
+
+    with open(path_timing, 'r') as in_id:
+
+        line = in_id.readline().split()
+        num_t = int(line[0])
+        d_t   = float(line[1])
+
+    return num_t, d_t
+
+def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
+
+    # Get output path.
+    path_timing = os.path.join(dir_out, 'timing.txt')
+    path_out = os.path.join(dir_out, 's_r_Theta_Phi.npy')
+    if os.path.exists(path_timing) and os.path.exists(path_out) and (not overwrite):
+
+        print('Summation file already exists, skipping calculation and loading: {:}'.format(path_out))
         s_r_Theta_Phi = np.load(path_out)
+        print('Loading {:}'.format(path_timing))
+        num_t, d_t = load_time_info(path_timing)
+        t = make_time_array(num_t, d_t)
 
         return t, s_r_Theta_Phi
+
+    # Get time values.
+    t = make_time_array(num_t, d_t)
 
     # Get station list.
     station_list = list(stations.index)
@@ -757,6 +796,10 @@ def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
     # Save.
     print('Writing {:}'.format(path_out))
     np.save(path_out, s)
+    print ('Writing {:}'.format(path_timing))
+    with open(path_timing, 'w') as out_id:
+
+        out_id.write('{:>10d} {:>18.12f}'.format(num_t, d_t))
 
     return t, s
 
@@ -793,6 +836,68 @@ def rotate_r_Theta_Phi_to_e_n_z(station_info, s_r_Theta_Phi):
         s_e_n_z[1, i, :] = sinChi*s_r_Theta_Phi[1, i, :] + cosChi*s_r_Theta_Phi[2, i, :]
 
     return s_e_n_z
+
+def rotate_e_n_z_to_channels(station_info, s_e_n_z, path_channels, dir_out, overwrite = False):
+
+    # Load channel information.
+    channel_dict = read_channel_file(path_channels)
+
+    # Get station list.
+    station_list = list(station_info.index)
+    num_stations = len(station_list)
+
+    # Get output path list.
+    path_out_dict = dict()
+    for i in range(num_stations):
+
+        station = station_list[i]
+        path_out_dict[station] = dict()
+
+        channels = channel_dict[station]['channels']
+        for channel in channels:
+
+            name_out = '{:}_{:}.npy'.format(station, channel)
+            path_out = os.path.join(dir_out, name_out)
+            path_out_dict[station][channel] = path_out
+
+    # Check output files already exist.
+    out_files_exist = []
+    if (not overwrite):
+
+        for station in path_out_dict:
+
+            for channel in path_out_dict[station]:
+
+                out_files_exist.append(os.path.exists((path_out_dict[station][channel])))
+
+        if all(out_files_exist):
+
+            print('All channel output files exist, skipping calculation.')
+            return
+
+    # Loop over stations.
+    for i in range(num_stations):
+
+        station = station_list[i]
+        channels = channel_dict[station]['channels']
+        
+        for channel in channels:
+
+            # Get the unit vector.
+            horiz_angle = np.deg2rad(channels[channel]['horiz_angle'])
+            vert_angle = np.deg2rad(channels[channel]['vert_angle'])
+            e, n, z = polar_coords_to_unit_vector(horiz_angle, vert_angle)
+
+            # Resolve the displacement in the direction of the component. 
+            s = s_e_n_z[0, i, :]*e + s_e_n_z[1, i, :]*n + s_e_n_z[2, i, :]*z
+
+            # Save.
+            name_out = '{:}_{:}.npy'.format(station, channel)
+            path_out = os.path.join(dir_out, name_out)
+            print('Writing to {:}'.format(path_out))
+            np.save(path_out, s)
+
+    return
 
 def main():
 
@@ -850,11 +955,12 @@ def main():
                     summation_info['d_t'], summation_info['dir_output'],
                     overwrite = overwrite)
 
-    # Rotate into specified channels. 
+    # Rotate into east, north and vertical components.
     s_e_n_z = rotate_r_Theta_Phi_to_e_n_z(stations, s_r_Theta_Phi)
 
-    print(s_e_n_z)
-    print(s_e_n_z.shape)
+    # Rotate into specified channels.
+    rotate_e_n_z_to_channels(stations, s_e_n_z, summation_info['path_channels'],
+                summation_info['dir_output'], overwrite = overwrite)
     
     return
 

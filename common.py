@@ -32,7 +32,7 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
     n_layers    = Ouroboros_info['n_layers']
     n_max       = Ouroboros_info['n_lims'][1]
     l_max       = Ouroboros_info['l_lims'][1]
-    g_switch    = Ouroboros_info['g_switch']
+    grav_switch    = Ouroboros_info['grav_switch']
 
     # Create model directory if it doesn't exist.
     name_model_with_layers = '{:}_{:>05d}'.format(name_model, n_layers)
@@ -46,7 +46,7 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
     # By default, the toroidal modes have g_switch = 0.
     if mode_type == 'T':
 
-        g_switch = 0
+        grav_switch = 0
 
     # Find the output file.
     name_model_with_layers  = '{:}_{:>05d}'.format(name_model, n_layers)
@@ -55,7 +55,7 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
 
     if mode_type in ['R', 'S']:
 
-        dir_g = os.path.join(dir_run, 'grav_{:1d}'.format(Ouroboros_info['g_switch']))
+        dir_g = os.path.join(dir_run, 'grav_{:1d}'.format(Ouroboros_info['grav_switch']))
         dir_type = os.path.join(dir_g, mode_type)
 
     else:
@@ -115,7 +115,7 @@ def read_Ouroboros_input_file(path_input_file):
         
         path_model      = in_id.readline().split()[1]
         dir_output      = in_id.readline().split()[1]
-        g_switch        = int(in_id.readline().split()[1])
+        grav_switch        = int(in_id.readline().split()[1])
         mode_types      = in_id.readline().split()[1:]
         n_min, n_max    = [int(x) for x in in_id.readline().split()[1:]]
         l_min, l_max    = [int(x) for x in in_id.readline().split()[1:]]
@@ -138,7 +138,7 @@ def read_Ouroboros_input_file(path_input_file):
     print('Input file was read successfully:')
     print('Path to model file: {:}'.format(path_model))
     print('Output directory: {:}'.format(dir_output))
-    print('Gravity switch: {:1d}'.format(g_switch))
+    print('Gravity switch: {:1d}'.format(grav_switch))
     print('Mode types:', end = '')
     for mode_type in mode_types:
         print(' {:1}'.format(mode_type), end = '')
@@ -153,7 +153,7 @@ def read_Ouroboros_input_file(path_input_file):
     Ouroboros_info['path_model']    = path_model
     Ouroboros_info['name_model']    = name_model
     Ouroboros_info['dir_output']    = dir_output 
-    Ouroboros_info['g_switch']      = g_switch 
+    Ouroboros_info['grav_switch']      = grav_switch 
     Ouroboros_info['mode_types']    = mode_types
     Ouroboros_info['l_lims']        = [l_min, l_max]
     Ouroboros_info['n_lims']        = [n_min, n_max]
@@ -381,12 +381,18 @@ def read_channel_file(path_channel):
                 lon = float(lon_str)
                 ele = float(ele_str)*1.0E3 # Convert to km.
                 coords = {'latitude' : lat, 'longitude' : lon, 'elevation' : ele}
-                channels = []
+                channels = dict() 
 
             else:
                 
-                channel = line.split()[1]
-                channels.append(channel)
+                channel = dict()
+                line_split = line.split()
+                channel_name = line_split[1]
+                channel['depth'] = float(line_split[2])
+                channel['horiz_angle'] = float(line_split[3])
+                channel['vert_angle'] = float(line_split[4])
+
+                channels[channel_name] = channel
 
             inventory[station] = dict()
             inventory[station]['channels'] = channels
@@ -454,19 +460,19 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
 
         return n, l, f
 
-def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None):
+def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None, convert_to_mineos_normalisation = True):
 
     # Unpack the Ouroboros parameters.
     dir_output  = Ouroboros_info['dir_output']
     n_layers    = Ouroboros_info['n_layers']
     n_max       = Ouroboros_info['n_lims'][1]
     l_max       = Ouroboros_info['l_lims'][1]
-    g_switch    = Ouroboros_info['g_switch']
+    grav_switch    = Ouroboros_info['grav_switch']
 
     # By default, the toroidal modes have g_switch = 0.
     if mode_type == 'T':
 
-        g_switch = 0
+        grav_switch = 0
 
     if mode_type == 'T':
 
@@ -490,6 +496,13 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None)
     path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
     
     # Load the eigenfunction.
+    # See Ouroboros/modes/notes_normalisation.pdf.
+    if convert_to_mineos_normalisation:
+
+        r_ref = 6371.0E3 # m
+        rho_ref = 5515.0 # kg/m3
+        G = 6.674E-11 # SI units.
+        c = rho_ref*np.sqrt((1.0E-9)*np.pi*G*((r_ref)**3.0))
     
     # Radial case.
     if mode_type == 'R':
@@ -497,12 +510,21 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None)
         r, U = np.load(path_eigenfunc)
         U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
 
+        if convert_to_mineos_normalisation:
+
+            U = U*c
+
         return r, U
     
     # Spheroidal case.
     elif mode_type == 'S':
 
         r, U, V = np.load(path_eigenfunc)
+
+        if convert_to_mineos_normalisation:
+
+            U = U*c
+            V = V*c
         
         return r, U, V
     
@@ -510,6 +532,10 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None)
     elif mode_type in ['T', 'I']:
 
         r, W = np.load(path_eigenfunc)
+
+        if convert_to_mineos_normalisation:
+
+            W = W*c
 
         return r, W
     
@@ -525,7 +551,7 @@ def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     n_layers    = Ouroboros_info['n_layers']
     n_max       = Ouroboros_info['n_lims'][1]
     l_max       = Ouroboros_info['l_lims'][1]
-    g_switch    = Ouroboros_info['g_switch']
+    grav_switch    = Ouroboros_info['grav_switch']
     version     = Ouroboros_info['version']
 
     #dir_base = os.path.join(os.sep, 'Users', 'hrmd_work', 'Documents', 'research', 'stoneley')

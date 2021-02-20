@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,23 +10,31 @@ def main():
     # Parse input arguments.
     parser = argparse.ArgumentParser()
     #
-    parser.add_argument("path_coeffs", help = "Path to coefficients file.")
+    parser.add_argument("dir_output", help = "Path to directory containing coefficients and mode information")
     parser.add_argument("station", help = 'Station code.')
     #
     args = parser.parse_args()
-    path_coeffs = args.path_coeffs
+    #path_coeffs = args.path_coeffs
+    dir_output = args.dir_output
     station = args.station
 
-    # Load data.
+    # Load mode data.
+    path_modes = os.path.join(dir_output, 'modes.pkl')
+    print('Loading {:}'.format(path_modes))
+    modes = pandas.read_pickle(path_modes)
+
+    # Load coeff data.
+    path_coeffs = os.path.join(dir_output, 'coeffs.pkl')
     print('Loading {:}'.format(path_coeffs))
     coeffs = pandas.read_pickle(path_coeffs)
+    #
     coeffs = coeffs.loc[station]
-    mode_type_int_list = np.unique(coeffs['type'])
+    mode_type_list = np.unique(modes['type'])
 
     line_kwargs = {'linewidth' : 1, 'alpha' : 0.3}
     scatter_kwargs = {}
     color_dict = {'R' : 'red', 'S' : 'blue', 'T' : 'green'}
-    mode_type_dict = {0 : 'R', 1 : 'S', 2 : 'T'}
+    #mode_type_dict = {0 : 'R', 1 : 'S', 2 : 'T'}
     
     comp_list = ['A_r', 'A_Theta', 'A_Phi']
     abs_list = [np.abs(coeffs[comp]) for comp in comp_list]
@@ -60,16 +69,16 @@ def main():
 
         ax = ax_arr[i]
 
-        for mode_type_int in mode_type_int_list:
+        for mode_type in mode_type_list:
 
-            mode_type = mode_type_dict[mode_type_int]
+            #mode_type = mode_type_dict[mode_type_int]
             color = color_dict[mode_type]
 
-            j = np.where(coeffs['type'] == mode_type_int)[0]
+            j = np.where(modes['type'] == mode_type)[0]
 
-            n = coeffs['n'][j]
-            l = coeffs['l'][j]
-            f = coeffs['f'][j]
+            n = modes['n'][j]
+            l = modes['l'][j]
+            f = modes['f'][j]
             A = coeffs[comp_list[i]][j]
             abs_A = np.abs(A)
 
