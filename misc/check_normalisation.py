@@ -24,6 +24,8 @@ def main():
     parser.add_argument("--eig_scale", type = float, help = 'Multiply eigenfunction(s) by this quantity before calculating normalisation.')
     parser.add_argument("--freq_scale", type = float, help = 'Multiply frequency (mHz) by this quantity before calculating normalisation.')
     parser.add_argument("--rho_scale", type = float, help = 'Multiply density by this quantity before calculating normalisation.')
+    parser.add_argument("--eig_norm", choices = ['mineos', 'DT'], default = 'DT', help = "Specify normalisation to be applied when loading the eigenfunctions. \'mineos\' is the normalisation function used by Mineos and Ouroboros. \'DT\' is the normalisation function used in the Dahlen and Tromp textbook. It does not include the factor of k. See also the --units flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.")
+    parser.add_argument("--eig_norm_units", choices = ['SI', 'ouroboros', 'mineos'], default = 'mineos', help = 'Specify units used when applying normalisation to eigenfunction. \'SI\' is SI units. \'mineos\' is Mineos units. \'ouroboros\' is Ouroboros units. See also the --norm_func flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.')
     args = parser.parse_args()
 
     # Rename input arguments.
@@ -37,6 +39,10 @@ def main():
     eig_scale   = args.eig_scale
     freq_scale  = args.freq_scale
     rho_scale   = args.rho_scale
+    eig_norm    = args.eig_norm
+    eig_norm_units = args.eig_norm_units
+
+
 
     if use_mineos:
 
@@ -76,26 +82,30 @@ def main():
     f_Hz = f_mHz*1.0E-3
     f_rad_per_s = f_Hz*(2.0*np.pi)
 
+    load_eigfunc_norm_args = {'norm_func' : eig_norm, 'units' : eig_norm_units}
+    if eig_norm == 'DT':
+        load_eigfunc_norm_args['omega'] = f_rad_per_s
+
     # Load eigenfunction(s).
     if use_mineos:
 
         if mode_type == 'R':
             
             print('Loading raw values of r and U from Ouroboros output files.')
-            r, U, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l)
+            r, U, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l, **load_eigfunc_norm_args)
             r = r[::-1]
             U = U[::-1]
 
         elif mode_type == 'S': 
 
-            r, U, _, V, _, _, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l)
+            r, U, _, V, _, _, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l, **load_eigfunc_norm_args)
             r = r[::-1]
             U = U[::-1]
             V = V[::-1]
 
         elif mode_type in ['T', 'I']:
 
-            r, W, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l)
+            r, W, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l, **load_eigfunc_norm_args)
             r = r[::-1]
             W = W[::-1]
 
@@ -104,16 +114,16 @@ def main():
         if mode_type == 'R':
             
             print('Loading raw values of r and U from Ouroboros output files.')
-            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
+            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, **load_eigfunc_norm_args)
             U[0] = 0.0 # Value of U at planet core appears to be buggy for R modes.
 
         elif mode_type == 'S': 
 
-            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l)
+            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, **load_eigfunc_norm_args)
 
         elif mode_type == 'T':
 
-            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal, **load_eigfunc_norm_args)
 
     if mode_type in ['S', 'T']:
 
@@ -237,6 +247,41 @@ def main():
 
     print('I             = {:>10.3e}'.format(integral))
     print('I * (omega^2) = {:>10.3e}'.format(integral*(f_rad_per_s**2.0))) 
+
+    print('\n')
+    if mode_type in ['S', 'T']:
+
+        # Integrate (each section integrated separately).
+        # Define integration function.
+        if mode_type == 'S':
+
+            print('I             = integral( rho * (U^2 + V^2) * (r^2) )')
+            function = rho*(U**2.0 + V**2.0)*(r**2.0)
+
+        elif mode_type == 'T':
+
+            print('I             = integral( rho * (W^2) * (r^2) )')
+            function = rho*(W**2.0)*(r**2.0)
+        
+        if mode_type == 'S':
+
+            i = np.array([0, *i_fluid_solid_boundary, len(r)], dtype = np.int)
+            n_segment = len(i) - 1
+            #
+            integral = 0.0
+            for j in range(n_segment):
+                
+                i1 = i[j]
+                i2 = i[j + 1]
+
+                integral = integral + np.trapz(function[i1 : i2], x = r[i1 : i2])
+
+        else:
+
+            integral = np.trapz(function, x = r)
+
+        print('I             = {:>10.3e}'.format(integral))
+        print('I * (omega^2) = {:>10.3e}'.format(integral*(f_rad_per_s**2.0))) 
 
     return
 

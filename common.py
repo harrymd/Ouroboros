@@ -460,7 +460,15 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
 
         return n, l, f
 
-def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None, convert_to_mineos_normalisation = True):
+def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None, norm_func = 'mineos', units = 'SI', omega = None):
+    '''
+    Normalisation
+    See Ouroboros/doc/Ouroboros_normalisation_notes.pdf.
+    mineos      Use the Mineos/Ouroboros normalisation formula with Mineos units.
+    ouroboros   Use the Mineos/Ouroboros normalisation formula with Ouroboros units.
+    SI          Use the Mineos/Ouroboros normalisation formula with SI units. 
+    DT          Use the Dahlen and Tromp normalisation formula with SI units.
+    '''
 
     # Unpack the Ouroboros parameters.
     dir_output  = Ouroboros_info['dir_output']
@@ -495,24 +503,37 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
     path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
     
-    # Load the eigenfunction.
-    # See Ouroboros/modes/notes_normalisation.pdf.
-    if convert_to_mineos_normalisation:
+    # Define normalisation constants.
+    # See Ouroboros/docs/Ouroboros_normalisation_notes.pdf.
+    if units == 'ouroboros':
+
+        c = 1
+
+    elif units == 'mineos':
 
         r_ref = 6371.0E3 # m
         rho_ref = 5515.0 # kg/m3
         G = 6.674E-11 # SI units.
         c = rho_ref*np.sqrt((1.0E-9)*np.pi*G*((r_ref)**3.0))
-    
+
+    elif units == 'SI':
+
+        c = np.sqrt(1.0E-9)
+
+    if norm_func == 'DT':
+
+        assert omega is not None, 'To apply D&T normalisation, the angular frequency (rad per s) must be specified.'
+        c = c*omega
+        k = np.sqrt(l*(l + 1.0))
+
     # Radial case.
     if mode_type == 'R':
 
         r, U = np.load(path_eigenfunc)
         U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
 
-        if convert_to_mineos_normalisation:
-
-            U = U*c
+        # Apply normalisation.
+        U = c*U
 
         return r, U
     
@@ -521,21 +542,25 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
         r, U, V = np.load(path_eigenfunc)
 
-        if convert_to_mineos_normalisation:
+        # Apply normalisation.
+        U = U*c
+        V = V*c
+        if norm_func == 'DT':
 
-            U = U*c
-            V = V*c
+            V = V*k
         
         return r, U, V
     
     # Toroidal case.
-    elif mode_type in ['T', 'I']:
+    elif mode_type == 'T':
 
         r, W = np.load(path_eigenfunc)
 
-        if convert_to_mineos_normalisation:
+        # Apply normalisation.
+        W = W*c
+        if norm_func == 'DT':
 
-            W = W*c
+            W = W*k
 
         return r, W
     
@@ -625,7 +650,7 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
     
     file_eigval = 'minos_bran_out_{:}.txt'.format(mode_type)
     path_eigval = os.path.join(run_info['dir_run'], file_eigval) 
-    
+
     if return_Q:
 
         n, l, f, Q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
@@ -633,10 +658,10 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
     else:
 
         n, l, f = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4)).T
-    
+
     n = n.astype(np.int)
     l = l.astype(np.int)
-    
+
     if (n_q is not None) and (l_q is not None):
 
         i = np.where((n == n_q) & (l == l_q))[0][0]
@@ -662,41 +687,58 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
 
             return n, l, f
 
-def load_eigenfunc_Mineos(run_info, mode_type, n, l):
-#def load_eigenfunc_Mineos(name_model, n_max, l_max, g_switch, mode_type, n, l):
-    
-    #if 'dir_eigval' in run_info:
-
-    #    dir_eigval = run_info['dir_eigval']
-
-    #else:
-
-    #    name_model = run_info['model']
-    #    n_max = run_info['n_lims'][1]
-    #    l_max = run_info['l_lims'][1]
-    #    g_switch = run_info['g_switch']
-
-    #    dir_eigval = get_dir_eigval_Mineos(run_info['dir_output'], name_model, n_max, l_max, g_switch)
+def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units = 'SI', omega = None):
+    '''
+    Normalisation
+    See Ouroboros/doc/Ouroboros_normalisation_notes.pdf.
+    mineos      Use the Mineos/Ouroboros normalisation formula with Mineos units.
+    ouroboros   Use the Mineos/Ouroboros normalisation formula with Ouroboros units.
+    SI          Use the Mineos/Ouroboros normalisation formula with SI units. 
+    DT          Use the Dahlen and Tromp normalisation formula with SI units.
+    '''
 
     # Find the Mineos output directory.
     _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
-
     dir_eig_funcs = os.path.join(run_info['dir_run'], 'eigen_txt_{:}'.format(mode_type))
 
     # Syndat uses a slightly different naming convention. Radial modes are
-    # prefixed with 'S' instead of 'R'.
-    # Note: Need to check the naming convention for inner-core toroidal
-    # modes.
-    if mode_type == 'I':
-
-        raise NotImplementedError
-
-    mode_type_to_mode_type_str_dict = {'R' : 'S', 'S' : 'S', 'T' : 'T', 'I' : None}
+    # prefixed with 'S' instead of 'R', and inner core toroidal modes are
+    # prefixed with 'C'.
+    mode_type_to_mode_type_str_dict = {'R' : 'S', 'S' : 'S', 'T' : 'T', 'I' : 'C'}
     mode_type_str = mode_type_to_mode_type_str_dict[mode_type]
 
     # Get the path of the eigenfunction file.
     file_eig_func = '{:}.{:>07d}.{:>07d}.ASC'.format(mode_type_str, n, l)
     path_eig_func = os.path.join(dir_eig_funcs, file_eig_func)
+
+    # Define normalisation constants.
+    if units in ['ouroboros', 'SI']:
+
+        r_ref = 6371.0E3 # m
+        rho_ref = 5515.0 # kg/m3
+        G = 6.674E-11 # SI units.
+
+    if units == 'ouroboros':
+
+        c = 1.0/(rho_ref*np.sqrt((1.0E-9)*np.pi*G*((r_ref)**3.0)))
+        d = c/(r_ref*1.0E-3)
+
+    elif units == 'mineos':
+
+        c = 1.0
+        d = 1.0
+
+    elif units == 'SI':
+
+        c = 1.0/(rho_ref*np.sqrt(np.pi*G*((r_ref)**3.0)))
+        d = c/r_ref
+
+    if norm_func == 'DT':
+        
+        assert omega is not None, 'To apply D&T normalisation, the angular frequency (rad per s) must be specified.'
+        c = c*omega
+        d = d*omega
+        k = np.sqrt(l*(l + 1.0))
 
     # Load the data.
     data = np.loadtxt(path_eig_func, skiprows = 1).T
@@ -705,21 +747,48 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l):
     if mode_type == 'R':
 
         r, U, Up = data
+        
+        # Apply normalisation.
+        U  = c*U
+        Up = c*Up
+
         return r, U, Up
 
     elif mode_type == 'S':
 
         r, U, Up, V, Vp, P, Pp  = data
+
+        # Apply normalisation.
+        U  = c*U
+        Up = d*Up
+        V  = c*V
+        Vp = d*Vp
+        #
+        if norm_func == 'DT':
+
+            V  = V*k
+            Vp = Vp*k
+
         return r, U, Up, V, Vp, P, Pp
 
-    elif mode_type == 'T':
+    elif mode_type in ['T', 'I']:
 
         r, W, Wp = data
+
+        # Apply normalisation.
+        W = c*W
+        Wp = d*Wp
+        #
+        if norm_func == 'DT':
+            
+            W  = W*k
+            Wp = Wp*k
+
         return r, W, Wp
 
-    elif mode_type == 'I':
+    else:
 
-        raise NotImplementedError
+        raise ValueError
 
 # Manipulating Earth models. --------------------------------------------------
 def get_r_fluid_solid_boundary(radius, vs):
