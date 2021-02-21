@@ -2,6 +2,8 @@ import argparse
 import os
 
 import numpy as np
+from obspy.core.stream import Stream
+from obspy.core.trace import Trace
 from scipy.special import  lpmn as associated_Legendre_func_series
 #from scipy.special import lpmv as associated_Legendre_func
 import pandas
@@ -98,6 +100,13 @@ def polar_coords_to_unit_vector(theta, phi):
     return x, y, z
 
 #
+def moment_sinc(omega, t_half):
+
+    x = omega*t_half
+    sinc = np.sin(x)/x
+
+    return sinc
+
 def old_calculate_excitation_factor(l, cosTheta, Phi, cmt_info, eigfunc_source, verbose = True):
     '''
     Dahlen and Tromp (1998) eq. 10.53.
@@ -178,85 +187,60 @@ def old_calculate_excitation_factor(l, cosTheta, Phi, cmt_info, eigfunc_source, 
 
     return excitation
 
-def calculate_source_coefficients_spheroidal(l, cmt_info, eigfunc_source):
+def calculate_source_coefficients_spheroidal(l, omega, cmt_info, eigfunc_source):
     '''
     Dahlen and Tromp (1998) eq. 10.53.
     '''
     
-    ## Associated Legendre function Plm.
-    ##Plm_list = Plm_series[:, l]
-    #Pl0, Pl1, Pl2 = Plm_list
-    #
-    ## Azimuthal terms.
-    #cos0Phi = np.cos(0*Phi)
-    #cos1Phi = np.cos(1*Phi)
-    #cos2Phi = np.cos(2*Phi)
-    #cosPhi_list = [cos0Phi, cos1Phi, cos2Phi]
-    ##
-    #sin0Phi = np.sin(0*Phi)
-    #sin1Phi = np.sin(1*Phi)
-    #sin2Phi = np.sin(2*Phi)
-    #sinPhi_list = [sin0Phi, sin1Phi, sin2Phi]
-
     # Unpack dictionaries.
     r = cmt_info['r_centroid']*1.0E3 # km to m
-    Mrr = cmt_info['Mrr']
-    Mtt = cmt_info['Mtt']
-    Mpp = cmt_info['Mpp']
-    Mrt = cmt_info['Mrt']
-    Mrp = cmt_info['Mrp']
-    Mtp = cmt_info['Mtp']
+    # Dahlen and Tromp (1998), eq. 5.92.
+    comp_list = ['rr', 'tt', 'pp', 'rt', 'rp', 'tp']
+    M = {comp : cmt_info['M{:}'.format(comp)] for comp in comp_list}
+    
+    # Multiply by the frequency-domain value of the unit source-time function
+    # as described in Dahlen and Tromp (1998), p. 377, including factor
+    # of sqrt(2).
+    # Note this assumes a boxcar excitation function.
+    m_omega = moment_sinc(omega, cmt_info['half_duration'])
+    M_scaling = np.sqrt(2.0)*cmt_info['scale_factor']*m_omega
+    for comp in comp_list:
+
+        M[comp] = M[comp]*M_scaling
+    #
+    ## Get unit moment tensor (Dahlen and Tromp, 1998, p. 167).
+    ## Dahlen and Tromp (1998) eq. 5.91
+    #M0 = (1.0/np.sqrt(2.0))*np.sqrt(Mrr**2.0 + Mtt**2.0 + Mpp**2.0
+    #                                + 2.0*(Mrt**2.0) + 2.0*(Mrp**2.0) + 2.0*(Mtp**2.0))
+
     #
     U = eigfunc_source['U']
     V = eigfunc_source['V']
     #
     dUdr = eigfunc_source['Up']
     dVdr = eigfunc_source['Vp']
-
+    
     # Coefficients.
     # D&T eq. 10.54-10.59.
     k = np.sqrt(l*(l + 1.0))
     #
-    A0 = Mrr*dUdr + ((Mtt + Mpp)*(U - 0.5*k*V)*(1.0/r))
+    A0 = M['rr']*dUdr + ((M['tt'] + M['pp'])*(U - 0.5*k*V)*(1.0/r))
     B0 = 0.0
     #
     C = dVdr - (V/r) + ((k*U)/r)
-    A1 = Mrt*C/k
-    B1 = Mrp*C/k
+    A1 = M['rt']*C/k
+    B1 = M['rp']*C/k
     #
     D = V/(k*r)
-    A2 = 0.5*D*(Mtt - Mpp)
-    B2 = D*Mtp
-    #
-    #A_list = [A0, A1, A2]
-    #B_list = [B0, B1, B2]
-    #
-    ##scale = 1.0E4
-    ##print(Mrr*dUdr*scale)
-    ##print(((Mtt + Mpp)*(U - 0.5*k*V)*(1.0/r))*scale)
-    ##print(A0*scale, B0*scale)
-    ##print(A1*scale, B2*scale)
-    ##print(A2*scale, B2*scale)
-    ###print(C)
-
-    ##import sys
-    ##sys.exit()
-
-    ## Summation (D&T eq. 10.53).
-    #excitation = 0.0
-    #for m in range(3):
-    #    
-    #    term = Pl_list[m]*(A_list[m]*cosPhi_list[m] + B_list[m]*sinPhi_list[m])
-    #    excitation = excitation + term 
-
-    #return excitation
+    A2 = 0.5*D*(M['tt'] - M['pp'])
+    B2 = D*M['tp']
 
     # Store in dictionary.
     src_coeffs = {'A0' : A0, 'A1' : A1, 'A2' : A2, 'B0' : B0, 'B1' : B1, 'B2' : B2}
 
     return src_coeffs
 
-def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Phi, Plm_series, Plm_prime_series, sin_cos_Phi_list):
+def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Plm_series, Plm_prime_series, sin_cos_Phi_list):
     '''
     Reference
 
@@ -282,11 +266,6 @@ def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Ph
 
     # Unpack functions of azimuth.
     cosPhi, sinPhi, cos2Phi, sin2Phi = sin_cos_Phi_list
-
-    cosPhi = np.cos(Phi)
-    sinPhi = np.sin(Phi)
-    cos2Phi = np.cos(2.0*Phi)
-    sin2Phi = np.sin(2.0*Phi)
 
     # Calculate k and L.
     k = np.sqrt(l*(l + 1.0))
@@ -380,7 +359,9 @@ def load_mode_info(run_info, summation_info, use_mineos = False):
 
     return mode_info
 
-def load_eigenfunc(run_info, mode_type, n, l, z_source, z_receiver = 0.0, use_mineos = False):
+def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver = 0.0, use_mineos = False):
+
+    norm_args = {'norm_func' : 'DT', 'units' : 'SI', 'omega' : f_rad_per_s}
 
     # Load eigenfunction information for this mode.
     if mode_type in ['R', 'S']:
@@ -392,7 +373,8 @@ def load_eigenfunc(run_info, mode_type, n, l, z_source, z_receiver = 0.0, use_mi
 
                 # Load Mineos eigenfunction.
                 r, U, Up, V, Vp, P, Pp = \
-                    load_eigenfunc_Mineos(run_info, mode_type, n, l)
+                    load_eigenfunc_Mineos(run_info, mode_type, n, l,
+                        **norm_args)
 
                 ## Convert to km.
                 #r = r*1.0E-3
@@ -410,7 +392,8 @@ def load_eigenfunc(run_info, mode_type, n, l, z_source, z_receiver = 0.0, use_mi
 
                 # Load Mineos eigenfunction.
                 r, U, Up = \
-                    load_eigenfunc_Mineos(run_info, mode_type, n, l)
+                    load_eigenfunc_Mineos(run_info, mode_type, n, l,
+                            **norm_args)
 
                 ## Convert to km.
                 #r = r*1.0E-3
@@ -581,6 +564,7 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                 n = mode_info[mode_type]['n'][i]
                 l = mode_info[mode_type]['l'][i]
                 f = mode_info[mode_type]['f'][i]
+                f_rad_per_s = f*1.0E-3*2.0*np.pi
                 Q = mode_info[mode_type]['Q'][i]
                 
                 if i == (num_modes - 1):
@@ -601,6 +585,7 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                     load_eigenfunc(run_info, mode_type,
                         n,
                         l,
+                        f_rad_per_s,
                         cmt['depth_centroid']*1.0E3, # km to m.
                         z_receiver = 0.0,
                         use_mineos = use_mineos)
@@ -616,12 +601,12 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                     # Excitation coefficients determined by source location.
                     source_coeffs = \
                         calculate_source_coefficients_spheroidal(
-                            l, cmt, eigfunc_source)
+                            l, f_rad_per_s, cmt, eigfunc_source)
 
                     # Overall coefficients including receiver location.
                     coeffs = calculate_coeffs_spheroidal(
                                 source_coeffs, eigfunc_receiver, l,
-                                sinTheta, Phi, Plm_series[:, l],
+                                sinTheta, Plm_series[:, l],
                                 Plm_prime_series[:, l], sin_cos_Phi_list)
 
                 else:
@@ -899,6 +884,53 @@ def rotate_e_n_z_to_channels(station_info, s_e_n_z, path_channels, dir_out, over
 
     return
 
+def convert_to_mseed(dir_out, path_channels, station_info, path_cmt):
+
+    # Load timing information.
+    name_timing = 'timing.txt'
+    path_timing = os.path.join(dir_out, name_timing)
+    num_t, d_t = load_time_info(path_timing)
+
+    # Load CMT info.
+    cmt = read_mineos_cmt(path_cmt)
+
+    # Load channel information.
+    channel_dict = read_channel_file(path_channels)
+
+    # Get station list.
+    station_list = list(station_info.index)
+    num_stations = len(station_list)
+
+    stream = Stream()
+    for i in range(num_stations):
+
+        station = station_list[i]
+
+        channels = channel_dict[station]['channels']
+        for channel in channels:
+
+            name_trace = '{:}_{:}.npy'.format(station, channel)
+            path_trace = os.path.join(dir_out, name_trace)
+
+            trace_data = np.load(path_trace)
+
+            trace_header = {'delta' : d_t, 'station' : station, 'channel' : channel,
+                            'starttime' : cmt['datetime_ref']}
+#                            'starttime' : cmt_info['}
+            trace = Trace(data = trace_data, header = trace_header)
+
+            stream = stream + trace
+    
+    # Differentiate (go from displacement (m) to velocity (m/s)).
+    stream.differentiate()
+
+    name_stream = 'stream.mseed'
+    path_stream = os.path.join(dir_out, name_stream) 
+    print('Writing {:}'.format(path_stream))
+    stream.write(path_stream)
+
+    return stream
+
 def main():
 
     # Parse input arguments.
@@ -961,6 +993,9 @@ def main():
     # Rotate into specified channels.
     rotate_e_n_z_to_channels(stations, s_e_n_z, summation_info['path_channels'],
                 summation_info['dir_output'], overwrite = overwrite)
+
+    # Convert to a convenient MSEED stream file.
+    convert_to_mseed(summation_info['dir_output'], summation_info['path_channels'], stations, summation_info['path_cmt'])
     
     return
 

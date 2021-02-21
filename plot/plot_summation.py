@@ -400,21 +400,26 @@ def main():
 
         summation_info['dir_output'] = summation_info['dir_cmt']
         
-        # Load trace.
-        name = '{:}_{:}'.format(station, channel)
-        name_trace = '{:}.npy'.format(name)
-        path_trace = os.path.join(summation_info['dir_output'], name_trace)
-        trace_data = np.load(path_trace)
+        ## Load trace.
+        #name = '{:}_{:}'.format(station, channel)
+        #name_trace = '{:}.npy'.format(name)
+        #path_trace = os.path.join(summation_info['dir_output'], name_trace)
+        #trace_data = np.load(path_trace)
 
-        # Load timing information.
-        name_timing = 'timing.txt'
-        path_timing = os.path.join(summation_info['dir_output'], name_timing)
-        num_t, d_t = load_time_info(path_timing)
-        
-        trace_header = {'delta' : d_t, 'station' : station, 'channel' : channel}
-        trace = Trace(data = trace_data, header = trace_header)
-        
-        stream = Stream([trace])
+        ## Load timing information.
+        #name_timing = 'timing.txt'
+        #path_timing = os.path.join(summation_info['dir_output'], name_timing)
+        #num_t, d_t = load_time_info(path_timing)
+        #
+        #trace_header = {'delta' : d_t, 'station' : station, 'channel' : channel}
+        #trace = Trace(data = trace_data, header = trace_header)
+        #
+        #stream = Stream([trace])
+        name_stream = 'stream.mseed'
+        path_stream = os.path.join(summation_info['dir_output'], name_stream) 
+        print('Reading {:}'.format(path_stream))
+        stream = read(path_stream)
+        stream = stream.select(station = station, channel = channel)
 
     trace = stream[0]
 

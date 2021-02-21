@@ -264,12 +264,12 @@ def sac2mseed(dir_output, path_cmt, path_channel):
     station_list = read_channel_file(path_channel)
 
     first_iteration = True
-
+    
     for station in station_list:
 
-        channel_list = station_list[station]
+        channel_list = station_list[station]['channels']
         for channel in channel_list:
-
+            
             path_sac = path_to_sac(dir_output, path_cmt, station, channel)
             stream_new = read(path_sac)
 
