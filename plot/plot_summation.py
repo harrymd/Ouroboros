@@ -7,6 +7,7 @@ from obspy import read
 from obspy.core.trace import Trace
 from obspy.core.stream import Stream
 from obspy.realtime.signal import scale
+from scipy.signal import find_peaks
 
 from Ouroboros.common import (  get_Mineos_out_dirs, get_Mineos_summation_out_dirs,
                                 mkdir_if_not_exist,
@@ -36,7 +37,7 @@ def unpack_trace(trace, trace_comparison = None):
 
     return t, x, t_c, x_c
 
-def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None, show = True, label = 'auto'):
+def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None, show = True, label = 'auto', show_legend = True, y_label = None, legend_keys = ['Synthetic', 'Observed']):
     '''
     Trace input units assumed to be nm/s.
     '''
@@ -67,18 +68,23 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
         fig = plt.figure(figsize = (8.5, 5.0), constrained_layout = True)
         ax  = plt.gca()
 
-    ax.plot(t*t_scale, x, **line_kwargs, label = 'Synthetic')
+    ax.plot(t*t_scale, x, **line_kwargs, label = legend_keys[0])
 
     if trace_comparison is not None:
 
         t_offset = t_c
 
-        ax.plot(t_c*t_scale, x_c, **line_kwargs_comparison, label = 'Observed')
+        ax.plot(t_c*t_scale, x_c, **line_kwargs_comparison, label = legend_keys[1])
 
-        ax.legend(loc = 'lower right')
+        if show_legend:
+
+            ax.legend(loc = 'lower right')
 
     ax.set_xlabel('Time ({:})'.format(t_units), fontsize = font_size_label)
-    ax.set_ylabel('Velocity (nm s$^{-1}$)', fontsize = font_size_label)
+    if y_label is not None:
+
+        ax.set_ylabel(y_label, fontsize = font_size_label)
+
     if label is not None:
 
         ax.text(0.9, 0.9, label, transform = ax.transAxes, ha = 'right', va = 'top')
@@ -116,7 +122,7 @@ def do_fft(t, x):
 
     return f, X
 
-def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None, show = True, label = 'auto'):
+def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None, show = True, label = 'auto', label_coeff_info = None, y_label = None, legend_keys = ['Synthetic', 'Observed']):
     '''
     Trace input units assumed to be nm/s.
     '''
@@ -129,9 +135,12 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
     t, x, t_c, x_c = unpack_trace(trace, trace_comparison = trace_comparison)
     
     # Do Fourier transform.
+    # Get amplitude spectrum, maximum amplitude, phase, and location of peaks.
     f, X = do_fft(t, x)
     abs_X = np.abs(X)
     abs_X_max = np.max(abs_X)
+    angle_X = np.angle(X)
+    i_peak, _ = find_peaks(abs_X, prominence = 0.01*abs_X)
 
     # Do Fourier transform of comparison trace.
     if trace_comparison is not None:
@@ -139,13 +148,17 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
         f_c, X_c = do_fft(t_c, x_c)
         abs_X_c = np.abs(X_c)
         abs_X_c_max = np.max(abs_X_c)
+        angle_X_c = np.angle(X_c)
+        i_peak_c, _ = find_peaks(abs_X_c, prominence = 0.01*abs_X_c_max)
 
     else:
 
         abs_X_c_max = 0.0
 
+    # Get overall maximum amplitude.
     abs_X_all_max = np.max([abs_X_max, abs_X_c_max])
 
+    # Create axes.
     if ax_arr is None:
 
         fig, ax_arr = plt.subplots(2, 1,
@@ -154,22 +167,23 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
                         gridspec_kw = {'height_ratios': [1, 2]},
                         constrained_layout = True)
 
+    # Enforce shared x axis if axes are provided.
     else:
 
         ax_arr[0].get_shared_x_axes().join(*ax_arr)
 
-    f_scale = 1.0E3
+    # Set plot properties.
+    f_scale = 1.0E3 # Hz to mHz.
     f_lims = [0.0, 5.0]
     X_scale = 1.0E-3 # 1.0E-3 for 1/Hz to 1/mHz
     font_size_label = 12
-    
     line_width = 1
     alpha = 0.5
     scatter_s = 5
     if trace_comparison is None:
 
         line_kwargs = {'color' : 'k', 'linewidth' : 1}
-        fill_kwargs = {'color' : 'k', 'alpha' : 0.5}
+        fill_kwargs = {'color' : 'k', 'alpha' : alpha}
         scatter_kwargs = {'color' : 'k', 's' : scatter_s}
 
     else:
@@ -184,62 +198,54 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
         fill_c_kwargs = {'color' : color_obs, 'alpha' : alpha}
         scatter_c_kwargs = {'color' : color_obs, 's' : scatter_s}
 
+    # Plot phase.
     ax = ax_arr[0]
-    
-    from scipy.signal import find_peaks
-    #i_low_amp = np.where(abs_X < 0.1*np.max(abs_X))[0]
-    angle_X = np.angle(X)
-    #angle_X[i_low_amp] = np.nan
 
-    i_peak, _ = find_peaks(abs_X, prominence = 0.01*np.max(abs(X)))
-    #peak_mask = np.ones(len(abs_X), np.bool)
-    #peak_mask[i_peak] = 0
-    #angle_X[peak_mask] = np.nan
-
+    # Plot phase.
     ax.plot(f*f_scale, angle_X, **line_kwargs)
     ax.scatter(f[i_peak]*f_scale, angle_X[i_peak], **scatter_kwargs)
 
+    # If no comparison trace, also fill phase curve.
     if trace_comparison is None:
 
         ax.fill_between(f*f_scale, angle_X, y2 = -np.pi, **fill_kwargs)
 
+    # Plot phase of comparison trace.
     else:
 
-        #i_low_amp_c = np.where(abs_X_c < 0.1*np.max(abs_X_c))[0]
-        angle_X_c = np.angle(X_c)
-        #angle_X_c[i_low_amp_c] = np.nan
-
-        i_peak_c, _ = find_peaks(abs_X_c, prominence = 0.01*np.max(abs(X_c)))
-        
         ax.scatter(f_c[i_peak_c]*f_scale, angle_X_c[i_peak_c], **scatter_c_kwargs)
-
         ax.plot(f_c*f_scale, angle_X_c, **line_c_kwargs)
-
+    
+    # Tidy up phase plot.
     ax.set_ylabel('Phase (radians)', fontsize = font_size_label)
-
     ax.set_ylim([-np.pi, np.pi])
     ax.set_yticks(np.array([-1.0, -0.5, 0.0, 0.5, 1.0])*np.pi)
     ax.set_yticklabels(['-$\pi$', '-$\pi/2$', '0', '$\pi$/2', '$\pi$'])
 
+    # Plot amplitude spectrum.
     ax = ax_arr[1]
-
-    ax.plot(f*f_scale, abs_X*X_scale, **line_kwargs, label = 'Synthetic')
+    #
+    ax.plot(f*f_scale, abs_X*X_scale, **line_kwargs, label = legend_keys[0])
     ax.fill_between(f*f_scale, abs_X*X_scale, **fill_kwargs)
     ax.scatter(f[i_peak]*f_scale, abs_X[i_peak]*X_scale, **scatter_kwargs)
 
+    # Plot amplitude spectrum of comparison trace.
     if trace_comparison is not None:
 
-        ax.plot(f_c*f_scale, abs_X_c*X_scale, **line_c_kwargs, label = 'Observed')
+        ax.plot(f_c*f_scale, abs_X_c*X_scale, **line_c_kwargs, label = legend_keys[1])
         ax.fill_between(f_c*f_scale, abs_X_c*X_scale, **fill_c_kwargs)
         ax.scatter(f_c[i_peak_c]*f_scale, abs_X_c[i_peak_c]*X_scale, **scatter_c_kwargs)
         ax.legend()
 
-    ax.set_ylabel('Spectral amplitude (nm s$^{-1}$ mHz$^{-1}$)', fontsize = font_size_label)
+    # Tidy up amplitude spectrum.
+    if y_label is not None:
+
+        #ax.set_ylabel('Spectral amplitude (nm s$^{-1}$ mHz$^{-1}$)', fontsize = font_size_label)
+        ax.set_ylabel(y_label, fontsize = font_size_label)
 
     y_lim_buff = 0.05
     y_log = False
     if y_log:
-
 
         ax.set_yscale('log')
 
@@ -248,24 +254,46 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
         y_lims = [0.0, (1.0 + y_lim_buff)*abs_X_all_max*X_scale]
         ax.set_ylim(y_lims)
 
+    if label_coeff_info is not None:
+        
+        coeffs = label_coeff_info['coeffs']
+        mode_info = label_coeff_info['modes']
+
+        amp_thresh_frac = 0.1
+        key = 'A_r'
+        abs_coeff = np.abs(coeffs[key])
+        max_coeff = np.max(abs_coeff)
+        cond_amp = np.array((abs_coeff > amp_thresh_frac*max_coeff), dtype = np.bool)
+
+        cond_freq = np.array(((mode_info['f'] > f_lims[0]) & (mode_info['f'] < f_lims[1])), dtype = np.bool)
+
+        i_label =  np.where(cond_amp & cond_freq)[0]
+        for i in i_label:
+            
+            mode_str = '$_{{{:>d}}}{:}_{{{:>d}}}$'.format(mode_info['n'][i], mode_info['type'][i], mode_info['l'][i])
+            ax.text(mode_info['f'][i], y_lims[1]*0.9, mode_str, rotation = 90.0, va = 'bottom', ha = 'center')
+            ax.plot([mode_info['f'][i], mode_info['f'][i]], [0.0, y_lims[1]*0.9], color = 'k', lw = 1)
+
     ax.set_xlim(f_lims)
     if label is not None:
         ax.text(0.1, 0.9, label, transform = ax.transAxes, ha = 'left')
 
     ax.set_xlabel('Frequency (mHz)', fontsize = font_size_label)
 
+    # Save (if requested).
     if path_out is not None:
         
         print('Saving figure to {:}'.format(path_out))
         plt.savefig(path_out, dpi = 300, bbox_inches = 'tight')
 
+    # Show (if requested).
     if show:
 
         plt.show()
 
     return
 
-def plot_seismograph_and_spectrum(trace, path_out = None, show = True, labels = ['auto', None], trace_comparison = None):
+def plot_seismograph_and_spectrum(trace, path_out = None, show = True, labels = ['auto', None], trace_comparison = None, label_coeff_info = None, y_labels = [None, None], legend_keys = ['Synthetic', 'Observed']):
 
     fig, ax_arr = plt.subplots(3, 1,
                     figsize = (10.0, 8.0),
@@ -273,10 +301,10 @@ def plot_seismograph_and_spectrum(trace, path_out = None, show = True, labels = 
                     constrained_layout = True)
 
     ax = ax_arr[0]
-    plot_seismograph(trace, ax = ax, show = False, label = labels[0], trace_comparison = trace_comparison)
+    plot_seismograph(trace, ax = ax, show = False, label = labels[0], trace_comparison = trace_comparison, show_legend = False, y_label = y_labels[0])
 
     sub_ax_arr = ax_arr[1:]
-    plot_spectrum(trace, ax_arr = sub_ax_arr, show = False, label = labels[1], trace_comparison = trace_comparison)
+    plot_spectrum(trace, ax_arr = sub_ax_arr, show = False, label = labels[1], trace_comparison = trace_comparison, label_coeff_info = label_coeff_info, y_label = y_labels[1], legend_keys = legend_keys)
 
     if path_out is not None:
         
@@ -297,20 +325,54 @@ def align_traces(tr_1, tr_2, d_t):
     t_span_actual = t_1_actual - t_0
     n_t = int(np.ceil(t_span_actual/d_t)) + 1
     t_span = (n_t - 1)*d_t
-    t_1 = t_0 + t_span
+    buff = 1.0*d_t
+    t_1 = t_0 + t_span + buff
 
     t_span = np.linspace(0.0, t_span, num = n_t)
 
-    tr_1.trim(t_0, t_1, pad = True, fill_value = 0.0) 
-    tr_2.trim(t_0, t_1, pad = True, fill_value = 0.0) 
+    tr_1_data_interpolated = np.interp(t_span, tr_1.times(), tr_1.data)
+    tr_2_data_interpolated = np.interp(t_span, tr_2.times(), tr_2.data)
 
-    sampling_rate = 1.0/d_t
+    # This is a hack; for unknown reasons Mineos and Ouroboros differ
+    # at the very start of their traces.
+    tr_1_data_interpolated[0:6] = 0.0
+    tr_2_data_interpolated[0:6] = 0.0
 
-    tr_1.interpolate(sampling_rate, method = 'linear')
-    tr_2.interpolate(sampling_rate, method = 'linear')
+    tr_1_copy = tr_1.copy()
+    tr_1_copy.data = tr_1_data_interpolated
+    tr_1_copy.stats.starttime = t_0
+    tr_1 = tr_1_copy
 
-    #stream = Stream([tr_1, tr_2])
-    #stream.plot()
+    tr_2_copy = tr_2.copy()
+    tr_2_copy.data = tr_2_data_interpolated
+    tr_2_copy.stats.starttime = t_0
+    tr_2 = tr_2_copy
+
+    #tr_1.trim(t_0, t_1, pad = True, fill_value = 0.0) 
+    #tr_2.trim(t_0, t_1, pad = True, fill_value = 0.0) 
+
+    #sampling_rate = 1.0/d_t
+
+    #tr_1.interpolate(sampling_rate, method = 'linear')
+    #tr_2.interpolate(sampling_rate, method = 'linear')
+
+    #n_pts_1 = tr_1.stats.npts
+    #n_pts_2 = tr_2.stats.npts
+    #
+    #print(t_0)
+    #print('\n')
+    #print(tr_1.stats)
+    #print('\n')
+    #print(tr_2.stats)
+
+    #if n_pts_1 > n_pts_2:
+
+    #    tr_1.data = tr_1.data[0:-1]
+
+
+    assert tr_1.stats.npts == tr_2.stats.npts
+    assert tr_1.stats.starttime == tr_2.stats.starttime
+    assert tr_1.stats.endtime == tr_2.stats.endtime
 
     return tr_1, tr_2
 
@@ -326,6 +388,7 @@ def main():
     parser.add_argument("--spec_and_trace", action = 'store_true', help = "Plot Fourier spectrum and time series in a single plot (default: time series only).")
     parser.add_argument("--use_mineos", action = 'store_true', help = 'Plot summation result from Mineos (default: Ouroboros).')
     parser.add_argument("--use_mineos_modes_only", action = 'store_true', help = 'Plot summation results using Ouroboros summation code with Mineos mode output. Note: This option is used only for testing purposes. Not compatible with --use_mineos flag.')
+    parser.add_argument("--label", action = 'store_true', help = 'Add labels to modes with excitation coefficients above a certain threshold.')
     parser.add_argument("--path_comparison", help = 'Path to a real data trace to be plotted for comparison. Should have units of nm/s, or provide the --comparison_scale flag with a number to multiply the comparison trace so that the units are nm/s.')
     parser.add_argument("--comparison_scale", type = float, default = 1.0)
 
@@ -342,6 +405,8 @@ def main():
     assert not (use_mineos and use_mineos_modes_only), 'Only one of --use_mineos and --use_mineos_modes_only may be specified.'
     path_comparison = input_args.path_comparison
     comparison_scale = input_args.comparison_scale
+    add_labels = input_args.label
+    assert not (use_mineos and add_labels), 'Cannot add mode labels to Mineos plot (excitation coefficients are not available).'
 
     if use_mineos:
 
@@ -382,8 +447,6 @@ def main():
 
             raise NotImplementedError
 
-
-
         # Read the summation input file.
         summation_info = read_Ouroboros_summation_input_file(path_summation_input)
 
@@ -421,6 +484,39 @@ def main():
         stream = read(path_stream)
         stream = stream.select(station = station, channel = channel)
 
+        if add_labels:
+
+            path_coeffs = os.path.join(summation_info['dir_output'], 'coeffs.pkl')
+            coeffs = np.load(path_coeffs, allow_pickle = True)
+            label_coeffs = coeffs.loc[station]
+            
+            path_modes = os.path.join(summation_info['dir_output'], 'modes.pkl')
+            modes = np.load(path_modes, allow_pickle = True)
+
+            label_coeff_info = {'coeffs' : coeffs, 'modes' : modes}
+
+        else:
+
+            label_coeff_info = None
+    
+    data_type = 'acceleration'
+    if data_type == 'acceleration':
+
+        displacement_y_label = 'Acceleration (nm s$^{-2}$)'
+        spectrum_y_label = 'Spectral amplitude (nm s$^{-2}$ mHz$^{-1}$)'
+
+    elif data_type == 'velocity':
+
+        displacement_y_label = 'Velocity (nm s$^{-2}$)'
+        spectrum_y_label = 'Spectral amplitude (nm s$^{-1}$ mHz$^{-1}$)'
+
+    else:
+
+        raise ValueError
+    
+    legend_keys = ['Synthetic', 'Observed']
+    legend_keys = ['New code', 'Mineos']
+
     trace = stream[0]
 
     dir_plot = os.path.join(run_info['dir_run'], 'plots')
@@ -450,20 +546,28 @@ def main():
         path_out = os.path.join(dir_plot, 'spectrum_{:}.png'.format(trace.id))
         plot_spectrum(trace, trace_comparison = trace_comparison,
                 path_out = path_out,
-                label = 'auto')
+                label = 'auto',
+                label_coeff_info = label_coeff_info,
+                y_label = spectrum_y_label,
+                legend_keys = legend_keys)
 
     elif spectrum_and_seismograph:
 
         path_out = os.path.join(dir_plot, 'seismograph_and_spectrum_{:}.png'
                                             .format(trace.id))
-        plot_seismograph_and_spectrum(trace, path_out = path_out, show = True, trace_comparison = trace_comparison)
+        plot_seismograph_and_spectrum(trace, path_out = path_out, show = True, trace_comparison = trace_comparison,
+                label_coeff_info = label_coeff_info,
+                y_labels = [displacement_y_label, spectrum_y_label],
+                legend_keys = legend_keys)
 
     else:
         
         path_out = os.path.join(dir_plot, 'seismograph_{:}.png'.format(trace.id))
         plot_seismograph(trace, trace_comparison = trace_comparison,
                 path_out = path_out,
-                label = 'auto')
+                label = 'auto',
+                y_label = displacement_y_label,
+                legend_keys = legend_keys)
     
     return
 

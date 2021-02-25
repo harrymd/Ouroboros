@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import os
 
 import numpy as np
@@ -8,9 +9,12 @@ from scipy.special import  lpmn as associated_Legendre_func_series
 #from scipy.special import lpmv as associated_Legendre_func
 import pandas
 
+#from Ouroboros.constants import G
+from Ouroboros.constants import G_mineos as G
 from Ouroboros.common import (  get_Mineos_out_dirs, get_Mineos_summation_out_dirs, 
                                 load_eigenfreq_Mineos, load_eigenfunc_Mineos, 
                                 load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros,
+                                load_model,
                                 mkdir_if_not_exist,
                                 read_channel_file,
                                 read_Mineos_input_file,
@@ -82,6 +86,111 @@ def calculate_epicentral_distance(lon_A, lat_A, lon_B, lat_B, io_in_degrees = Tr
 
     return Theta, cos_Theta
 
+def calculate_epi_dist_azi_mineos(lon_0, lat_0, lon_1, lat_1):
+    '''
+    Copied from mineos/green.f:
+
+          data pi,rad,tstart/3.14159265359,57.29578,0./
+
+    .
+    .
+    .
+
+      th = 90.0-atan(0.99329534*tan(slat/rad))*rad                              
+      ph=slon 
+
+    .
+    .
+    .
+
+      t0=th/rad                                                                 
+      p0=ph/rad                                                                 
+      c0=cos(t0)                                                                
+      s0=sin(t0)    
+
+    .
+    .
+    .
+
+    c.....convert station geographic latitude to geocentric                         
+          t1 = (90.0-atan(0.99329534*tan(lat_site(ns(1))/rad))*rad)/rad             
+          p1 = lon_site(ns(1))                                                      
+          if(p1.lt.0.0) p1 = 360.0+p1                                               
+          p1 = p1/rad                                                               
+                                                                                    
+          if(icomp.eq.2) goto 500                                                   
+          len=0                                                                     
+          if(icomp.eq.1) goto 35                                                    
+    c                                                                               
+    c....do some trigonometry                                                       
+    c      epicentral distance: co, si                                              
+    c      azimuth of source:   caz,saz                                             
+    c                                                                               
+          c1=cos(t1)                                                                
+          s1=sin(t1)                                                                
+          dp=p1-p0                                                                  
+          co=c0*c1+s0*s1*cos(dp)                                                    
+          si=dsqrt(1.d0-co*co)                                                      
+                                                                                    
+          del = datan2(si,co)                                                       
+          del = del/pi*180.                                                         
+          write(*,'(a,f10.3)')' green: Epicentral Distance : ',del                  
+                                                                                    
+          sz=s1*sin(dp)/si                                                          
+          cz=(c0*co-c1)/(s0*si)                                                     
+          saz=-s0*sin(dp)/si                                                        
+          caz=(c0-co*c1)/(si*s1)                                                    
+                                                                                    
+          azim = datan2(saz,caz)                                                    
+          azim = azim/pi*180.                                                       
+          write(*,'(a,f10.3)')' green: Azimuth of Source   : ',azim 
+    '''
+    
+    # Constant for converting from degrees to radians.
+    pi = 3.14159265359
+    rad = 57.29578
+
+    # Correct latitude for Earth flattening and convert to radians.
+    t0 = (90.0 - np.arctan(0.99329534*np.tan(lat_0/rad))*rad)/rad             
+    t1 = (90.0 - np.arctan(0.99329534*np.tan(lat_1/rad))*rad)/rad             
+
+    # Wrap longitude and convert to radians. 
+    p0 = lon_0                                                      
+    if p0 < 0.0:
+        p0 = p0 + 360.0
+    p0 = p0/rad                                                               
+    #
+    p1 = lon_1                                                      
+    if p1 < 0.0:
+        p1 = p1 + 360.0
+    p1 = p1/rad                                                               
+                                                                                
+    # Get sines and cosines. 
+    c0 = np.cos(t0)
+    s0 = np.sin(t0)
+    #
+    c1 = np.cos(t1)                                                                
+    s1 = np.sin(t1)                                                                
+    #
+    dp = p1 - p0                                                                  
+    co = c0*c1 + s0*s1*np.cos(dp)                                                    
+    si = np.sqrt(1.0 - co*co)                                                      
+                                                                                
+    # Get epicentral distance.
+    delta = np.arctan2(si,co)                                                       
+    delta = delta/pi*180.0                                                         
+                                                                                
+    # Get azimuth.
+    sz = s1*np.sin(dp)/si                                                          
+    cz = (c0*co - c1)/(s0*si)                                                     
+    saz = -s0*np.sin(dp)/si                                                        
+    caz = (c0 - co*c1)/(si*s1)                                                    
+                                                                              
+    azim = np.arctan2(saz, caz)                                                    
+    azim = azim/pi*180.0                                                       
+
+    return delta, azim
+
 def polar_coords_to_unit_vector(theta, phi):
     '''
     See diagram in [1] for definitions of angles.
@@ -100,12 +209,43 @@ def polar_coords_to_unit_vector(theta, phi):
     return x, y, z
 
 #
+def get_surface_gravity(run_info):
+    
+    # Load the planetary model.
+    model = load_model(run_info['path_model'])
+    
+    # Integrate spherical shells to get mass.
+    mass_element = 4.0*np.pi*model['rho']*(model['r']**2.0)
+    mass = np.trapz(mass_element, x = model['r'])
+    
+    # Newton's formula for gravity.
+    r_srf = model['r'][-1]
+    g_srf = G*mass/(r_srf**2.0)
+
+    return g_srf
+
+#
 def moment_sinc(omega, t_half):
 
     x = omega*t_half
     sinc = np.sin(x)/x
 
     return sinc
+
+def moment_triangle(omega, t_half):
+    '''
+    Fourier transform of triangular pulse with half-width t_half and unit
+    area.
+    '''
+
+    #x = omega*t_half
+
+    #f = (2.0/(x**2.0))*(1.0 - np.cos(x))
+
+    x = 0.5*0.5*t_half*omega
+    f = (np.sin(x)/x)**2.0
+
+    return f 
 
 def old_calculate_excitation_factor(l, cosTheta, Phi, cmt_info, eigfunc_source, verbose = True):
     '''
@@ -187,13 +327,8 @@ def old_calculate_excitation_factor(l, cosTheta, Phi, cmt_info, eigfunc_source, 
 
     return excitation
 
-def calculate_source_coefficients_spheroidal(l, omega, cmt_info, eigfunc_source):
-    '''
-    Dahlen and Tromp (1998) eq. 10.53.
-    '''
-    
-    # Unpack dictionaries.
-    r = cmt_info['r_centroid']*1.0E3 # km to m
+def scale_moment_tensor(cmt_info, omega, pulse_type):
+
     # Dahlen and Tromp (1998), eq. 5.92.
     comp_list = ['rr', 'tt', 'pp', 'rt', 'rp', 'tp']
     M = {comp : cmt_info['M{:}'.format(comp)] for comp in comp_list}
@@ -201,19 +336,42 @@ def calculate_source_coefficients_spheroidal(l, omega, cmt_info, eigfunc_source)
     # Multiply by the frequency-domain value of the unit source-time function
     # as described in Dahlen and Tromp (1998), p. 377, including factor
     # of sqrt(2).
-    # Note this assumes a boxcar excitation function.
-    m_omega = moment_sinc(omega, cmt_info['half_duration'])
-    M_scaling = np.sqrt(2.0)*cmt_info['scale_factor']*m_omega
+    # Also divide by 10^7 to convert from dyn-cm to N-m.
+    if pulse_type == 'rectangle':
+
+        m_omega = moment_sinc(omega, cmt_info['half_duration'])
+
+    elif pulse_type == 'triangle':
+
+        m_omega = moment_triangle(omega, cmt_info['half_duration'])
+
+    # Not sure if factor of sqrt(2) belongs here.
+    #M_scaling = np.sqrt(2.0)*cmt_info['scale_factor']*m_omega*1.0E-7
+    M_scaling = cmt_info['scale_factor']*m_omega*1.0E-7
+
     for comp in comp_list:
 
         M[comp] = M[comp]*M_scaling
-    #
+
+    return M
+
+def calculate_source_coefficients_spheroidal(l, omega, cmt_info, eigfunc_source, pulse_type):
+    '''
+    Dahlen and Tromp (1998) eq. 10.53.
+    '''
+
+    # Get radial coordinate of source.
+    r = cmt_info['r_centroid']*1.0E3 # km to m
+    
+    # Apply appropriate frequency scaling to moment tensor.
+    M = scale_moment_tensor(cmt_info, omega, pulse_type)
+    
     ## Get unit moment tensor (Dahlen and Tromp, 1998, p. 167).
     ## Dahlen and Tromp (1998) eq. 5.91
     #M0 = (1.0/np.sqrt(2.0))*np.sqrt(Mrr**2.0 + Mtt**2.0 + Mpp**2.0
     #                                + 2.0*(Mrt**2.0) + 2.0*(Mrp**2.0) + 2.0*(Mtp**2.0))
 
-    #
+    # Unpack eigenfunction information.
     U = eigfunc_source['U']
     V = eigfunc_source['V']
     #
@@ -260,6 +418,10 @@ def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Pl
     Pl0, Pl1, Pl2 = Plm_series
     Pl0_p, Pl1_p, Pl2_p = Plm_prime_series
 
+    #print(Pl0, Pl1, Pl2)
+    #print('\n')
+    #print(Pl2)
+
     # Unpack receiver eigenfunction.
     Ur = eigfunc_receiver['U']
     Vr = eigfunc_receiver['V']
@@ -293,6 +455,56 @@ def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Pl
 
     return A
 
+def calculate_source_coefficients_radial(omega, cmt_info, eigfunc_source, pulse_type):
+    '''
+    Dahlen and Tromp (1998) eq. 10.53.
+    '''
+
+    # Get radial coordinate of source.
+    r = cmt_info['r_centroid']*1.0E3 # km to m
+    
+    # Apply appropriate frequency scaling to moment tensor.
+    M = scale_moment_tensor(cmt_info, omega, pulse_type)
+    
+    # Unpack eigenfunction information.
+    U = eigfunc_source['U']
+    dUdr = eigfunc_source['Up']
+    
+    # Coefficients.
+    # D&T eq. 10.54-10.59.
+    #
+    A0 = M['rr']*dUdr + (M['tt'] + M['pp'])*U/r
+
+    # Store in dictionary.
+    src_coeffs = {'A0' : A0}
+
+    return src_coeffs
+
+def calculate_coeffs_radial(source_coeffs, eigfunc_receiver):
+    '''
+    Reference
+
+    [1] Ouroboros/summation/notes.pdf
+    '''
+
+    # Unpack source coefficients.
+    A0 = source_coeffs['A0']
+
+    # Unpack receiver eigenfunction.
+    Ur = eigfunc_receiver['U']
+
+    # Calculate the coefficients.
+    A = dict()
+
+    # Radial component, [1] equation (1).
+    A['r'] = Ur*A0/(4.0*np.pi)
+
+    # Radial modes have no tranverse motion.
+    A['Theta'] = np.zeros(A['r'].shape)
+    A['Phi']   = np.zeros(A['r'].shape)
+
+    return A
+
 #
 def associated_Legendre_func_series_no_CS_phase(m_max, l_max, cosTheta):
     '''
@@ -313,6 +525,13 @@ def associated_Legendre_func_series_no_CS_phase(m_max, l_max, cosTheta):
 
             Plm_series[m, :] = -1.0*Plm_series[m, :]
             Plm_prime_series[m, :] = -1.0*Plm_prime_series[m, :]
+
+    #for m in range(0, m_max + 1):
+    #    
+    #    if (m % 2) != 0:
+
+    #        Plm_series[:, m] = -1.0*Plm_series[:, m]
+    #        Plm_prime_series[:, m] = -1.0*Plm_prime_series[:, m]
 
     return Plm_series, Plm_prime_series
 
@@ -359,67 +578,73 @@ def load_mode_info(run_info, summation_info, use_mineos = False):
 
     return mode_info
 
-def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver = 0.0, use_mineos = False):
+def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver = 0.0, use_mineos = False, response_correction_params = None):
 
     norm_args = {'norm_func' : 'DT', 'units' : 'SI', 'omega' : f_rad_per_s}
 
     # Load eigenfunction information for this mode.
-    if mode_type in ['R', 'S']:
+    if mode_type == 'S':
+        
+        if use_mineos:
 
-        # Load spheroidal mode.
-        if mode_type == 'S':
+            # Load Mineos eigenfunction.
+            r, U, Up, V, Vp, P, Pp = \
+                load_eigenfunc_Mineos(run_info, mode_type, n, l,
+                    **norm_args)
 
-            if use_mineos:
+            # Store required values in dictionary.
+            eigenfunc_dict = {
+                'r'  : r,
+                'U'  : U,
+                'V'  : V,
+                'Up' : Up,
+                'Vp' : Vp} 
 
-                # Load Mineos eigenfunction.
-                r, U, Up, V, Vp, P, Pp = \
-                    load_eigenfunc_Mineos(run_info, mode_type, n, l,
+        else:
+
+            print('Loading eigenfunction for spheroidal modes not\
+            implemented yet for Ouroboros')
+            raise NotImplementedError
+
+    # Load toroidal mode.
+    elif mode_type == 'R':
+
+        if use_mineos:
+
+            # Load Mineos eigenfunction.
+            r, U, Up = \
+                load_eigenfunc_Mineos(run_info, mode_type, n, l,
                         **norm_args)
 
-                ## Convert to km.
-                #r = r*1.0E-3
+            # Store in dictionary.
+            eigenfunc_dict = {'r' : r, 'U' : U, 'Up' : Up}
 
-            else:
+        else:
 
-                print('Loading eigenfunction for spheroidal modes not\
-                implemented yet for Ouroboros')
-                raise NotImplementedError
-
-        # Load toroidal mode.
-        elif mode_type == 'R':
-
-            if use_mineos:
-
-                # Load Mineos eigenfunction.
-                r, U, Up = \
-                    load_eigenfunc_Mineos(run_info, mode_type, n, l,
-                            **norm_args)
-
-                ## Convert to km.
-                #r = r*1.0E-3
-
-            else:
-
-                print('Loading eigenfunction for radial modes not implemented\
-                yet for Ouroboros.')
-                raise NotImplementedError
-
-            # No tangential component for radial modes.
-            V = np.zeros(U.shape)
-            Vp = np.zeros(Up.shape)
-
-        # Store required values in dictionary.
-        eigenfunc_dict = {
-            'r'  : r,
-            'U'  : U,
-            'V'  : V,
-            'Up' : Up,
-            'Vp' : Vp}
+            print('Loading eigenfunction for radial modes not implemented\
+            yet for Ouroboros.')
+            raise NotImplementedError
 
     else:
-
-        print('Toroidal modes not implemented yet.')
+        
+        print('Mode summation only implemented for R and S modes.')
         raise NotImplementedError
+
+    if response_correction_params is not None:
+
+        if mode_type == 'S':
+
+            eigenfunc_dict['P'] = P
+
+        elif mode_type == 'R':
+            
+            # Radial modes do have a perturbation to the potential
+            # but only internally, so here we just set P = 0.
+            eigenfunc_dict['P'] = np.zeros(U.shape)
+
+        else:
+
+            raise ValueError('Response correction can only be applied to R and S modes.')
 
     # Convert r to depth.
     r_planet = eigenfunc_dict['r'][0]
@@ -430,22 +655,73 @@ def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver 
     # and receiver.
     eigfunc_source = dict()
     eigfunc_receiver = dict()
-    if mode_type in ['R', 'S']:
+    if mode_type == 'S':
 
-        keys = ['U', 'V', 'Up', 'Vp']
+        if response_correction_params is not None:
+        
+            keys = ['U', 'V', 'Up', 'Vp', 'P']
+
+        else:
+
+            keys = ['U', 'V', 'Up', 'Vp']
+
+    elif mode_type == 'R':
+
+        if response_correction_params is not None:
+
+            keys = ['U', 'Up', 'P']
+
+        else:
+
+            keys = ['U', 'Up']
 
     else:
-
+        
+        print('Not implented yet for T modes.')
         raise NotImplementedError
 
     for key in keys:
 
         eigfunc_source[key] = np.interp(  z_source,   z, eigenfunc_dict[key])
         eigfunc_receiver[key] = np.interp(z_receiver, z, eigenfunc_dict[key])
+
+    # Apply seismometer response correction (if requested).
+    if response_correction_params is not None:
+        
+        assert mode_type in ['R', 'S']
+        # Unpack response correction parameters.
+        g = response_correction_params['g']
+        #
+        U = eigfunc_receiver['U']
+        P = eigfunc_receiver['P']
+
+        U_free, U_pot, V_tilt, V_pot = seismometer_response_correction(
+                                        l, f_rad_per_s, r_planet, g,
+                                        U, P)
+
+        eigfunc_receiver['U'] = U + U_free + U_pot
+        if mode_type == 'S':
+
+            V = eigfunc_receiver['V']
+            eigfunc_receiver['V'] = V + V_tilt + V_pot
     
     return eigfunc_source, eigfunc_receiver, r_planet
 
-def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite = False):
+def seismometer_response_correction(l, f_rad_per_s, r_planet, g, U, P):
+
+    # Dahlen and Tromp (1998) eq. 10.70-10.72.
+    k = np.sqrt(l*(l + 1))
+    c = r_planet*(f_rad_per_s**2.0)
+    U_free = (2.0*g*U)/c
+    U_pot = (l + 1.0)*P/c
+    V_tilt = -k*g*U/c
+    V_pot = -k*P/c
+
+    #print('{:>5d} {:>10.3f} {:>10.3e} {:10.3e} {:>10.3e} {:>10.3e}'.format(l, f_rad_per_s/(2.0*np.pi*1.0E-3), U_free, U_pot, V_tilt, V_pot))
+
+    return U_free, U_pot, V_tilt, V_pot
+
+def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite = False, response_correction_params = None):
 
     # Get name of output file.
     name_coeffs_data_frame = 'coeffs.pkl'
@@ -510,6 +786,8 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
     Phi_list     = np.zeros(num_station, dtype = np.float)
 
     # Do summation.
+    epi_dist_azi_method = 'mineos'
+    #epi_dist_azi_method = 'spherical'
     station_list = []
     for j, station in enumerate(channel_dict):
 
@@ -518,17 +796,48 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
         print('Station: {:>8}, lon. : {:>+8.2f},  lat. {:>+8.2f}'.format(station,
                 channel_dict[station]['coords']['longitude'],
                 channel_dict[station]['coords']['latitude']))
-        
-        # Calculate epicentral distance and azimuth.
-        Theta_deg, cosTheta = calculate_epicentral_distance(
-                            cmt['lon_centroid'], cmt['lat_centroid'],
+
+        # Use Mineos approach to calculating epicentral distance and azimuth.
+        # Includes a correction to latitude for Earth's flattening.
+        if epi_dist_azi_method == 'mineos':
+
+            #Theta_deg, Azi_deg = calculate_epi_dist_azi_mineos(
+            #                cmt['lon_centroid'], cmt['lat_centroid'],
+            #                channel_dict[station]['coords']['longitude'],
+            #                channel_dict[station]['coords']['latitude'])
+            Theta_deg, Azi_deg = calculate_epi_dist_azi_mineos(
                             channel_dict[station]['coords']['longitude'],
                             channel_dict[station]['coords']['latitude'],
-                            io_in_degrees = True)
-        Phi_deg = calculate_azimuth(cmt['lon_centroid'], cmt['lat_centroid'],
-                                    channel_dict[station]['coords']['longitude'],
-                                    channel_dict[station]['coords']['latitude'],
-                                    io_in_degrees = True)
+                            cmt['lon_centroid'], cmt['lat_centroid'])
+
+            Phi_deg = 180.0 - Azi_deg
+            #Phi_deg = calculate_azimuth(cmt['lon_centroid'], cmt['lat_centroid'],
+            #                            channel_dict[station]['coords']['longitude'],
+            #                            channel_dict[station]['coords']['latitude'],
+            #                            io_in_degrees = True)
+
+            cosTheta = np.cos(np.deg2rad(Theta_deg))
+        
+        # Calculate epicentral distance and azimuth using spherical formulae.
+        elif epi_dist_azi_method == 'spherical':
+        
+            # Calculate epicentral distance and azimuth.
+            Theta_deg, cosTheta = calculate_epicentral_distance(
+                                cmt['lon_centroid'], cmt['lat_centroid'],
+                                channel_dict[station]['coords']['longitude'],
+                                channel_dict[station]['coords']['latitude'],
+                                io_in_degrees = True)
+            Phi_deg = calculate_azimuth(cmt['lon_centroid'], cmt['lat_centroid'],
+                                        channel_dict[station]['coords']['longitude'],
+                                        channel_dict[station]['coords']['latitude'],
+                                        io_in_degrees = True)
+
+        else:
+
+            raise ValueError
+
+        #Theta_deg = 83.268
+        #cosTheta = np.cos(np.deg2rad(Theta_deg))
         # Convert to radians.
         Theta = np.deg2rad(Theta_deg)
         Phi = np.deg2rad(Phi_deg)
@@ -548,9 +857,15 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
         print('              Epi. dist.: {:>8.2f}, azim. {:>+8.2f}'.format(Theta_deg, Phi_deg))
 
         # Pre-calculate the associated Legendre functions.
+        if l_max < 2:
+            l_max_legendre = 2
+        else:
+            l_max_legendre = l_max
+        print('Theta {:>.3f}'.format(Theta_deg))
+        print('CosTheta: {:>18.12f}'.format(cosTheta))
         Plm_series, Plm_prime_series = \
                 associated_Legendre_func_series_no_CS_phase(
-                        2, l_max, cosTheta)
+                        2, l_max_legendre, cosTheta)
         
         i_offset = 0
         for mode_type in summation_info['mode_types']:
@@ -566,7 +881,7 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                 f = mode_info[mode_type]['f'][i]
                 f_rad_per_s = f*1.0E-3*2.0*np.pi
                 Q = mode_info[mode_type]['Q'][i]
-                
+
                 if i == (num_modes - 1):
 
                     str_end = '\n'
@@ -588,7 +903,8 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                         f_rad_per_s,
                         cmt['depth_centroid']*1.0E3, # km to m.
                         z_receiver = 0.0,
-                        use_mineos = use_mineos)
+                        use_mineos = use_mineos,
+                        response_correction_params = response_correction_params)
 
                 if (i == 0) & (i_offset == 0):
                 
@@ -596,18 +912,37 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                     cmt['r_centroid'] = r_planet*1.0E-3 - cmt['depth_centroid']
 
                 # Calculate the coefficients.
-                if mode_type in ['R', 'S']:
+                if mode_type == 'S':
 
                     # Excitation coefficients determined by source location.
                     source_coeffs = \
                         calculate_source_coefficients_spheroidal(
-                            l, f_rad_per_s, cmt, eigfunc_source)
+                            l, f_rad_per_s, cmt, eigfunc_source,
+                            summation_info['pulse_type'])
 
                     # Overall coefficients including receiver location.
                     coeffs = calculate_coeffs_spheroidal(
                                 source_coeffs, eigfunc_receiver, l,
                                 sinTheta, Plm_series[:, l],
                                 Plm_prime_series[:, l], sin_cos_Phi_list)
+
+                elif mode_type == 'R':
+
+                    # Excitation coefficients determined by source location.
+                    source_coeffs = \
+                        calculate_source_coefficients_radial(
+                            f_rad_per_s, cmt, eigfunc_source,
+                            summation_info['pulse_type'])
+
+                    # Overall coefficients including receiver location.
+                    coeffs = calculate_coeffs_radial(
+                                source_coeffs, eigfunc_receiver)
+
+                    ## Overall coefficients including receiver location.
+                    #coeffs = calculate_coeffs_radial(
+                    #            source_coeffs, eigfunc_receiver,
+                    #            sinTheta, Plm_series[l, :],
+                    #            Plm_prime_series[l, :], sin_cos_Phi_list)
 
                 else:
 
@@ -626,7 +961,7 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                 A_Theta_list[j, i + i_offset]  = coeffs['Theta']
                 A_Phi_list[j, i + i_offset]    = coeffs['Phi']
 
-            i_offset = i_offset + i
+            i_offset = i_offset + i + 1
 
     # Store station data.
     station_data_frame = pandas.DataFrame(
@@ -685,11 +1020,12 @@ def load_time_info(path_timing):
 
     return num_t, d_t
 
-def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
+def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, path_cmt, output_type = 'acceleration', attenuation = 'full', overwrite = False):
 
     # Get output path.
     path_timing = os.path.join(dir_out, 'timing.txt')
-    path_out = os.path.join(dir_out, 's_r_Theta_Phi.npy')
+    var_name_dict = {'displacement' : 's', 'acceleration' : 'a'}
+    path_out = os.path.join(dir_out, '{:}_r_Theta_Phi.npy'.format(var_name_dict[output_type]))
     if os.path.exists(path_timing) and os.path.exists(path_out) and (not overwrite):
 
         print('Summation file already exists, skipping calculation and loading: {:}'.format(path_out))
@@ -700,6 +1036,9 @@ def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
 
         return t, s_r_Theta_Phi
 
+    # Load CMT information.
+    cmt = read_mineos_cmt(path_cmt)
+
     # Get time values.
     t = make_time_array(num_t, d_t)
 
@@ -707,20 +1046,22 @@ def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
     station_list = list(stations.index)
     num_stations = len(station_list)
 
-
     # s is displacement in r, Theta, Phi components.
     s     = np.zeros((3, num_stations, num_t))
     key_list = ['A_r', 'A_Theta', 'A_Phi']
 
+    if (attenuation == 'approx') and (output_type == 'acceleration'):
+
+        print('Cannot use \'approx\' attenuation with \'acceleration\' output. Use \'full\' attenuation instead (the results are equivalent).')
+        raise ValueError
+
     # Decide whether to neglect attenuation.
     if np.any(modes['Q'] == 0.0):
 
-        neglect_attenuation = True
-        assert np.all(modes['Q'] == 0.0), "All modes must have Q = 0 to neglect attenuation."
+        if attenuation in ['full', 'approx']:
 
-    else:
-
-        neglect_attenuation = False
+            print("Found modes with Q = 0, ignoring attenuation.")
+            attenuation = 'none'
 
     for i in range(num_stations):
 
@@ -736,47 +1077,117 @@ def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, overwrite = False):
 
             # Angular frequency, rad per s.
             omega = modes['f'][j]*1.0E-3*2.0*np.pi
+            #print('\n')
+            #print(modes['f'][j], omega)
 
-            if neglect_attenuation:
-                
-                k0 = 1.0/(omega**2.0)
-                cos_wt = np.cos(omega*t)    
+            if output_type == 'displacement':
 
-                for k in range(3):
+                if attenuation == 'none':
+                    
+                    k0 = 1.0/(omega**2.0)
+                    cos_wt = np.cos(omega*t)    
 
-                    key = key_list[k]
-                    A = coeffs_station[key][j]
+                    for k in range(3):
 
-                    s[k, i, :] = s[k, i, :] + k0*A*(1.0 - cos_wt)
+                        key = key_list[k]
+                        A = coeffs_station[key][j]
+
+                        s[k, i, :] = s[k, i, :] + k0*A*(1.0 - cos_wt)
+
+                elif attenuation in ['approx', 'full']:
+
+                    # Gamma (decay rate), 1/s.
+                    # Dahlen and Tromp (1998), eq. 9.53.
+                    gamma = omega/(2.0*modes['Q'][j])
+
+                    # Sinusoids and decay.
+                    cos_wt = np.cos(omega*t)
+                    exp_wt = np.exp(-1.0*gamma*t)
+
+                    # Low-attenuation approximation.
+                    if attenuation == 'approx':
+
+                        # Evaluate D&T equation 10.61.
+                        for k in range(3):
+
+                            key = key_list[k]
+                            A = coeffs_station[key][j]
+
+                            s[k, i, :] = s[k, i, :] + (1.0/omega**2.0)*A*(1.0 - cos_wt*exp_wt)
+
+                    # Full form of attenuation.
+                    elif attenuation == 'full':
+
+                        # Evaluate D&T eq. 10.51
+                        #
+                        # Constants relating to omega and gamma.
+                        c0 = (omega**2.0 + gamma**2.0)
+                        c1 = (omega**2.0 - gamma**2.0) 
+                        c2 = (2.0*omega*gamma)
+                        #
+                        k0 = 1.0/c0
+                        k1 = c1/c0
+                        k2 = c2/c0
+                        #
+                        # Sinusoids and decay.
+                        sin_wt = np.sin(omega*t)
+                        #cos_wt = np.cos(omega*t)
+                        #exp_wt = np.exp(-1.0*gamma*t)
+                        #
+                        for k in range(3):
+
+                            key = key_list[k]
+                            A = coeffs_station[key][j]
+
+                            s[k, i, :] = s[k, i, :] + k0*A*(k1*(1.0 - cos_wt*exp_wt) - k2*sin_wt*exp_wt)
+
+                else:
+
+                    raise ValueError
+
+            elif output_type == 'acceleration':
+
+                # Evaluate D&T eq. 10.63.
+                #cos_wt = np.cos(omega*t)
+
+                # This modification seems to be necessary to agree with
+                # phase of Mineos output.
+                # Based on a section of mineos/syndat.f starting with comment
+                # "make correction for halfduratio, if tconst > 0"
+                x = 0.5*cmt['half_duration']*omega
+                cos_wt = np.cos(omega*t - x)
+
+                if attenuation == 'none':
+
+                    for k in range(3):
+
+                        key = key_list[k]
+                        A = coeffs_station[key][j]
+
+                        s[k, i, :] = s[k, i, :] + A*cos_wt
+
+                elif attenuation == 'full':
+
+                    # Gamma (decay rate), 1/s.
+                    # Dahlen and Tromp (1998), eq. 9.53.
+                    gamma = omega/(2.0*modes['Q'][j])
+
+                    exp_wt = np.exp(-1.0*gamma*t)
+                    #
+                    for k in range(3):
+
+                        key = key_list[k]
+                        A = coeffs_station[key][j]
+
+                        s[k, i, :] = s[k, i, :] + A*cos_wt*exp_wt
+
+                else:
+
+                    raise ValueError
 
             else:
 
-                # Gamma (decay rate), 1/s.
-                # Dahlen and Tromp (1998), eq. 9.53.
-                gamma = omega/(2.0*modes['Q'][j])
-                
-                # Evaluate D&T eq. 10.51
-                #
-                # Constants relating to omega and gamma.
-                c0 = (omega**2.0 + gamma**2.0)
-                c1 = (omega**2.0 - gamma**2.0) 
-                c2 = (2.0*omega*gamma)
-                #
-                k0 = 1.0/c0
-                k1 = c1/c0
-                k2 = c2/c0
-                #
-                # Sinusoids and decay.
-                sin_wt = np.sin(omega*t)
-                cos_wt = np.cos(omega*t)
-                exp_wt = np.exp(-1.0*gamma*t)
-                #
-                for k in range(3):
-
-                    key = key_list[k]
-                    A = coeffs_station[key][j]
-
-                    s[k, i, :] = s[k, i, :] + k0*A*(k1*(1.0 - cos_wt*exp_wt) - k2*sin_wt*exp_wt)
+                raise ValueError
 
     # Save.
     print('Writing {:}'.format(path_out))
@@ -884,7 +1295,7 @@ def rotate_e_n_z_to_channels(station_info, s_e_n_z, path_channels, dir_out, over
 
     return
 
-def convert_to_mseed(dir_out, path_channels, station_info, path_cmt):
+def convert_to_mseed(dir_out, path_channels, station_info, path_cmt, differentiate = False):
 
     # Load timing information.
     name_timing = 'timing.txt'
@@ -913,16 +1324,19 @@ def convert_to_mseed(dir_out, path_channels, station_info, path_cmt):
             path_trace = os.path.join(dir_out, name_trace)
 
             trace_data = np.load(path_trace)
-
+            
             trace_header = {'delta' : d_t, 'station' : station, 'channel' : channel,
-                            'starttime' : cmt['datetime_ref']}
+                            'starttime' : cmt['datetime_ref']}# + datetime.timedelta(seconds=cmt['half_duration']/2.0)}
 #                            'starttime' : cmt_info['}
             trace = Trace(data = trace_data, header = trace_header)
+            trace.normalize(norm = 1.0E-9) # Convert from m to nm.
 
             stream = stream + trace
     
     # Differentiate (go from displacement (m) to velocity (m/s)).
-    stream.differentiate()
+    if differentiate:
+
+        stream.differentiate()
 
     name_stream = 'stream.mseed'
     path_stream = os.path.join(dir_out, name_stream) 
@@ -978,13 +1392,28 @@ def main():
 
         raise NotImplementedError
 
+    # If necessary, calculate the surface gravity.
+    if summation_info['correct_response']:
+
+        g = get_surface_gravity(run_info)
+        response_correction_params = dict()
+        response_correction_params['g'] = g
+
+
+    else:
+
+        response_correction_params = None
+
     # Calculate the coefficients.
     coeffs, stations, modes = get_coeffs_wrapper(run_info, summation_info,
-                use_mineos = use_mineos, overwrite = overwrite)
+                use_mineos = use_mineos, overwrite = overwrite,
+                response_correction_params = response_correction_params)
 
     # Do the summation to get r, Theta and Phi components.
     t, s_r_Theta_Phi = sum_coeffs(stations, modes, coeffs, summation_info['n_samples'],
                     summation_info['d_t'], summation_info['dir_output'],
+                    summation_info['path_cmt'],
+                    attenuation = summation_info['attenuation'],
                     overwrite = overwrite)
 
     # Rotate into east, north and vertical components.

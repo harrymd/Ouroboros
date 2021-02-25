@@ -60,6 +60,8 @@ def main():
     #import sys
     #sys.exit()
 
+    print(coeffs)
+
     #fig = plt.figure(figsize = (8.5, 11.0))
     #ax  = plt.gca()
     fig, ax_arr = plt.subplots(1, 3, figsize = (14.0, 7.0), sharex = True,

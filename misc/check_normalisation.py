@@ -11,6 +11,39 @@ from common import (    get_r_fluid_solid_boundary,
 from kernels.run_kernels import interp_n_parts
 
 def main():
+    '''
+
+    Examples:
+    
+    If we load the eigenfunctions with the Mineos units (--eig_norm_units mineos) then to get a correct normalisation we must scale the variables as follows:
+    r_scale = 1.0/6371000
+    f_scale = 1.0/(1.0754 * 10^-3)
+    rho_scale = 1.0/5515.0
+    
+    We can then choose whether the normalisation applies to the eigenfunctions including the factor of k (--eig_norm mineos)
+    
+    >>> python3 misc/check_normalisation.py ../../input/mineos/input_Mineos_stoneley_noq.txt --use_mineos --r_scale 0.00000015696123 --freq_scale 929.886553 --rho_scale 0.00018132366 --eig_norm mineos --eig_norm_units mineos S 2 8
+    >>> I             = integral( rho * (U^2 + (k*V)^2) * (r^2) )
+    >>> I * (omega^2) =  9.943e-01
+    
+    or without the factor of k (--eig_norm DT)
+    
+    >>> python3 misc/check_normalisation.py ../../input/mineos/input_Mineos_stoneley_noq.txt --use_mineos --r_scale 0.00000015696123 --freq_scale 929.886553 --rho_scale 0.00018132366 --eig_norm DT --eig_norm_units mineos S 2 8
+    >>> I             = integral( rho * (U^2 + V^2) * (r^2) )
+    >>> I             =  9.943e-01
+    
+    When using Ouroboros units (--eig_norm_units ouroboros) then the radial coordinate must be converted to km to get a correct normalisation:
+    
+    >>> python3 misc/check_normalisation.py ../../input/Ouroboros/input_Ouroboros_prem_noq_noocean.txt --r_scale 1.0E-3 --freq_scale 1.0 --rho_scale 1.0 --eig_norm mineos --eig_norm_units ouroboros S 3 5
+    >>> I             = integral( rho * (U^2 + (k*V)^2) * (r^2) )
+    >>> I * (omega^2) =  1.000e+00
+    
+    No adjustment are necessary to get the correct normalisation in SI units (because the radial coordinate array is always loaded in units of m):
+    
+    >>> python3 misc/check_normalisation.py ../../input/Ouroboros/input_Ouroboros_prem_noq_noocean.txt --r_scale 1.0 --freq_scale 1.0 --rho_scale 1.0 --eig_norm mineos --eig_norm_units SI S 4 7
+    >>> I             = integral( rho * (U^2 + (k*V)^2) * (r^2) )
+    >>> I * (omega^2) =  1.000e+00
+    '''
 
     # Read input arguments.
     parser = argparse.ArgumentParser()

@@ -6,10 +6,15 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Mineos, load_eigenfreq_Ouroboros, load_eigenfunc_Mineos, load_eigenfunc_Ouroboros, load_model, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file
+from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary,
+                            load_eigenfreq_Mineos, load_eigenfreq_Ouroboros,
+                            load_eigenfunc_Mineos, load_eigenfunc_Ouroboros,
+                            load_potential_Ouroboros,
+                            load_model, mkdir_if_not_exist,
+                            read_Mineos_input_file, read_Ouroboros_input_file)
 #from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
 
-def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', sign = None, plot_gradient = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0): 
+def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', sign = None, plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0): 
 
     # Get model information for axis limits, scaling and horizontal lines.
     model = load_model(run_info['path_model'])
@@ -28,8 +33,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         # Get normalisation arguments.
         f_rad_per_s = f*1.0E-3*2.0*np.pi
         normalisation_args = {'norm_func' : norm_func, 'units' : units}
-        if norm_func == 'DT':
-            normalisation_args['omega'] = f_rad_per_s
+        normalisation_args['omega'] = f_rad_per_s
 
         if mode_type == 'R':
 
@@ -56,36 +60,51 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         # Get normalisation arguments.
         f_rad_per_s = f*1.0E-3*2.0*np.pi
         normalisation_args = {'norm_func' : norm_func, 'units' : units}
-        if norm_func == 'DT':
-            normalisation_args['omega'] = f_rad_per_s
+        normalisation_args['omega'] = f_rad_per_s
 
-        if mode_type == 'R':
+        if plot_potential:
 
-            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
-                        **normalisation_args)
+            if mode_type == 'S':
 
-            Up = np.zeros(Up) # Gradient not implemented yet.
-
-        elif mode_type == 'S': 
-
-            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                r, P = load_potential_Ouroboros(run_info, mode_type, n, l,
                             **normalisation_args)
 
-            # Gradient not implemented yet.
-            Up = np.zeros(U.shape)
-            Vp = np.zeros(V.shape)
+            else:
 
-        elif mode_type == 'T':
-
-            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal,
-                        **normalisation_args)
-
-            # Gradient not implemented yet.
-            Wp = np.zeros(W.shape)
+                raise NotImplementedError("Ouroboros potential not implemented yet except for S modes.")
 
         else:
 
-            raise ValueError
+            if mode_type == 'R':
+
+                r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                            **normalisation_args)
+
+                Up = np.zeros(Up) # Gradient not implemented yet.
+
+            elif mode_type == 'S': 
+
+                r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                                **normalisation_args)
+
+                # Gradient not implemented yet.
+                Up = np.zeros(U.shape)
+                Vp = np.zeros(V.shape)
+
+            elif mode_type == 'T':
+
+                r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal,
+                            **normalisation_args)
+
+                # Gradient not implemented yet.
+                Wp = np.zeros(W.shape)
+
+            else:
+
+                raise ValueError
+
+    print(f,np.max(np.abs(P)))
+
         
     ## Apply factor of k (used for both Mineos and Ouroboros).
     ## Calculate k value.
@@ -101,54 +120,66 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     #    Wp = k*Wp
     
     # Sign.
-    if mode_type == 'R':
+    if plot_potential:
 
-        sign_max_eigfunc = np.sign(U[np.argmax(np.abs(U))]) 
-
-    elif mode_type == 'S':
-        
-        max_abs_U = np.max(np.abs(U))
-        max_abs_V = np.max(np.abs(V))
-        if max_abs_U > max_abs_V:
-
-            sign_max_eigfunc = np.sign(U[np.argmax(np.abs(U))]) 
-
-        else:
-
-            sign_max_eigfunc = np.sign(V[np.argmax(np.abs(V))]) 
-
-    elif mode_type in ['T', 'I']:
-
-        sign_max_eigfunc = np.sign(W[np.argmax(np.abs(W))]) 
+        sign_max_eigfunc = np.sign(P[np.argmax(np.abs(P))])
 
     else:
 
-        raise ValueError
+        if mode_type == 'R':
+
+            sign_max_eigfunc = np.sign(U[np.argmax(np.abs(U))]) 
+
+        elif mode_type == 'S':
+            
+            max_abs_U = np.max(np.abs(U))
+            max_abs_V = np.max(np.abs(V))
+            if max_abs_U > max_abs_V:
+
+                sign_max_eigfunc = np.sign(U[np.argmax(np.abs(U))]) 
+
+            else:
+
+                sign_max_eigfunc = np.sign(V[np.argmax(np.abs(V))]) 
+
+        elif mode_type in ['T', 'I']:
+
+            sign_max_eigfunc = np.sign(W[np.argmax(np.abs(W))]) 
+
+        else:
+
+            raise ValueError
 
     if sign is not None:
 
         if sign_max_eigfunc != sign:
 
-            if mode_type == 'R':
+            if plot_potential:
 
-                U = U*-1.0
-                Up = Up*-1.0
-
-            elif mode_type == 'S':
-
-                U = U*-1.0
-                Up = Up*-1.0
-                V = V*-1.0
-                Vp = Vp*-1.0
-
-            elif mode_type in ['T', 'I']:
-
-                W = W*-1.0
-                Wp = Wp*-1.0
+                P = P*-1.0
 
             else:
 
-                raise NotImplementedError
+                if mode_type == 'R':
+
+                    U = U*-1.0
+                    Up = Up*-1.0
+
+                elif mode_type == 'S':
+
+                    U = U*-1.0
+                    Up = Up*-1.0
+                    V = V*-1.0
+                    Vp = Vp*-1.0
+
+                elif mode_type in ['T', 'I']:
+
+                    W = W*-1.0
+                    Wp = Wp*-1.0
+
+                else:
+
+                    raise NotImplementedError
 
     if mode_type in ['R', 'S']:
 
@@ -172,35 +203,47 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     title = '$_{{{:d}}}${:}$_{{{:d}}}$'.format(n, mode_type_for_title, l)
     
+    # Find axis limits.
     if plot_gradient:
 
-        # Find axis limits.
-        if mode_type == 'R':
+        if plot_potential:
 
-            vals = Up
-
-        elif mode_type == 'S':
-
-            vals = np.concatenate([Up, Vp])
+            vals = Pp
 
         else:
 
-            vals = Wp
+            if mode_type == 'R':
+
+                vals = Up
+
+            elif mode_type == 'S':
+
+                vals = np.concatenate([Up, Vp])
+
+            else:
+
+                vals = Wp
 
     else:
 
-        # Find axis limits.
-        if mode_type == 'R':
+        if plot_potential:
 
-            vals = U
-
-        elif mode_type == 'S':
-
-            vals = np.concatenate([U, V])
+            vals = P
 
         else:
 
-            vals = W
+            # Find axis limits.
+            if mode_type == 'R':
+
+                vals = U
+
+            elif mode_type == 'S':
+
+                vals = np.concatenate([U, V])
+
+            else:
+
+                vals = W
 
     max_ = np.max(np.abs(vals))
 
@@ -250,6 +293,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             
             plot_eigenfunc_R_or_T(r, Wp, h_lines = None, linestyle = linestyle, label = 'W{:}'.format(label_suffix), **common_args)
 
+    elif plot_potential:
+
+        plot_P(r, P, linestyle = linestyle, label_suffix = label_suffix, **common_args)
+
     else:
 
         if mode_type == 'R':
@@ -273,32 +320,43 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     plt.tight_layout()
     
     if save:
+
+        if run_info['use_mineos']:
+
+            method_str = 'Mineos'
+
+        else:
+
+            method_str = 'Ouroboros'
+
+        if plot_gradient:
+
+            gradient_str = '_gradient'
+
+        else:
+
+            gradient_str = ''
+
+        if plot_potential:
+
+            var_str = 'potential'
+
+        else:
+
+            var_str = 'eigfunc'
+
+        fig_name = '{:}{:}_{:}'.format(var_str, gradient_str, method_str)
         
         if run_info['use_mineos']:
             
-            if plot_gradient:
-
-                fig_name = 'eigfunc_gradient_Mineos'
-
-            else:
-
-                fig_name = 'eigfunc_Mineos'
-
             dir_out = run_info['dir_output']
             dir_plot = os.path.join(dir_out, 'plots')
 
         else:
             
-            if plot_gradient:
-
-                fig_name = 'eigfunc_gradient_Ouroboros'
-
-            else:
-
-                fig_name = 'eigfunc_Ouroboros'
             _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
-            dir_plot = os.path.join(dir_out, 'plots')
 
+        dir_plot = os.path.join(dir_out, 'plots')
         mkdir_if_not_exist(dir_plot)
 
         if mode_type in ['S', 'R']:
@@ -325,32 +383,23 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     return ax, sign_max_eigfunc
 
-def plot_eigenfunc_S(r, U, V, k = None, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
+def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
     
     if ax is None:
 
         fig = plt.figure()
         ax  = plt.gca()
        
-    if k is None:
-
-        U_label = 'U'
-        V_label = 'V'
-        k = 1.0
-
-    else:
-
-        U_label = 'U'
-        V_label = 'kV'
-
+    U_label = 'U'
+    V_label = 'V'
     U_label = U_label + label_suffix
     V_label = V_label + label_suffix
 
     ax.plot(U, r, label = U_label, color = colors[0], linestyle = linestyles[0], alpha = alpha)
-    ax.plot(k*V, r, label = V_label, color = colors[1], linestyle = linestyles[1], alpha = alpha)
+    ax.plot(V, r, label = V_label, color = colors[1], linestyle = linestyles[1], alpha = alpha)
 
     max_abs_U_plot = np.max(np.abs(U))
-    max_abs_V_plot = np.max(np.abs(k*V))
+    max_abs_V_plot = np.max(np.abs(V))
     E_max = np.max([max_abs_U_plot, max_abs_V_plot])
     
     tidy_axes(ax, r, E_max, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label)
@@ -360,6 +409,28 @@ def plot_eigenfunc_S(r, U, V, k = None, ax = None, h_lines = None, x_label = 'Ei
         plt.show()
 
     return ax, E_max
+
+def plot_P(r, P, ax = None, h_lines = None, x_label = 'Potential', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, color = 'r', linestyle = '-', label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
+    
+    if ax is None:
+
+        fig = plt.figure()
+        ax  = plt.gca()
+    
+    label = 'P'
+    label = label + label_suffix
+    
+    ax.plot(P, r, label = label, color = color, linestyle = linestyle, alpha = alpha)
+
+    P_max = np.max(np.abs(P))
+
+    tidy_axes(ax, r, P_max, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label)
+
+    if show:
+
+        plt.show()
+
+    return ax, P_max
 
 def tidy_axes(ax, r, E_max, h_lines = None, add_legend = True, legend_loc = 'best', title = None, x_label = 'Eigenfunction', y_label = 'Radius / km'):
     
@@ -439,6 +510,7 @@ def main():
     parser.add_argument("l", type = int, help = "Plot mode with angular order l (must be 0 for radial modes).")
     parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal eigenfunction for the solid shell given by LAYER_NUMBER (0 is outermost solid shell).", type = int)
     parser.add_argument("--gradient", action = "store_true", help = "Include this flag to plot eigenfunction gradients (default: plot eigenfunctions).")
+    parser.add_argument("--potential", action = "store_true", help = "Include this flag to plot potential (default: plot eigenfunctions).")
     parser.add_argument("--use_mineos", action = "store_true", help = "Plot Mineos eigenfunction (default: Ouroboros).")
     parser.add_argument("--path_input_mineos_compare", help = "Provide Mineos input path to plot both Ouroboros and Mineos eigenfunction (default: Ouroboros only).")
     parser.add_argument("--norm_func", choices = ['mineos', 'DT'], default = 'DT', help = "Specify normalisation function. \'mineos\' is the normalisation function used by Mineos and Ouroboros. \'DT\' is the normalisation function used in the Dahlen and Tromp textbook. It does not include the factor of k. See also the --units flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.")
@@ -452,6 +524,7 @@ def main():
     l           = args.l
     i_toroidal = args.layer_number
     plot_gradient = args.gradient
+    plot_potential = args.potential
     use_mineos = args.use_mineos
     path_input_mineos_compare = args.path_input_mineos_compare
     norm_func = args.norm_func
@@ -501,14 +574,25 @@ def main():
 
     #Ouroboros_info, mode_type, n, l, i_toroidal = prep_Ouroboros_info()
     #run_info, mode_type, n, l, i_toroidal = prep_run_info(args)
+    if plot_potential:
 
-    if plot_gradient:
+        if plot_gradient:
 
-        x_label = 'Eigenfunction gradient'
+            x_label = 'Potential gradient'
+
+        else:
+
+            x_label = 'Potential'
 
     else:
 
-        x_label = 'Eigenfunction'
+        if plot_gradient:
+
+            x_label = 'Eigenfunction gradient'
+
+        else:
+
+            x_label = 'Eigenfunction'
 
     # Plot.
     if path_input_mineos_compare is not None:
@@ -541,8 +625,8 @@ def main():
             label_suffix_Mineos = ' (Mineos)'
             label_suffix_Ouroboros = ' (Ouroboros)'
 
-        ax, sign = plot_eigenfunc_wrapper(run_info_mineos, mode_type_mineos, n, l, i_toroidal = None, ax = None, show = False, transparent = False, save = False, linestyle = ':', label_suffix = label_suffix_Mineos, x_label = None, norm_func = norm_func, units = units) 
-        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = ax, show = True, label_suffix = label_suffix_Ouroboros, sign = sign, plot_gradient = plot_gradient, x_label = x_label, norm_func = norm_func, units = units, alpha = 0.5) 
+        ax, sign = plot_eigenfunc_wrapper(run_info_mineos, mode_type_mineos, n, l, i_toroidal = None, ax = None, show = False, transparent = False, save = False, linestyle = ':', label_suffix = label_suffix_Mineos, x_label = None, norm_func = norm_func, units = units, plot_gradient = plot_gradient, plot_potential = plot_potential) 
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = ax, show = True, label_suffix = label_suffix_Ouroboros, sign = sign, plot_gradient = plot_gradient, plot_potential = plot_potential, x_label = x_label, norm_func = norm_func, units = units, alpha = 0.5) 
 
     else:
 
@@ -554,7 +638,7 @@ def main():
 
             label_suffix = ''
 
-        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None, plot_gradient = plot_gradient, label_suffix = label_suffix, x_label = x_label, norm_func = norm_func, units = units) 
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None, plot_gradient = plot_gradient, plot_potential = plot_potential, label_suffix = label_suffix, x_label = x_label, norm_func = norm_func, units = units) 
 
     return
 

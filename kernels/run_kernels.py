@@ -3,40 +3,8 @@ import os
 
 import numpy as np
 
-from common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
-from kernels.kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
-
-def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_boundary_model):
-    '''
-    Careful interpolation of model parameters, preserving the fluid-solid discontinuities.
-    '''
-
-    n_parts = len(i_fluid_solid_boundary) + 1
-    assert n_parts == (len(i_fluid_solid_boundary_model) + 1)
-    
-    i_fluid_solid_boundary = list(i_fluid_solid_boundary)
-    i_fluid_solid_boundary.insert(0, 0)
-    i_fluid_solid_boundary.append(None)
-
-    i_fluid_solid_boundary_model = list(i_fluid_solid_boundary_model)
-    i_fluid_solid_boundary_model.insert(0, 0)
-    i_fluid_solid_boundary_model.append(None)
-    
-    x_list = []
-    for i in range(n_parts):
-
-        i0 = i_fluid_solid_boundary[i]
-        i1 = i_fluid_solid_boundary[i + 1]
-
-        i0_model = i_fluid_solid_boundary_model[i]
-        i1_model = i_fluid_solid_boundary_model[i + 1]
-
-        x_i = np.interp(r[i0 : i1], r_model[i0_model : i1_model], x_model[i0_model : i1_model])
-        x_list.append(x_i)
-
-    x = np.concatenate(x_list)
-
-    return x
+from Ouroboros.common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, interp_n_parts, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
+from Ourobors.kernels.kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
 
 def kernels_wrapper(run_info, mode_type, model):
 

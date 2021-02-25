@@ -175,6 +175,10 @@ def read_Ouroboros_summation_input_file(path_input):
         path_cmt = in_id.readline().split()[-1]
         d_t = float(in_id.readline().split()[-1])
         n_samples = int(in_id.readline().split()[-1])
+        pulse = in_id.readline().split()[-1]
+        output_type = in_id.readline().split()[-1]
+        attenuation = in_id.readline().split()[-1]
+        correct_response = bool(int(in_id.readline().split()[-1]))
 
     name_channels = os.path.splitext(os.path.basename(path_channels))[0]
     name_cmt = os.path.splitext(os.path.basename(path_cmt))[0]
@@ -189,6 +193,10 @@ def read_Ouroboros_summation_input_file(path_input):
     summation_info['name_cmt'] = name_cmt
     summation_info['d_t'] = d_t
     summation_info['n_samples'] = n_samples
+    summation_info['pulse_type'] = pulse
+    summation_info['output_type'] = output_type
+    summation_info['attenuation'] = attenuation
+    summation_info['correct_response'] = correct_response
 
     return summation_info
 
@@ -470,17 +478,17 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     DT          Use the Dahlen and Tromp normalisation formula with SI units.
     '''
 
-    # Unpack the Ouroboros parameters.
-    dir_output  = Ouroboros_info['dir_output']
-    n_layers    = Ouroboros_info['n_layers']
-    n_max       = Ouroboros_info['n_lims'][1]
-    l_max       = Ouroboros_info['l_lims'][1]
-    grav_switch    = Ouroboros_info['grav_switch']
+    ## Unpack the Ouroboros parameters.
+    #dir_output  = Ouroboros_info['dir_output']
+    #n_layers    = Ouroboros_info['n_layers']
+    #n_max       = Ouroboros_info['n_lims'][1]
+    #l_max       = Ouroboros_info['l_lims'][1]
+    #grav_switch    = Ouroboros_info['grav_switch']
 
-    # By default, the toroidal modes have g_switch = 0.
-    if mode_type == 'T':
+    ## By default, the toroidal modes have g_switch = 0.
+    #if mode_type == 'T':
 
-        grav_switch = 0
+    #    grav_switch = 0
 
     if mode_type == 'T':
 
@@ -507,24 +515,32 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # See Ouroboros/docs/Ouroboros_normalisation_notes.pdf.
     if units == 'ouroboros':
 
-        c = 1
+        En = 1.0
 
     elif units == 'mineos':
 
-        r_ref = 6371.0E3 # m
-        rho_ref = 5515.0 # kg/m3
+        r_n = 6371.0E3 # m
+        rho_n = 5515.0 # kg/m3
         G = 6.674E-11 # SI units.
-        c = rho_ref*np.sqrt((1.0E-9)*np.pi*G*((r_ref)**3.0))
+        En = rho_n*np.sqrt((1.0E-9)*np.pi*G*((r_n)**3.0))
 
     elif units == 'SI':
 
-        c = np.sqrt(1.0E-9)
+        En = np.sqrt(1.0E-9)
+
+    else:
+
+        raise ValueError
 
     if norm_func == 'DT':
 
         assert omega is not None, 'To apply D&T normalisation, the angular frequency (rad per s) must be specified.'
-        c = c*omega
+        En = En*omega
         k = np.sqrt(l*(l + 1.0))
+
+    else:
+
+        assert norm_func == 'mineos', 'Options: mineos, DT'
 
     # Radial case.
     if mode_type == 'R':
@@ -533,7 +549,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
 
         # Apply normalisation.
-        U = c*U
+        U = En*U
 
         return r, U
     
@@ -543,8 +559,8 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         r, U, V = np.load(path_eigenfunc)
 
         # Apply normalisation.
-        U = U*c
-        V = V*c
+        U = U*En
+        V = V*En
         if norm_func == 'DT':
 
             V = V*k
@@ -557,7 +573,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         r, W = np.load(path_eigenfunc)
 
         # Apply normalisation.
-        W = W*c
+        W = W*En
         if norm_func == 'DT':
 
             W = W*k
@@ -568,6 +584,55 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     else:
 
         raise NotImplementedError
+
+def load_potential_Ouroboros(Ouroboros_info, mode_type, n, l, norm_func = 'mineos', units = 'SI', omega = None):
+
+    if mode_type != 'S':
+
+        raise NotImplementedError
+
+    # Find the directory containing the eigenfunctions (which is contained
+    # within the eigenvalue directory) based on the Ouroboros parameters.
+    _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
+    dir_eigenfuncs  = os.path.join(dir_eigval, 'eigenfunctions')
+    dir_potential = os.path.join(dir_eigval, 'potential')
+    file_potential = 'P_{:>05d}_{:>05d}.npy'.format(n, l)
+    path_potential = os.path.join(dir_potential, file_potential)
+
+    ## Define normalisation constants.
+    if units in ['mineos']:
+
+        r_n = 6371.0E3 # m
+        rho_n = 5515.0 # kg/m3
+        G = 6.674E-11 # SI units.
+
+    if units == 'mineos':
+
+        Pn = np.sqrt(r_n/(1.0E3*np.pi*G)) 
+
+    elif units == 'ouroboros':
+
+        Pn = 1.0
+
+    elif units == 'SI':
+
+        Pn = 1.0E3*np.sqrt(1.0E-9)
+
+    if norm_func == 'mineos':
+
+        Pn = Pn/omega
+
+    else:
+
+        assert norm_func == 'DT'
+
+    # Load potential.
+    r, P = np.load(path_potential)
+
+    # Apply normalisation.
+    P = Pn*P
+
+    return r, P
 
 def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     
@@ -714,30 +779,38 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
     # Define normalisation constants.
     if units in ['ouroboros', 'SI']:
 
-        r_ref = 6371.0E3 # m
-        rho_ref = 5515.0 # kg/m3
+        r_n = 6371.0E3 # m
+        rho_n = 5515.0 # kg/m3
         G = 6.674E-11 # SI units.
 
     if units == 'ouroboros':
 
-        c = 1.0/(rho_ref*np.sqrt((1.0E-9)*np.pi*G*((r_ref)**3.0)))
-        d = c/(r_ref*1.0E-3)
+        En = 1.0/(rho_n*np.sqrt((1.0E-9)*np.pi*G*((r_n)**3.0)))
+        Epn = En/(r_n*1.0E-3)
+        Pn = np.sqrt((1.0E3*np.pi*G)/r_n) 
+        Ppn = Pn/(r_n*1.0E-3)
 
     elif units == 'mineos':
 
-        c = 1.0
-        d = 1.0
+        En = 1.0
+        Epn = 1.0
+        Pn = 1.0
+        Ppn = 1.0
 
     elif units == 'SI':
 
-        c = 1.0/(rho_ref*np.sqrt(np.pi*G*((r_ref)**3.0)))
-        d = c/r_ref
+        En = 1.0/(rho_n*np.sqrt(np.pi*G*((r_n)**3.0)))
+        Epn = En/r_n
+        Pn = np.sqrt((np.pi*G)/r_n) 
+        Ppn = Pn/r_n
 
     if norm_func == 'DT':
         
         assert omega is not None, 'To apply D&T normalisation, the angular frequency (rad per s) must be specified.'
-        c = c*omega
-        d = d*omega
+        En = En*omega
+        Epn = Epn*omega
+        Pn = Pn*omega
+        Ppn = Ppn*omega
         k = np.sqrt(l*(l + 1.0))
 
     # Load the data.
@@ -749,8 +822,8 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
         r, U, Up = data
         
         # Apply normalisation.
-        U  = c*U
-        Up = c*Up
+        U  = En*U
+        Up = Epn*Up
 
         return r, U, Up
 
@@ -759,10 +832,12 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
         r, U, Up, V, Vp, P, Pp  = data
 
         # Apply normalisation.
-        U  = c*U
-        Up = d*Up
-        V  = c*V
-        Vp = d*Vp
+        U  = En*U
+        Up = Epn*Up
+        V  = En*V
+        Vp = Epn*Vp
+        P  = Pn*P
+        Pp = Ppn*Pp
         #
         if norm_func == 'DT':
 
@@ -776,8 +851,8 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
         r, W, Wp = data
 
         # Apply normalisation.
-        W = c*W
-        Wp = d*Wp
+        W = En*W
+        Wp = Epn*Wp
         #
         if norm_func == 'DT':
             
@@ -814,6 +889,38 @@ def get_r_fluid_solid_boundary(radius, vs):
     r_solid_fluid_boundary = [radius[i] for i in i_solid_fluid_boundary]
 
     return i_fluid, r_solid_fluid_boundary, i_solid_fluid_boundary
+
+def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_boundary_model):
+    '''
+    Careful interpolation of model parameters, preserving the fluid-solid discontinuities.
+    '''
+
+    n_parts = len(i_fluid_solid_boundary) + 1
+    assert n_parts == (len(i_fluid_solid_boundary_model) + 1)
+    
+    i_fluid_solid_boundary = list(i_fluid_solid_boundary)
+    i_fluid_solid_boundary.insert(0, 0)
+    i_fluid_solid_boundary.append(None)
+
+    i_fluid_solid_boundary_model = list(i_fluid_solid_boundary_model)
+    i_fluid_solid_boundary_model.insert(0, 0)
+    i_fluid_solid_boundary_model.append(None)
+    
+    x_list = []
+    for i in range(n_parts):
+
+        i0 = i_fluid_solid_boundary[i]
+        i1 = i_fluid_solid_boundary[i + 1]
+
+        i0_model = i_fluid_solid_boundary_model[i]
+        i1_model = i_fluid_solid_boundary_model[i + 1]
+
+        x_i = np.interp(r[i0 : i1], r_model[i0_model : i1_model], x_model[i0_model : i1_model])
+        x_list.append(x_i)
+
+    x = np.concatenate(x_list)
+
+    return x
 
 # Manipulating waveform data. -------------------------------------------------
 def add_epi_dist_and_azim(inv, cmt, stream):
