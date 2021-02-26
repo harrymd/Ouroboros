@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 from Ouroboros.common import get_Ouroboros_out_dirs, get_r_fluid_solid_boundary, interp_n_parts, load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros, mkdir_if_not_exist, load_model, read_Ouroboros_input_file
-from Ourobors.kernels.kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
+from Ouroboros.kernels.kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
 
 def kernels_wrapper(run_info, mode_type, model):
 
@@ -25,7 +25,10 @@ def kernels_wrapper(run_info, mode_type, model):
 def kernels_wrapper_R_or_S(run_info, model, mode_type):
 
     # Get a list of all the modes calculated by Ouroboros.
-    n_list, l_list, f_mHz_list = load_eigenfreq_Ouroboros(run_info, mode_type) 
+    mode_info = load_eigenfreq_Ouroboros(run_info, mode_type) 
+    n_list = mode_info['n']
+    l_list = mode_info['l']
+    f_mHz_list = mode_info['f']
     num_modes = len(n_list)
     
     # Find the fluid-solid boundary points in the model.
@@ -76,7 +79,7 @@ def kernels_wrapper_R_or_S(run_info, model, mode_type):
             v_s  = interp_n_parts(r, model['r'], model['v_s'], i_fluid_solid_boundary, i_fluid_solid_boundary_model)
             i_fluid = np.where(v_s == 0.0)[0]
 
-            if run_info['g_switch'] in [1, 2]:
+            if run_info['grav_switch'] in [1, 2]:
 
                 # Calculate the gravitational acceleration.
                 # (SI units m/s2)
@@ -109,7 +112,7 @@ def kernels_wrapper_R_or_S(run_info, model, mode_type):
         U = U*omega_rad_per_s
         V = V*omega_rad_per_s
 
-        if run_info['g_switch'] == 2:
+        if run_info['grav_switch'] == 2:
 
             # Calculate gravitational potential.
             P = potential(r, U, V, l, rho)
@@ -120,7 +123,7 @@ def kernels_wrapper_R_or_S(run_info, model, mode_type):
 
         # Calculate the kernels.
         K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop = \
-            get_kernels_spheroidal(omega_rad_per_s, r, U, V, l, v_p, v_s, run_info['g_switch'],
+            get_kernels_spheroidal(omega_rad_per_s, r, U, V, l, v_p, v_s, run_info['grav_switch'],
                 g = g,
                 rho = rho,
                 P = P,
@@ -262,6 +265,7 @@ def main():
 
     # Read the input file.
     Ouroboros_info = read_Ouroboros_input_file(Ouroboros_input_file)
+    Ouroboros_info['use_attenuation'] = False
 
     # Load the planetary model.
     model = load_model(Ouroboros_info['path_model'])

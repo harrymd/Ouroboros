@@ -60,7 +60,7 @@ def main():
     #import sys
     #sys.exit()
 
-    print(coeffs)
+    print(coeffs[0:10])
 
     #fig = plt.figure(figsize = (8.5, 11.0))
     #ax  = plt.gca()
@@ -72,6 +72,7 @@ def main():
         ax = ax_arr[i]
 
         for mode_type in mode_type_list:
+            print(mode_type)
 
             #mode_type = mode_type_dict[mode_type_int]
             color = color_dict[mode_type]
@@ -89,6 +90,7 @@ def main():
             jj_cond = (abs_A > abs_A_thresh)
             jj = np.where(jj_cond)[0]
             jjj = np.where(~jj_cond)[0]
+            print(jj)
 
             ax.scatter(l[jj], f[jj], color = color, s = s[jj], **scatter_kwargs)
             ax.scatter(l[jjj], f[jjj], color = color, s = s[jjj], facecolor = 'white', **scatter_kwargs)

@@ -12,8 +12,10 @@ import pandas
 #from Ouroboros.constants import G
 from Ouroboros.constants import G_mineos as G
 from Ouroboros.common import (  get_Mineos_out_dirs, get_Mineos_summation_out_dirs, 
+                                get_Ouroboros_out_dirs, get_Ouroboros_summation_out_dirs,
                                 load_eigenfreq_Mineos, load_eigenfunc_Mineos, 
                                 load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros,
+                                load_gradient_Ouroboros, load_potential_Ouroboros,
                                 load_model,
                                 mkdir_if_not_exist,
                                 read_channel_file,
@@ -558,8 +560,15 @@ def load_mode_info(run_info, summation_info, use_mineos = False):
         
         else:
 
-            n, l, f = load_eigenfreq_Ouroboros(
+            mode_dict = load_eigenfreq_Ouroboros(
                             run_info, mode_type, i_toroidal = i_toroidal)
+            n = mode_dict['n']
+            l = mode_dict['l']
+            f = mode_dict['f']
+            if run_info['use_attenuation']:
+                Q = mode_dict['Q']
+            else:
+                Q = np.zeros(f.shape)
 
         # Apply frequency filter.
         i_freq = np.where(  (f > summation_info['f_lims'][0]) &
@@ -592,19 +601,44 @@ def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver 
                 load_eigenfunc_Mineos(run_info, mode_type, n, l,
                     **norm_args)
 
-            # Store required values in dictionary.
-            eigenfunc_dict = {
-                'r'  : r,
-                'U'  : U,
-                'V'  : V,
-                'Up' : Up,
-                'Vp' : Vp} 
-
         else:
 
-            print('Loading eigenfunction for spheroidal modes not\
-            implemented yet for Ouroboros')
-            raise NotImplementedError
+            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                                **norm_args)
+            r, Up, Vp = load_gradient_Ouroboros(run_info, mode_type, n, l,
+                                **norm_args)
+            r, P = load_potential_Ouroboros(run_info, mode_type, n, l,
+                            **norm_args)
+            #if n == 2 and l == 2:
+            #    
+
+            #    import matplotlib.pyplot as plt
+            #    fig = plt.figure()
+            #    ax = plt.gca()
+            #    ax.plot(r, U)
+            #    ax.plot(r, V)
+            #    plt.show()
+            #    import sys
+            #    sys.exit()
+
+            # Reverse.
+            r = r[::-1]
+            U = U[::-1]
+            V = V[::-1]
+            Up = Up[::-1]
+            Vp = Vp[::-1]
+            P = P[::-1]
+
+            # Convert to m.
+            r = r*1.0E3
+
+        # Store required values in dictionary.
+        eigenfunc_dict = {
+            'r'  : r,
+            'U'  : U,
+            'V'  : V,
+            'Up' : Up,
+            'Vp' : Vp} 
 
     # Load toroidal mode.
     elif mode_type == 'R':
@@ -650,6 +684,7 @@ def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver 
     r_planet = eigenfunc_dict['r'][0]
     z = r_planet - eigenfunc_dict['r']
     assert z[-1] > z[0], 'Depth must be increasing for np.interp'
+    print(z[-1], z[0])
 
     # Find the eigenfunctions and gradients at the depth of the source
     # and receiver.
@@ -679,9 +714,9 @@ def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver 
         
         print('Not implented yet for T modes.')
         raise NotImplementedError
-
+    
     for key in keys:
-
+        
         eigfunc_source[key] = np.interp(  z_source,   z, eigenfunc_dict[key])
         eigfunc_receiver[key] = np.interp(z_receiver, z, eigenfunc_dict[key])
 
@@ -704,7 +739,7 @@ def load_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver 
 
             V = eigfunc_receiver['V']
             eigfunc_receiver['V'] = V + V_tilt + V_pot
-    
+
     return eigfunc_source, eigfunc_receiver, r_planet
 
 def seismometer_response_correction(l, f_rad_per_s, r_planet, g, U, P):
@@ -905,7 +940,7 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
                         z_receiver = 0.0,
                         use_mineos = use_mineos,
                         response_correction_params = response_correction_params)
-
+                
                 if (i == 0) & (i_offset == 0):
                 
                     # Calculate radial coordinate of event (km).
@@ -1390,7 +1425,14 @@ def main():
 
     else:
 
-        raise NotImplementedError
+        run_info['dir_model'], run_info['dir_run'], _, _ = get_Ouroboros_out_dirs(run_info, 'none')
+
+        summation_info = get_Ouroboros_summation_out_dirs(run_info, summation_info)
+        for key in ['dir_summation', 'dir_channels', 'dir_cmt']:
+
+            mkdir_if_not_exist(summation_info[key])
+
+        summation_info['dir_output'] = summation_info['dir_cmt']
 
     # If necessary, calculate the surface gravity.
     if summation_info['correct_response']:

@@ -10,6 +10,7 @@ from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary
                             load_eigenfreq_Mineos, load_eigenfreq_Ouroboros,
                             load_eigenfunc_Mineos, load_eigenfunc_Ouroboros,
                             load_potential_Ouroboros,
+                            load_gradient_Ouroboros,
                             load_model, mkdir_if_not_exist,
                             read_Mineos_input_file, read_Ouroboros_input_file)
 #from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
@@ -55,7 +56,8 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     else:
 
-        f = load_eigenfreq_Ouroboros(run_info, mode_type, n_q = n, l_q = l, i_toroidal = i_toroidal)
+        mode_info = load_eigenfreq_Ouroboros(run_info, mode_type, n_q = n, l_q = l, i_toroidal = i_toroidal)
+        f = mode_info['f']
 
         # Get normalisation arguments.
         f_rad_per_s = f*1.0E-3*2.0*np.pi
@@ -73,6 +75,17 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
                 raise NotImplementedError("Ouroboros potential not implemented yet except for S modes.")
 
+        elif plot_gradient:
+
+            if mode_type == 'S':
+
+                r, Up, Vp = load_gradient_Ouroboros(run_info, mode_type, n, l,
+                                **normalisation_args)
+
+            else:
+
+                raise NotImplementedError("Ouroboros gradients not implemented yet except for S modes.")
+
         else:
 
             if mode_type == 'R':
@@ -80,32 +93,20 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
                 r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
                             **normalisation_args)
 
-                Up = np.zeros(Up) # Gradient not implemented yet.
-
             elif mode_type == 'S': 
 
                 r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
                                 **normalisation_args)
-
-                # Gradient not implemented yet.
-                Up = np.zeros(U.shape)
-                Vp = np.zeros(V.shape)
 
             elif mode_type == 'T':
 
                 r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal,
                             **normalisation_args)
 
-                # Gradient not implemented yet.
-                Wp = np.zeros(W.shape)
-
             else:
 
                 raise ValueError
 
-    print(f,np.max(np.abs(P)))
-
-        
     ## Apply factor of k (used for both Mineos and Ouroboros).
     ## Calculate k value.
     #k = np.sqrt((l*(l + 1.0)))
@@ -123,6 +124,24 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     if plot_potential:
 
         sign_max_eigfunc = np.sign(P[np.argmax(np.abs(P))])
+
+    elif plot_gradient:
+
+        if mode_type == 'S':
+            
+            max_abs_Up = np.max(np.abs(Up))
+            max_abs_Vp = np.max(np.abs(Vp))
+            if max_abs_Up > max_abs_Vp:
+
+                sign_max_eigfunc = np.sign(Up[np.argmax(np.abs(Up))]) 
+
+            else:
+
+                sign_max_eigfunc = np.sign(Vp[np.argmax(np.abs(Vp))]) 
+
+        else:
+
+            raise ValueError
 
     else:
 
@@ -275,10 +294,6 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             'x_label' : x_label, 'alpha' : alpha}
 
     if plot_gradient:
-
-        if not run_info['use_mineos']:
-
-            raise NotImplementedError('Gradient not implemented yet for Ouroboros.')
 
         if mode_type == 'R':
 

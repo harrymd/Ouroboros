@@ -119,7 +119,7 @@ def read_ndk(path_ndk):
     hhmm_str = time_str[0:5]
     ss_s_str = time_str[6:]
     secs = float(ss_s_str)
-    secs_int = int(round(secs))
+    secs_int = int(np.floor(secs))
     microsecs_int = int(round(1.0E6*(secs - secs_int)))
 
     hhmmss_str = '{:}:{:>02d}'.format(hhmm_str, secs_int) 

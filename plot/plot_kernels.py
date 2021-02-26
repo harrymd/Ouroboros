@@ -4,8 +4,8 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from plot.plot_kernels_brute import get_kernel_brute
-from common import get_Ouroboros_out_dirs, mkdir_if_not_exist, read_Ouroboros_input_file
+from Ouroboros.plot.plot_kernels_brute import get_kernel_brute
+from Ouroboros.common import get_Ouroboros_out_dirs, mkdir_if_not_exist, read_Ouroboros_input_file
 
 def main():
 
@@ -132,7 +132,7 @@ def main():
 
         if mode_type in ['S', 'R']:
 
-            fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, l, run_info['g_switch'])
+            fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, l, run_info['grav_switch'])
 
         else:
 

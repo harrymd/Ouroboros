@@ -120,7 +120,10 @@ def get_rho(run_info):
 
     # Load the radial coordinate.
     mode_type = 'S'
-    n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type)
+    mode_info = load_eigenfreq_Ouroboros(run_info, mode_type)
+    n = mode_info['n']
+    l = mode_info['l']
+    f = mode_info['f']
     eigfunc_list = load_eigenfunc_Ouroboros(run_info, mode_type, n[0], l[0])
     r = eigfunc_list[0]
     r = r
@@ -169,7 +172,10 @@ def main():
         _, _, _, dir_output = \
             get_Ouroboros_out_dirs(run_info, mode_type)
 
-        n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = None)
+        mode_info = load_eigenfreq_Ouroboros(run_info, mode_type)
+        n = mode_info['n']
+        l = mode_info['l']
+        f = mode_info['f']
 
         num_modes = len(n)
 

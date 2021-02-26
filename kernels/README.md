@@ -43,7 +43,7 @@ python3 plot/plot_kernels.py inputs/example_input_Ouroboros.txt R 0 0
 
 will produce a plot like
 
-<img src="../docs/example_sensitivity_kernel.png" width="80%" title ="Example of mode sensitivty of mode 0R0 from example input file."/>
+<img src="../docs/figs/example_sensitivity_kernel.png" width="80%" title ="Example of mode sensitivty of mode 0R0 from example input file."/>
 
 ## Other functions
 

@@ -65,6 +65,14 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
 
     return dir_model, dir_run, dir_g, dir_type
 
+def get_Ouroboros_summation_out_dirs(run_info, summation_info):
+
+    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], 'summation')
+    summation_info['dir_channels'] = os.path.join(summation_info['dir_summation'], summation_info['name_channels'])
+    summation_info['dir_cmt'] = os.path.join(summation_info['dir_channels'], summation_info['name_cmt'])
+
+    return summation_info
+
 def get_Mineos_out_dirs(run_info):
     '''
     Returns the directory containing the Mineos eigenvalue output.
@@ -120,6 +128,7 @@ def read_Ouroboros_input_file(path_input_file):
         n_min, n_max    = [int(x) for x in in_id.readline().split()[1:]]
         l_min, l_max    = [int(x) for x in in_id.readline().split()[1:]]
         n_layers        = int(in_id.readline().split()[1])
+        use_attenuation = bool(int(in_id.readline().split()[1]))
 
     name_model = os.path.splitext(os.path.basename(path_model))[0]
 
@@ -147,6 +156,7 @@ def read_Ouroboros_input_file(path_input_file):
         print('l range: {:d} to {:d}'.format(l_min, l_max))
     print('n range: {:d} to {:d}'.format(n_min, n_max))
     print('Number of layers: {:d}'.format(n_layers))
+    print('Attenuative: {:}'.format(use_attenuation))
 
     # Store in dictionary.
     Ouroboros_info = dict()
@@ -158,6 +168,7 @@ def read_Ouroboros_input_file(path_input_file):
     Ouroboros_info['l_lims']        = [l_min, l_max]
     Ouroboros_info['n_lims']        = [n_min, n_max]
     Ouroboros_info['n_layers']      = n_layers
+    Ouroboros_info['use_attenuation'] = use_attenuation
 
     return Ouroboros_info
 
@@ -350,6 +361,68 @@ def load_model(model_path, skiprows = 3):
 
     return model
 
+def load_model_full(model_path):
+    '''
+    Load a planetary model. Models are given in Mineos format (tabular setting); see the Mineos manual, section 3.1.2.1. This means that all units are S.I. units.
+    '''
+
+    # Read the header.
+    # T_ref     Reference period in seconds.
+    with open(model_path, 'r') as in_id:
+
+        in_id.readline()
+        T_ref = float(in_id.readline().split()[1])
+
+    # Load the data.
+    model_data = np.loadtxt(model_path, skiprows = 3)
+
+    # Extract the variables.
+    # r         Radial coordinate in m.
+    # rho       Density in kg/m3.
+    # v_pv      P-wave speed vertically polarised (m/s).
+    # v_sv      S-wave speed vertically polarised (m/s).
+    # Q_k       Bulk attenuation quality factor (units ?).
+    # Q_mu      Shear attenuation quality factor (units ?).
+    # v_ph      P-wave speed horizontally polarised (m/s).
+    # v_sh      S-wave speed horizontally polarised (m/s).
+    r       =  model_data[:, 0]
+    rho     =  model_data[:, 1]
+    v_pv    =  model_data[:, 2]
+    v_sv    =  model_data[:, 3]
+    Q_ka    =  model_data[:, 4]
+    Q_mu    =  model_data[:, 5]
+    v_ph    =  model_data[:, 6]
+    v_sh    =  model_data[:, 7]
+
+    # Derived quantities.
+    # v_p       Simple isotropic mean P-wave speed in m/s.
+    # v_s       Simple isotropic mean S-wave speed in m/s.
+    # ka        Bulk modulus (Pa).
+    # mu        Shear modulus (Pa). 
+    v_p = (v_pv + v_ph)/2.0
+    v_s = (v_sv + v_sh)/2.0
+    mu = rho*(v_s**2.0)
+    ka = rho*((v_p**2.0) - (4.0/3.0)*(v_s**2.0))
+    
+    # Store in a dictionary.
+    model = dict()
+    model['T_ref']  = T_ref
+    model['r']      = r
+    model['rho']    = rho
+    model['v_pv']   = v_pv
+    model['v_ph']   = v_ph
+    model['v_sv']   = v_sv
+    model['v_sh']   = v_sh
+    model['Q_ka']   = Q_ka
+    model['Q_mu']   = Q_mu
+    model['v_p']    = v_p
+    model['v_s']    = v_s
+    model['mu']     = mu
+    model['ka']     = ka 
+    model['n_layers'] = len(r)
+
+    return model
+
 def mode_types_to_jcoms(mode_types):
 
     jcoms = []
@@ -432,23 +505,40 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
     _, _, _, dir_eigval  = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
 
     # Generate the name of the output file.
-    if i_toroidal is None:
+    if Ouroboros_info['use_attenuation']:
 
-        file_eigval = 'eigenvalues.txt'
+        file_name = 'eigenvalues_relabelled'
 
     else:
 
-        file_eigval = 'eigenvalues_{:>03d}.txt'.format(i_toroidal)
+        file_name = 'eigenvalues'
+
+    if i_toroidal is None:
+
+        file_eigval = '{:}.txt'.format(file_name)
+
+    else:
+
+        file_eigval = '{:}_{:>03d}.txt'.format(file_name, i_toroidal)
 
     path_eigval = os.path.join(dir_eigval, file_eigval)
 
     # Load the data from the output file.
-    n, l, f = np.loadtxt(path_eigval).T
+    if Ouroboros_info['use_attenuation']:
+
+        n, l, f, Q = np.loadtxt(path_eigval).T
+
+    else:
+
+        n, l, f = np.loadtxt(path_eigval).T
     
     # Convert single-value output files to arrays.
     n = np.atleast_1d(n)
     l = np.atleast_1d(l)
     f = np.atleast_1d(f)
+    if Ouroboros_info['use_attenuation']:
+
+        Q = np.atleast_1d(Q)
     
     # Convert radial and angular order to integer type.
     n = n.astype(np.int)
@@ -462,11 +552,26 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
 
         f_q = f[i]
 
-        return f_q
+        if Ouroboros_info['use_attenuation']:
+
+            Q_q = Q[i]
+            mode_info = {'f' : f_q, 'Q' : Q_q}
+
+        else:
+
+            mode_info = {'f' : f_q}
 
     else:
 
-        return n, l, f
+        if Ouroboros_info['use_attenuation']:
+
+            mode_info = {'n' : n, 'l' : l, 'f' : f, 'Q' : Q} 
+
+        else:
+
+            mode_info = {'n' : n, 'l' : l, 'f' : f}
+
+    return mode_info
 
 def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None, norm_func = 'mineos', units = 'SI', omega = None):
     '''
@@ -496,13 +601,21 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
     # The eigenfunction files files have different names depending on the mode type.
     # This is due to the automatic separation of uncoupled toroidal modes
-    if i_toroidal is None:
+    if Ouroboros_info['use_attenuation']:
 
-        dir_eigenfuncs = 'eigenfunctions'
+        dir_name = 'eigenfunctions_relabelled'
 
     else:
 
-        dir_eigenfuncs = 'eigenfunctions_{:>03d}'.format(i_toroidal)
+        dir_name = 'eigenfunctions'
+
+    if i_toroidal is None:
+
+        dir_eigenfuncs = '{:}'.format(dir_name)
+
+    else:
+
+        dir_eigenfuncs = '{:}_{:>03d}'.format(dir_name, i_toroidal)
 
     # Find the directory containing the eigenfunctions (which is contained
     # within the eigenvalue directory) based on the Ouroboros parameters.
@@ -634,6 +747,61 @@ def load_potential_Ouroboros(Ouroboros_info, mode_type, n, l, norm_func = 'mineo
 
     return r, P
 
+def load_gradient_Ouroboros(Ouroboros_info, mode_type, n, l, norm_func = 'mineos', units = 'SI', omega = None):
+
+    if mode_type != 'S':
+
+        raise NotImplementedError
+
+    # Find the directory containing the eigenfunctions (which is contained
+    # within the eigenvalue directory) based on the Ouroboros parameters.
+    _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
+    dir_gradient = os.path.join(dir_eigval, 'gradient')
+    file_gradient = 'grad_{:>05d}_{:>05d}.npy'.format(n, l)
+    path_gradient = os.path.join(dir_gradient, file_gradient)
+
+    ## Define normalisation constants.
+    if units in ['mineos']:
+
+        r_n = 6371.0E3 # m
+        rho_n = 5515.0 # kg/m3
+        G = 6.674E-11 # SI units.
+    
+    print(units, norm_func)
+    if units == 'mineos':
+
+        Epn = rho_n*np.sqrt((1.0E-9)*np.pi*G*((r_n)**3.0))*(r_n*1.0E-3)
+
+    elif units == 'ouroboros':
+
+        Epn = 1.0
+
+    elif units == 'SI':
+
+        Epn = np.sqrt(1.0E-9)/1.0E3
+
+    if norm_func == 'mineos':
+
+        Epn = Epn/omega
+        k = np.sqrt(l*(l + 1.0))
+
+    else:
+
+        assert norm_func == 'DT'
+
+    # Load gradient.
+    r, Up, Vp = np.load(path_gradient)
+
+    # Apply normalisation.
+    Up = Up*Epn
+    Vp = Vp*Epn
+
+    if norm_func == 'mineos':
+
+        Vp = Vp/k
+
+    return r, Up, Vp 
+
 def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     
     # Unpack the Ouroboros run information.
@@ -688,17 +856,6 @@ def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
 
 # Loading data from Mineos. ---------------------------------------------------
 def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None, return_Q = False):
-#def load_eigenfreq_Mineos(ame_model, n_max, l_max, g_switch, mode_type, n_q = None, l_q = None):
-    
-    #path_model = get_path_model_Mineos(dir_mineos_models, name_model)
-
-    #if 'dir_eigval' in run_info:
-
-    #    dir_eigval = run_info['dir_eigval']
-
-    #else:
-
-    #    dir_eigval = get_dir_eigval_Mineos(run_info['dir_output'], run_info['model'], run_info['n_lims'][1], run_info['l_lims'][1], run_info['g_switch'])
     
     # Find the Mineos output directory.
     _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
@@ -762,6 +919,7 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
     DT          Use the Dahlen and Tromp normalisation formula with SI units.
     '''
 
+    print(norm_func, units)
     # Find the Mineos output directory.
     _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
     dir_eig_funcs = os.path.join(run_info['dir_run'], 'eigen_txt_{:}'.format(mode_type))

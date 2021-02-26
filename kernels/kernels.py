@@ -29,7 +29,6 @@ def radial_derivative(r, x):
     n_r = len(r)
     i_d = get_indices_of_discontinuities(r)
     i_d.append(n_r)
-    #i_d.append(n_r - 1)
     n_d = len(i_d)
 
     dxdr = np.zeros(n_r)
@@ -41,17 +40,6 @@ def radial_derivative(r, x):
         dxdr[i1 : i2 + 1] = np.gradient(x[i1 : i2 + 1], r[i1 : i2 + 1])
         i1 = i2 + 1
 
-    #i1 = 0
-    #for i2 in i_d:
-
-    #    for i in range(i1, i2):
-
-    #        dxdr[i] = (x[i + 1] - x[i])/(r[i + 1] - r[i])
-
-    #    i1 = i2 + 1
-
-    #print(dxdr)
-        
     return dxdr
 
 # Wrappers. -------------------------------------------------------------------

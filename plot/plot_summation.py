@@ -10,6 +10,7 @@ from obspy.realtime.signal import scale
 from scipy.signal import find_peaks
 
 from Ouroboros.common import (  get_Mineos_out_dirs, get_Mineos_summation_out_dirs,
+                                get_Ouroboros_out_dirs, get_Ouroboros_summation_out_dirs,
                                 mkdir_if_not_exist,
                                 read_Mineos_input_file, read_Mineos_summation_input_file,
                                 read_Ouroboros_input_file, read_Ouroboros_summation_input_file)
@@ -280,6 +281,8 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
 
     ax.set_xlabel('Frequency (mHz)', fontsize = font_size_label)
 
+    ax.set_ylim([0.0, 3000.0])
+
     # Save (if requested).
     if path_out is not None:
         
@@ -337,7 +340,7 @@ def align_traces(tr_1, tr_2, d_t):
     # at the very start of their traces.
     tr_1_data_interpolated[0:6] = 0.0
     tr_2_data_interpolated[0:6] = 0.0
-
+    
     tr_1_copy = tr_1.copy()
     tr_1_copy.data = tr_1_data_interpolated
     tr_1_copy.stats.starttime = t_0
@@ -389,6 +392,7 @@ def main():
     parser.add_argument("--use_mineos", action = 'store_true', help = 'Plot summation result from Mineos (default: Ouroboros).')
     parser.add_argument("--use_mineos_modes_only", action = 'store_true', help = 'Plot summation results using Ouroboros summation code with Mineos mode output. Note: This option is used only for testing purposes. Not compatible with --use_mineos flag.')
     parser.add_argument("--label", action = 'store_true', help = 'Add labels to modes with excitation coefficients above a certain threshold.')
+    parser.add_argument("--integrate", action = 'store_true', help = 'Differentiate acceleration to get velocity.')
     parser.add_argument("--path_comparison", help = 'Path to a real data trace to be plotted for comparison. Should have units of nm/s, or provide the --comparison_scale flag with a number to multiply the comparison trace so that the units are nm/s.')
     parser.add_argument("--comparison_scale", type = float, default = 1.0)
 
@@ -406,6 +410,7 @@ def main():
     path_comparison = input_args.path_comparison
     comparison_scale = input_args.comparison_scale
     add_labels = input_args.label
+    integrate = input_args.integrate
     assert not (use_mineos and add_labels), 'Cannot add mode labels to Mineos plot (excitation coefficients are not available).'
 
     if use_mineos:
@@ -445,7 +450,8 @@ def main():
 
         else:
 
-            raise NotImplementedError
+            run_info = read_Ouroboros_input_file(path_mode_input)
+
 
         # Read the summation input file.
         summation_info = read_Ouroboros_summation_input_file(path_summation_input)
@@ -459,7 +465,9 @@ def main():
 
         else:
             
-            raise NotImplementedError
+            run_info['dir_model'], run_info['dir_run'], _, _ = get_Ouroboros_out_dirs(run_info, 'none')
+
+            summation_info = get_Ouroboros_summation_out_dirs(run_info, summation_info)
 
         summation_info['dir_output'] = summation_info['dir_cmt']
         
@@ -499,7 +507,14 @@ def main():
 
             label_coeff_info = None
     
-    data_type = 'acceleration'
+    if integrate:
+
+        data_type = 'velocity'
+
+    else:
+
+        data_type = 'acceleration'
+
     if data_type == 'acceleration':
 
         displacement_y_label = 'Acceleration (nm s$^{-2}$)'
@@ -516,6 +531,11 @@ def main():
     
     legend_keys = ['Synthetic', 'Observed']
     legend_keys = ['New code', 'Mineos']
+    legend_keys = ['New code', 'Data']
+
+    if integrate:
+
+        stream.integrate()
 
     trace = stream[0]
 
@@ -525,11 +545,11 @@ def main():
     if path_comparison is not None:
 
         stream_comparison = read(path_comparison)
-        print(len(stream_comparison))
         if len(stream_comparison) > 1:
 
-            stream_comparison = stream_comparison.select(station = station,
-                                    channel = channel)
+            #stream_comparison = stream_comparison.select(station = station,
+            #                        channel = channel)
+            stream_comparison = stream_comparison.select(station = station)
 
         trace_comparison = stream_comparison[0]
         trace_comparison.normalize(norm = 1.0/comparison_scale)
