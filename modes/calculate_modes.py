@@ -27,20 +27,11 @@ def main():
     # Read the input file.
     Ouroboros_info = read_Ouroboros_input_file(Ouroboros_input_file)
 
-    # Get the name of the model from the file.
-    #name_model = os.path.splitext(os.path.basename(Ouroboros_info['path_model']))[0]
+    print(Ouroboros_info)
 
-    ## Create model directory if it doesn't exist.
-    #name_model_with_layers = '{:}_{:>05d}'.format(name_model, Ouroboros_info['n_layers'])
-    #dir_model = os.path.join(Ouroboros_info['dir_output'], name_model_with_layers)
-    #mkdir_if_not_exist(dir_model)
+    import sys
+    sys.exit()
 
-    ## Create the run directory if it doesn't exist.
-    #name_run = '{:>05d}_{:>05d}'.format(Ouroboros_info['n_lims'][1],
-    #            Ouroboros_info['l_lims'][1])
-    #dir_run = os.path.join(dir_model, name_run)
-    #mkdir_if_not_exist(dir_run)
-    
     # Set the 'g_switch' string: 0 -> noG, 1 -> G, 2 -> GP.
     g_switch_strs = ['noGP', 'G', 'GP']
     g_switch_str = g_switch_strs[Ouroboros_info['grav_switch']]

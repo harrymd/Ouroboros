@@ -7,15 +7,15 @@ from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary,
-                            load_eigenfreq_Mineos, load_eigenfreq_Ouroboros,
-                            load_eigenfunc_Mineos, load_eigenfunc_Ouroboros,
+                            load_eigenfreq, load_eigenfunc,
                             load_potential_Ouroboros,
                             load_gradient_Ouroboros,
                             load_model, mkdir_if_not_exist,
-                            read_Mineos_input_file, read_Ouroboros_input_file)
+                            read_input_file)
+from Ouroboros.misc.compare_eigenfunctions import check_sign_S
 #from stoneley.code.common.Mineos import load_eigenfreq_Mineos, load_eigenfunc_Mineos
 
-def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', sign = None, plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0): 
+def old_plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0): 
 
     # Get model information for axis limits, scaling and horizontal lines.
     model = load_model(run_info['path_model'])
@@ -26,6 +26,9 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     r_srf = model['r'][-1]
     i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(model['r'], model['v_s'])
 
+    mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal, n_q = n, l_q = l)
+    f = mode_info['f']
+
     # Get frequency information for title.
     if run_info['use_mineos']:
 
@@ -35,22 +38,22 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         f_rad_per_s = f*1.0E-3*2.0*np.pi
         normalisation_args = {'norm_func' : norm_func, 'units' : units}
         normalisation_args['omega'] = f_rad_per_s
+        
+        #if mode_type == 'R':
 
-        if mode_type == 'R':
+        #    r, U, Up = load_eigenfunc_Mineos(run_info, mode_type, n, l, **normalisation_args)
 
-            r, U, Up = load_eigenfunc_Mineos(run_info, mode_type, n, l, **normalisation_args)
+        #elif mode_type == 'S': 
 
-        elif mode_type == 'S': 
+        #    r, U, Up, V, Vp, P, Pp = load_eigenfunc_Mineos(run_info, mode_type, n, l, **normalisation_args)
 
-            r, U, Up, V, Vp, P, Pp = load_eigenfunc_Mineos(run_info, mode_type, n, l, **normalisation_args)
+        #elif mode_type in ['T', 'I']:
 
-        elif mode_type in ['T', 'I']:
+        #    r, W, Wp = load_eigenfunc_Mineos(run_info, mode_type, n, l, **normalisation_args)
 
-            r, W, Wp = load_eigenfunc_Mineos(run_info, mode_type, n, l, **normalisation_args)
+        #else:
 
-        else:
-
-            raise ValueError
+        #    raise ValueError
 
         r = r*1.0E-3 # Convert to km.
 
@@ -398,6 +401,290 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     return ax, sign_max_eigfunc
 
+def get_title_str(mode_type, n, l, code):
+
+    # Get title string information.
+    if mode_type in ['R', 'S']:
+
+        mode_type_for_title = 'S'
+
+    else:
+        
+        if code == 'mineos':
+
+            mode_type_for_title = mode_type
+
+        elif code == 'ouroboros':
+
+            if i_toroidal == 0:
+                
+                mode_type_for_title = 'I'
+            
+            else:
+                
+                mode_type_for_title = 'T'
+
+        else:
+
+            raise ValueError
+
+    title = '$_{{{:d}}}${:}$_{{{:d}}}$'.format(n, mode_type_for_title, l)
+
+    return title
+
+def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0): 
+
+    # Get model information for axis limits, scaling and horizontal lines.
+    model = load_model(run_info['path_model'])
+    # Convert to km.
+    model['r'] = model['r']
+    # r_srf Radius of planet.
+    # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
+    r_srf = model['r'][-1]
+    i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(model['r'], model['v_s'])
+
+    # Get frequency information.
+    mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal, n_q = n, l_q = l)
+    f = mode_info['f']
+
+    # Get normalisation arguments.
+    f_rad_per_s = f*1.0E-3*2.0*np.pi
+    normalisation_args = {'norm_func' : norm_func, 'units' : units}
+    normalisation_args['omega'] = f_rad_per_s
+
+    # Get eigenfunction information.
+    eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, i_toroidal = i_toroidal, norm_args = normalisation_args)
+
+    # Get title string.
+    title = get_title_str(mode_type, n, l, run_info['code'])
+    
+    # Find axis limits.
+    if plot_gradient:
+
+        if plot_potential:
+
+            vals = eigfunc_dict['Pp'] 
+
+        else:
+
+            if mode_type == 'R':
+
+                vals = eigfunc_dict['Up'] 
+
+            elif mode_type == 'S':
+
+                vals = np.concatenate([eigfunc_dict['Up'], eigfunc_dict['Vp']])
+                sign = check_sign_S(eigfunc_dict['r'], eigfunc_dict['U'],
+                                    eigfunc_dict['V'])
+
+
+            elif mode_type == 'T':
+
+                vals = eigfunc_dict['Wp']
+
+            else:
+
+                raise ValueError
+
+    else:
+
+        if plot_potential:
+
+            vals = eigfunc_dict['P']
+
+        else:
+
+            # Find axis limits.
+            if mode_type == 'R':
+
+                vals = eigfunc_dict['U']
+
+            elif mode_type == 'S':
+
+                vals = np.concatenate([eigfunc_dict['U'], eigfunc_dict['V']])
+                sign = check_sign_S(eigfunc_dict['r'], eigfunc_dict['U'],
+                                    eigfunc_dict['V'])
+
+            elif mode_type in ['I', 'T']:
+
+                vals = eigfunc_dict['W']
+
+            else:
+
+                raise ValueError
+
+    if sign < 0: 
+
+        for val in eigfunc_dict:
+
+            if val != 'r':
+
+                eigfunc_dict[val] = eigfunc_dict[val]*-1.0
+
+    max_ = np.max(np.abs(vals))
+
+    if run_info['code'] == 'mineos':
+        
+        clip_zero = True
+        if mode_type in ['T', 'I']:
+
+            if clip_zero:
+
+                i_nonzero = np.nonzero(eigfunc_dict['W'])[0]
+
+            i_0 = i_nonzero[0]
+            i_1 = i_nonzero[-1]
+
+            eigfunc_dict['r'] = eigfunc_dict['r'][i_0 : i_1]
+            for val in ['W', 'Wp']:
+
+                eigfunc_dict[val] = eigfunc_dict[val][i_0 : i_1]
+
+    # Create axes if not provided.
+    if ax is None:
+        
+        
+        r_range = np.max(eigfunc_dict['r']) - np.min(eigfunc_dict['r'])
+        r_frac = r_range/r_srf
+        fig = plt.figure(figsize = (5.5, 11.0*r_frac))
+        ax  = plt.gca()
+
+    # Arguments for all possibilities.
+    common_args = {'ax' : ax, 'show' : False, 'title' : title,
+            'x_label' : x_label, 'alpha' : alpha}
+
+    if plot_gradient:
+
+        if mode_type == 'R':
+
+            plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['Up'],
+                    h_lines = r_solid_fluid_boundary,
+                    linestyle = linestyle,
+                    label = 'U{:}'.format(label_suffix),
+                    **common_args)
+        
+        elif mode_type == 'S':
+
+            plot_eigenfunc_S(eigfunc_dict['r'], eigfunc_dict['Up'], eigfunc_dict['Vp'],
+                    h_lines = r_solid_fluid_boundary,
+                    linestyles = [linestyle, linestyle],
+                    label_suffix = label_suffix,
+                    **common_args)
+
+        elif mode_type in ['T', 'I']:
+            
+            plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['Wp'],
+                    h_lines = None,
+                    linestyle = linestyle,
+                    label = 'W{:}'.format(label_suffix),
+                    **common_args)
+
+    elif plot_potential:
+
+        plot_P(eigfunc_dict['r'], eigfunc_dict['P'],
+                linestyle = linestyle,
+                label_suffix = label_suffix,
+                **common_args)
+
+    else:
+
+        if mode_type == 'R':
+
+            plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['U'],
+                    h_lines = r_solid_fluid_boundary,
+                    linestyle = linestyle,
+                    label = 'U{:}'.format(label_suffix),
+                    **common_args)
+        
+        elif mode_type == 'S':
+
+            plot_eigenfunc_S(eigfunc_dict['r'], eigfunc_dict['U'], eigfunc_dict['V'],
+                    h_lines = r_solid_fluid_boundary,
+                    linestyles = [linestyle, linestyle],
+                    label_suffix = label_suffix,
+                    **common_args)
+
+        elif mode_type in ['T', 'I']:
+            
+            plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['W'],
+                    h_lines = None,
+                    linestyle = linestyle,
+                    label = 'W{:}'.format(label_suffix),
+                    **common_args)
+
+    if transparent:
+        
+        fig = plt.gcf()
+        set_patch_facecolors(fig, ax) 
+
+    plt.tight_layout()
+    
+    if save:
+
+        method_str = run_info['code']
+
+        if plot_gradient:
+
+            gradient_str = '_gradient'
+
+        else:
+
+            gradient_str = ''
+
+        if plot_potential:
+
+            var_str = 'potential'
+
+        else:
+
+            var_str = 'eigfunc'
+
+        fig_name = '{:}{:}_{:}'.format(var_str, gradient_str, method_str)
+        
+        if run_info['code'] == 'mineos':
+            
+            dir_out = run_info['dir_output']
+            dir_plot = os.path.join(dir_out, 'plots')
+
+        elif run_info['code'] == 'ouroboros':
+            
+            _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
+
+        else:
+
+            raise ValueError
+
+        dir_plot = os.path.join(dir_out, 'plots')
+        mkdir_if_not_exist(dir_plot)
+
+        if mode_type in ['S', 'R']:
+
+            fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, l, run_info['grav_switch'])
+
+        else:
+
+            if run_info['code'] == 'mineos':
+
+                fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, l, run_info['grav_switch'])
+
+            elif run_info['code'] == 'ouroboros':
+
+                fig_name = '{:}_{:>05d}_{:}{:1d}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, i_toroidal, l, run_info['grav_switch'])
+
+            else:
+
+                raise ValueError
+
+        fig_path = os.path.join(dir_plot, fig_name)
+        print('Saving figure to {:}'.format(fig_path))
+        plt.savefig(fig_path, dpi = 300, bbox_inches = 'tight')
+
+    if show:
+
+        plt.show()
+
+    return ax
+
 def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
     
     if ax is None:
@@ -515,6 +802,74 @@ def plot_eigenfunc_T(r, W, ax = None, show = False):
 
     return
 
+def get_label_suffixes(path_compare, code, code_compare, plot_gradient):
+
+    if plot_gradient:
+
+        if code == 'mineos':
+
+            label_suffix = '\' (Mineos)'
+        
+        elif code == 'ouroboros':
+
+            label_suffix = '\' (Ouroboros)'
+
+        else:
+
+            raise ValueError
+
+        if path_compare is not None:
+
+            if code_compare == 'mineos':
+
+                label_suffix_compare = '\' (Mineos)'
+            
+            elif code_compare == 'ouroboros':
+
+                label_suffix_compare = '\' (Ouroboros)'
+
+            else:
+
+                raise ValueError
+
+        else:
+
+            label_suffix_compare = None
+
+    else:
+
+        if code == 'mineos':
+
+            label_suffix = ' (Mineos)'
+        
+        elif code == 'ouroboros':
+
+            label_suffix = ' (Ouroboros)'
+
+        else:
+
+            raise ValueError
+
+        if path_compare is not None:
+
+            if code_compare == 'mineos':
+
+                label_suffix_compare = ' (Mineos)'
+            
+            elif code_compare == 'ouroboros':
+
+                label_suffix_compare = ' (Ouroboros)'
+
+            else:
+
+                raise ValueError
+
+        else:
+
+            label_suffix_compare = None
+
+    return label_suffix, label_suffix_compare
+
 def main():
 
     # Read input arguments.
@@ -527,7 +882,7 @@ def main():
     parser.add_argument("--gradient", action = "store_true", help = "Include this flag to plot eigenfunction gradients (default: plot eigenfunctions).")
     parser.add_argument("--potential", action = "store_true", help = "Include this flag to plot potential (default: plot eigenfunctions).")
     parser.add_argument("--use_mineos", action = "store_true", help = "Plot Mineos eigenfunction (default: Ouroboros).")
-    parser.add_argument("--path_input_mineos_compare", help = "Provide Mineos input path to plot both Ouroboros and Mineos eigenfunction (default: Ouroboros only).")
+    parser.add_argument("--path_compare", help = "Provide input path to plot a second eigenfunction for comparison.")
     parser.add_argument("--norm_func", choices = ['mineos', 'DT'], default = 'DT', help = "Specify normalisation function. \'mineos\' is the normalisation function used by Mineos and Ouroboros. \'DT\' is the normalisation function used in the Dahlen and Tromp textbook. It does not include the factor of k. See also the --units flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.")
     parser.add_argument("--units", choices = ['SI', 'ouroboros', 'mineos'], default = 'mineos', help = 'Specify units used when applying normalisation to eigenfunction. \'SI\' is SI units. \'mineos\' is Mineos units. \'ouroboros\' is Ouroboros units. See also the --norm_func flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.')
     args = parser.parse_args()
@@ -540,55 +895,48 @@ def main():
     i_toroidal = args.layer_number
     plot_gradient = args.gradient
     plot_potential = args.potential
-    use_mineos = args.use_mineos
-    path_input_mineos_compare = args.path_input_mineos_compare
+    path_compare = args.path_compare
     norm_func = args.norm_func
     units = args.units
-    assert not (use_mineos and (not(path_input_mineos_compare is None))), 'Only one of --use_mineos and --path_input_mineos_compare may be used.'
 
+    # Check input arguments.
     if mode_type == 'R':
 
         assert l == 0, 'Must have l = 0 for radial modes.'
 
-    # Check input arguments.
-    if use_mineos:
+    ## Check input arguments.
+    #if use_mineos:
 
-        assert i_toroidal is None, 'Do not use --toroidal flag with Mineos, instead specify mode type T (mantle) or I (inner core).'
+    #    assert i_toroidal is None, 'Do not use --toroidal flag with Mineos, instead specify mode type T (mantle) or I (inner core).'
+
+    #else:
+
+    #    assert mode_type in ['R', 'S', 'T'], 'Mode type must be R, S or T for Ouroboros modes.'
+
+    #    if mode_type in ['R', 'S']:
+
+    #        assert i_toroidal is None, 'The --toroidal flag should not be used for mode types R or S.'
+
+    #    elif mode_type == 'T':
+
+    #        assert i_toroidal is not None, 'Must use the --toroidal flag for mode type T.'
+
+    #    else:
+
+    #        raise ValueError
+
+    # Read input file.
+    run_info = read_input_file(path_input)
+    if path_compare is not None:
+
+        run_info_compare = read_input_file(path_compare)
+        code_compare = run_info_compare['code']
 
     else:
 
-        assert mode_type in ['R', 'S', 'T'], 'Mode type must be R, S or T for Ouroboros modes.'
+        code_compare = None
 
-        if mode_type in ['R', 'S']:
-
-            assert i_toroidal is None, 'The --toroidal flag should not be used for mode types R or S.'
-
-        elif mode_type == 'T':
-
-            assert i_toroidal is not None, 'Must use the --toroidal flag for mode type T.'
-
-        else:
-
-            raise ValueError
-
-    # Read the input file and command-line arguments.
-    if use_mineos:
-
-        run_info = read_Mineos_input_file(path_input)
-        run_info['use_mineos'] = True
-
-    else:
-
-        run_info = read_Ouroboros_input_file(path_input)
-        run_info['use_mineos'] = False
-
-        if path_input_mineos_compare is not None:
-            
-            run_info_mineos = read_Mineos_input_file(path_input_mineos_compare)
-            run_info_mineos['use_mineos'] = True
-
-    #Ouroboros_info, mode_type, n, l, i_toroidal = prep_Ouroboros_info()
-    #run_info, mode_type, n, l, i_toroidal = prep_run_info(args)
+    # Get x label.
     if plot_potential:
 
         if plot_gradient:
@@ -608,50 +956,35 @@ def main():
         else:
 
             x_label = 'Eigenfunction'
+    
+    label_suffix, label_suffix_compare = get_label_suffixes(path_compare,
+            run_info['code'], code_compare, plot_gradient)
 
     # Plot.
-    if path_input_mineos_compare is not None:
+    if path_compare is not None:
 
-        if i_toroidal is not None:
+        #if i_toroidal is not None:
 
-            if i_toroidal == 0:
+        #    if i_toroidal == 0:
 
-                mode_type_mineos = 'I'
+        #        mode_type_mineos = 'I'
 
-            elif i_toroidal == 1:
+        #    elif i_toroidal == 1:
 
-                mode_type_mineos = 'T'
+        #        mode_type_mineos = 'T'
 
-            else:
+        #    else:
 
-                raise ValueError('Models with more than two solid regions are not supported by Mineos.')
+        #        raise ValueError('Models with more than two solid regions are not supported by Mineos.')
 
-        else:
+        #else:
 
-            mode_type_mineos = mode_type
+        #    mode_type_mineos = mode_type
 
-        if plot_gradient:
-
-            label_suffix_Mineos = '\' (Mineos)'
-            label_suffix_Ouroboros = '\' (Ouroboros)'
-
-        else:
-
-            label_suffix_Mineos = ' (Mineos)'
-            label_suffix_Ouroboros = ' (Ouroboros)'
-
-        ax, sign = plot_eigenfunc_wrapper(run_info_mineos, mode_type_mineos, n, l, i_toroidal = None, ax = None, show = False, transparent = False, save = False, linestyle = ':', label_suffix = label_suffix_Mineos, x_label = None, norm_func = norm_func, units = units, plot_gradient = plot_gradient, plot_potential = plot_potential) 
-        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = ax, show = True, label_suffix = label_suffix_Ouroboros, sign = sign, plot_gradient = plot_gradient, plot_potential = plot_potential, x_label = x_label, norm_func = norm_func, units = units, alpha = 0.5) 
+        ax = plot_eigenfunc_wrapper(run_info_compare, mode_type, n, l, i_toroidal = None, ax = None, show = False, transparent = False, save = False, linestyle = ':', label_suffix = label_suffix_compare, x_label = None, norm_func = norm_func, units = units, plot_gradient = plot_gradient, plot_potential = plot_potential) 
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = ax, show = True, label_suffix = label_suffix, plot_gradient = plot_gradient, plot_potential = plot_potential, x_label = x_label, norm_func = norm_func, units = units, alpha = 0.5) 
 
     else:
-
-        if plot_gradient:
-
-            label_suffix = '\''
-
-        else:
-
-            label_suffix = ''
 
         plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None, plot_gradient = plot_gradient, plot_potential = plot_potential, label_suffix = label_suffix, x_label = x_label, norm_func = norm_func, units = units) 
 

@@ -6,59 +6,24 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-from common import load_eigenfreq_Mineos, load_eigenfreq_Ouroboros, mkdir_if_not_exist, read_Mineos_input_file, read_Ouroboros_input_file, get_Ouroboros_out_dirs
-#from stoneley.code.common.Mineos import load_eigenfreq_Mineos
+from Ouroboros.common import align_mode_lists, get_Ouroboros_out_dirs, load_eigenfreq, mkdir_if_not_exist, read_input_file
+from Ouroboros.misc.compare_eigenfunctions import get_eigfunc_comparison_out_path
 
 def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = True, i_toroidal = None, f_lims = 'auto', l_lims = 'auto', colors = ['k', 'k'], apply_atten_correction = False):
-
-    # Get frequency information.
-    if run_info['use_mineos']:
-        
-        assert not apply_atten_correction, 'Mineos modes not compatible with attenuation correction.'
-
-        if i_toroidal is not None:
-
-            raise NotImplementedError('Dispersion plotting for Mineos toroidal modes not implemented yet.')
-        
-        #name_run = '{:>05d}_{:>05d}_{:>1d}'.format(run_info['l_lims'][1], run_info['n_lims'][1], run_info['g_switch'])
-        #dir_run = os.path.join(run_info['dir_output'], run_info['model'], name_run)
-        #path_minos_bran = os.path.join(dir_run, 'minos_bran_out_{:}.txt'.format(mode_type))
-        #mode_data = read_minos_bran_output(path_minos_bran)
-        #print(mode_data)
-        #n = mode_data['n']
-        #l = mode_data['l']
-        #f = mode_data['w'] # Freq in mHz.
-
-        n, l, f = load_eigenfreq_Mineos(run_info, mode_type)
-
-    else:
-
-        if apply_atten_correction:
-            
-            n, l, f, Q = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i_toroidal, return_Q = True)
-
-        else:
-
-            n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i_toroidal)
+    
+    # Get mode information.
+    mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal)
+    n = mode_info['n']
+    l = mode_info['l']
+    f = mode_info['f']
 
     # Try to also load radial modes.
     if mode_type == 'S':
-
+        
         try:
 
-            if run_info['use_mineos']:
-
-                #path_minos_bran_R = os.path.join(dir_run, 'minos_bran_out_{:}.txt'.format('R'))
-                #mode_data_R = read_minos_bran_output(path_minos_bran_R)
-                #n_R = mode_data_R['n']
-                #l_R = mode_data_R['l']
-                #f_R = mode_data_R['w'] # Freq in mHz.
-                #nlf_radial = (n_R, l_R, f_R)
-                nlf_radial = load_eigenfreq_Mineos(run_info, 'R')
-
-            else:
-
-                nlf_radial = load_eigenfreq_Ouroboros(run_info, 'R')
+            mode_info_R = load_eigenfreq(run_info, 'R')
+            nlf_radial = (mode_info_R['n'], mode_info_R['l'], mode_info_R['f'])
     
         except OSError:
 
@@ -84,14 +49,18 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
     if save:
         
         fig_name = 'dispersion.png'
-        if run_info['use_mineos']:
+        if run_info['code'] == 'mineos':
 
             dir_out = run_info['dir_output'] 
 
-        else:
+        elif run_info['code'] == 'ouroboros':
 
             _, _, _, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
             dir_out = dir_type
+
+        else:
+
+            raise ValueError
 
         dir_plot = os.path.join(dir_out, 'plots')
         mkdir_if_not_exist(dir_plot)
@@ -193,72 +162,102 @@ def plot_dispersion(n, l, f, ax = None, l_lims = 'auto', f_lims = 'auto', x_labe
         
     return ax
 
-def align_mode_lists(n_0, l_0, f_0, n_1, l_1, f_1):
+def get_f_lims_indices(f, f_lims):
 
-    num_modes_0 = len(n_0)
-    f_1_sorted_by_0 = np.zeros(num_modes_0)
+    if (f_lims == 'auto') or (f_lims is None):
 
-    for i in range(num_modes_0):
+        num_modes = len(n)
+        i_f = np.array(list(range(num_modes)), dtype = np.int)
 
-        j = np.where((l_1 == l_0[i]) & (n_1 == n_0[i]))[0]
-        
-        assert len(j) < 2
-        if len(j) == 1:
+    else:
 
-            f_1_sorted_by_0[i] = f_1[j]
+        i_f = np.where((f > f_lims[0]) & (f < f_lims[1]))[0]
 
-        else:
+    return i_f
 
-            f_1_sorted_by_0[i] = np.nan
-
-    i_good = np.where(~np.isnan(f_1_sorted_by_0))[0]
-    n = n_0[i_good]
-    l = l_0[i_good]
-    f_0 = f_0[i_good]
-    f_1 = f_1_sorted_by_0[i_good]
-
-    return n, l, f_0, f_1, i_good
-
-def plot_differences(run_info_0, run_info_1, mode_type, i_toroidal = None, apply_atten_correction = False, f_lims = None, l_lims = None, save = True, show = True):
+def plot_differences(run_info_0, run_info_1, mode_type, diff_type = 'eigenvalues', i_toroidal = None, apply_atten_correction = False, f_lims = None, l_lims = None, save = True, show = True, var_lims = None):
     
-    mode_info_0 = load_eigenfreq_Ouroboros(run_info_0, mode_type, i_toroidal = i_toroidal)
-    n_0 = mode_info_0['n']
-    l_0 = mode_info_0['l']
-    f_0 = mode_info_0['f']
+    if diff_type == 'eigvals':
 
+        mode_info_0 = load_eigenfreq(run_info_0, mode_type, i_toroidal = i_toroidal)
+        n_0 = mode_info_0['n']
+        l_0 = mode_info_0['l']
+        f_0 = mode_info_0['f']
 
+        mode_info_1 = load_eigenfreq(run_info_1, mode_type, i_toroidal = None)
+        n_1 = mode_info_1['n']
+        l_1 = mode_info_1['l']
+        f_1 = mode_info_1['f']
 
-    n_1, l_1, f_1 = load_eigenfreq_Mineos(run_info_1, mode_type)
+        n, l, i_align_0, i_align_1 = align_mode_lists(n_0, l_0, n_1, l_1)
+        f_0 = f_0[i_align_0]
+        f_1 = f_1[i_align_1]
 
-    n, l, f_0, f_1, _ = align_mode_lists(n_0, l_0, f_0, n_1, l_1, f_1)
+        f_mean = (f_0 + f_1)/2.0
+        i_f = get_f_lims_indices(f_mean, f_lims)
 
-    f_mean = (f_0 + f_1)/2.0
-    i_f = np.where((f_mean > f_lims[0]) & (f_mean < f_lims[1]))[0]
-    f_diff = (f_0 - f_1)
-    abs_f_diff = np.abs(f_diff)
-    frac_abs_f_diff = abs_f_diff/f_mean
-    min_frac_abs_f_diff = np.min(frac_abs_f_diff[i_f])
-    max_frac_abs_f_diff = np.max(frac_abs_f_diff[i_f])
-    range_frac_abs_f_diff = max_frac_abs_f_diff - min_frac_abs_f_diff
+        f_diff = (f_0 - f_1)
+        abs_f_diff = np.abs(f_diff)
+        frac_abs_f_diff = abs_f_diff/f_mean
+        min_frac_abs_f_diff = np.min(frac_abs_f_diff[i_f])
+        max_frac_abs_f_diff = np.max(frac_abs_f_diff[i_f])
+        range_frac_abs_f_diff = max_frac_abs_f_diff - min_frac_abs_f_diff
+
+        var_min = min_frac_abs_f_diff
+        var_range = range_frac_abs_f_diff
+        var = frac_abs_f_diff
+
+        colors = []
+        color_pos = 'b'
+        color_neg = 'r'
+        for i in range(len(f_1)):
+
+            if f_diff[i] > 0.0:
+
+                colors.append(color_pos)
+
+            else:
+
+                colors.append(color_neg)
+
+    elif diff_type == 'eigvecs':
+    
+        path_rms = get_eigfunc_comparison_out_path(run_info_0, run_info_1, mode_type) 
+
+        n, l, f_0, f_1, rms = np.loadtxt(path_rms).T
+        n = n.astype(np.int)
+        l = l.astype(np.int)
+        
+        f_mean = (f_0 + f_1)/2.0
+        i_f = get_f_lims_indices(f_mean, f_lims)
+
+        var_min = np.min(rms[i_f])
+        var_max = np.max(rms[i_f])
+        var_range = (var_max - var_min)
+        var = rms
+
+        colors = 'k'
+
+    else:
+
+        raise ValueError
+
+    if var_range == 0.0:
+
+        var_range = 1.0
+
+    var_lims = [1.0E-7, 1.0E-2]
+    if var_lims is not None:
+
+        var_min = var_lims[0]
+        var_max = var_lims[1]
+        var_range = var_max - var_min
+
     s_min =  3.0
     s_max = 50.0
     s_range = s_max - s_min
     s_mid = (s_min + s_max)/2.0
-    sizes = s_min + s_range*(frac_abs_f_diff - min_frac_abs_f_diff)/range_frac_abs_f_diff
-
-
-    colors = []
-    color_pos = 'b'
-    color_neg = 'r'
-    for i in range(len(f_1)):
-
-        if f_diff[i] > 0.0:
-
-            colors.append(color_pos)
-
-        else:
-
-            colors.append(color_neg)
+    sizes = s_min + s_range*(var - var_min)/var_range
 
     ax = None
     if ax is None:
@@ -268,11 +267,27 @@ def plot_differences(run_info_0, run_info_1, mode_type, i_toroidal = None, apply
 
     ax = plot_dispersion(n, l, f_mean, l_lims = l_lims, f_lims = f_lims, ax = ax, sizes = sizes, show = False, colors = colors)
 
-    ax.scatter([], [], c = 'k', s = s_min, label = '{:>.3f} %'.format(min_frac_abs_f_diff*1.0E2))
-    ax.scatter([], [], c = 'k', s = s_max, label = '{:>.3f} %'.format(max_frac_abs_f_diff*1.0E2))
-    ax.scatter([], [], c = color_pos, s = s_mid, label = 'Positive')
-    ax.scatter([], [], c = color_neg, s = s_mid, label = 'Negative')
-    plt.legend(title = 'Freq. diff.')
+    if diff_type == 'eigvals':
+
+        ax.scatter([], [], c = 'k', s = s_min, label = '{:>.3f} %'.format(var_min*1.0E2))
+        ax.scatter([], [], c = 'k', s = s_max, label = '{:>.3f} %'.format(var_max*1.0E2))
+        ax.scatter([], [], c = color_pos, s = s_mid, label = 'Positive')
+        ax.scatter([], [], c = color_neg, s = s_mid, label = 'Negative')
+        plt.legend(title = 'Freq. diff.')
+
+        fig_name = 'dispersion_differences.png'
+
+    elif diff_type == 'eigvecs':
+
+        ax.scatter([], [], c = 'k', s = s_min, label = '{:>8.3e}'.format(var_min))
+        ax.scatter([], [], c = 'k', s = s_max, label = '{:>8.3e}'.format(var_max))
+        plt.legend(title = 'Difference')
+
+        fig_name = 'eigenfunction_differences.png'
+
+    else:
+
+        raise ValueError
 
     if save:
         
@@ -297,59 +312,67 @@ def main():
 
     # Read input arguments.
     parser = argparse.ArgumentParser()
-    parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
-    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
-    parser.add_argument("--use_mineos", action = "store_true", help = "Plot only Mineos modes (default: only Ouroboros) ")
+    parser.add_argument("path_input", help = "File path (relative or absolute) to input file.")
+    parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes. (Note: syntax is different for plotting Mineos toroidal modes.)", type = int)
     parser.add_argument("--f_lims", type = float, nargs = 2, help = "Specify frequency limits (mHz) of plot axes (default: limits are found automatically).")
     parser.add_argument("--l_lims", type = float, nargs = 2, help = "Specify angular order of plot axes (default: limits are found automatically).")
-    parser.add_argument("--path_input_mineos_comparison", help = "File path to Mineos input file for comparison.")
-    parser.add_argument("--attenuation_correction", action = 'store_true', help = 'Before plotting, apply attenuation correction calculated with calculate_Q.py.')
-    parser.add_argument("--plot_differences", action = 'store_true', help = 'Plot differences between mode frequencies.')
+    parser.add_argument("--path_input_comparison", help = "File path to second input file for comparison.")
+    parser.add_argument("--plot_diff", choices = ['eigvals', 'eigvecs'], help = 'Plot differences between mode frequencies (option \'eigvals\') or eigenfunctions (option \'eigvecs\').')
     args = parser.parse_args()
 
     # Rename input arguments.
-    path_input = args.path_to_input_file
+    path_input = args.path_input
     i_toroidal = args.layer_number
-    use_mineos = args.use_mineos
-    path_input_mineos = args.path_input_mineos_comparison
-    apply_atten_correction =  args.attenuation_correction
+    path_input_comparison = args.path_input_comparison
+    diff_type = args.plot_diff
+    if diff_type is not None:
+
+        assert path_input_comparison is not None, 'To plot differences, you must specify --path_input_comparison.'
+
     f_lims = args.f_lims
     l_lims = args.l_lims
     if f_lims is None:
         f_lims = 'auto'
     if l_lims is None:
         l_lims = 'auto'
+    
+    # Read input file(s).
+    run_info = read_input_file(path_input)
+    #
+    if path_input_comparison is not None:
 
-    # Read the input file.
-    if use_mineos:
+        run_info_comparison = read_input_file(path_input_comparison)
 
-        # Read Mineos input file.
-        run_info = read_Mineos_input_file(path_input)
+    ## Read the input file.
+    #if use_mineos:
 
-        # Store whether Mineos is being used.
-        run_info['use_mineos'] = use_mineos
+    #    # Read Mineos input file.
+    #    run_info = read_Mineos_input_file(path_input)
 
-    elif path_input_mineos is not None:
+    #    # Store whether Mineos is being used.
+    #    run_info['use_mineos'] = use_mineos
 
-        # Read Mineos input file.
-        run_info_mineos = read_Mineos_input_file(path_input_mineos)
+    #elif path_input_mineos is not None:
 
-        # Store whether Mineos is being used.
-        run_info_mineos['use_mineos'] = True
+    #    # Read Mineos input file.
+    #    run_info_mineos = read_Mineos_input_file(path_input_mineos)
 
-        # Read Ouroboros input file.
-        run_info = read_Ouroboros_input_file(path_input)
+    #    # Store whether Mineos is being used.
+    #    run_info_mineos['use_mineos'] = True
 
-        # Store whether Mineos is being used.
-        run_info['use_mineos'] = False
+    #    # Read Ouroboros input file.
+    #    run_info = read_Ouroboros_input_file(path_input)
 
-    else:
-        
-        # Read Ouroboros input file.
-        run_info = read_Ouroboros_input_file(path_input)
+    #    # Store whether Mineos is being used.
+    #    run_info['use_mineos'] = False
 
-        # Store whether Mineos is being used.
-        run_info['use_mineos'] = use_mineos
+    #else:
+    #    
+    #    # Read Ouroboros input file.
+    #    run_info = read_Ouroboros_input_file(path_input)
+
+    #    # Store whether Mineos is being used.
+    #    run_info['use_mineos'] = use_mineos
 
     # Set mode type string.
     if i_toroidal is not None:
@@ -365,23 +388,23 @@ def main():
         mode_type = 'S'
 
     # Plot the dispersion diagram.
-    if plot_differences:
+    if diff_type is not None:
         
-        assert path_input_mineos is not None
-        plot_differences(run_info, run_info_mineos, mode_type, f_lims = f_lims, l_lims = l_lims, apply_atten_correction = apply_atten_correction)
+        assert path_input_comparison is not None
+        plot_differences(run_info, run_info_comparison, mode_type, diff_type = diff_type, f_lims = f_lims, l_lims = l_lims)
 
     else:
 
-        if path_input_mineos is not None:
+        if path_input_comparison is not None:
 
-            ax = plot_dispersion_wrapper(run_info_mineos, mode_type, i_toroidal = i_toroidal, f_lims = f_lims, l_lims = l_lims, show = False, save = False,
+            ax = plot_dispersion_wrapper(run_info_comparison, mode_type, i_toroidal = i_toroidal, f_lims = f_lims, l_lims = l_lims, show = False, save = False,
                         colors = ['r', 'r'])
             plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal, f_lims = f_lims, l_lims = l_lims, ax = ax, show = True, save = True,
-                        colors = ['b', 'b'], apply_atten_correction = apply_atten_correction)
+                        colors = ['b', 'b'])
 
         else:
 
-            plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal, f_lims = f_lims, l_lims = l_lims, apply_atten_correction = apply_atten_correction)
+            plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal, f_lims = f_lims, l_lims = l_lims)
 
     return
 

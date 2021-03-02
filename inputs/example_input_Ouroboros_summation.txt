@@ -1,0 +1,10 @@
+mode_types S 
+f_lims 0.0 5.0
+path_channels ../../input/mineos/station_lists/ANMO_3c.txt
+path_cmt ../../input/mineos/CMTs/tohoku.txt
+time_step 10.0
+n_samples 8000
+pulse triangle
+output_type acceleration
+attenuation full
+correct_response 1 

@@ -115,12 +115,14 @@ def read_Ouroboros_input_file(path_input_file):
     Reads the RadialPNM input file.
     '''
 
-    # Announcement
-    print('Reading input file, {:}'.format(path_input_file))
+    ## Announcement
+    #print('Reading input file, {:}'.format(path_input_file))
     
     # Read line by line.
     with open(path_input_file, 'r') as in_id:
         
+        code            = in_id.readline().split()[1]
+        assert code == 'ouroboros'
         path_model      = in_id.readline().split()[1]
         dir_output      = in_id.readline().split()[1]
         grav_switch        = int(in_id.readline().split()[1])
@@ -160,6 +162,7 @@ def read_Ouroboros_input_file(path_input_file):
 
     # Store in dictionary.
     Ouroboros_info = dict()
+    Ouroboros_info['code']          = code
     Ouroboros_info['path_model']    = path_model
     Ouroboros_info['name_model']    = name_model
     Ouroboros_info['dir_output']    = dir_output 
@@ -216,11 +219,13 @@ def read_Mineos_input_file(path_input_file):
     Reads the Mineos input file.
     '''
 
-    print('Reading input file, {:}'.format(path_input_file))
+    #print('Reading input file, {:}'.format(path_input_file))
     
     # Read line by line.
     with open(path_input_file, 'r') as in_id:
         
+        code            = in_id.readline().split()[-1]
+        assert code == 'mineos'
         path_model      = in_id.readline().split()[-1]
         dir_output      = in_id.readline().split()[-1]
         grav_switch     = int(in_id.readline().split()[-1])
@@ -268,7 +273,8 @@ def read_Mineos_input_file(path_input_file):
     print('n range: {:d} to {:d}'.format(n_min, n_max))
 
     # Store in dictionary.
-    mineos_info = { 'path_model'    : path_model,
+    mineos_info = { 'code'          : code,     
+                    'path_model'    : path_model,
                     'name_model'    : name_model,
                     'dir_output'    : dir_output,
                     'grav_switch'   : grav_switch,
@@ -608,7 +614,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     else:
 
         dir_name = 'eigenfunctions'
-
+    
     if i_toroidal is None:
 
         dir_eigenfuncs = '{:}'.format(dir_name)
@@ -664,8 +670,8 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         # Apply normalisation.
         U = En*U
 
-        return r, U
-    
+        eigenfunc_dict = {'r' : r, 'U' : U}
+
     # Spheroidal case.
     elif mode_type == 'S':
 
@@ -677,9 +683,9 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         if norm_func == 'DT':
 
             V = V*k
+
+        eigenfunc_dict = {'r' : r, 'U' : U, 'V' : V}
         
-        return r, U, V
-    
     # Toroidal case.
     elif mode_type == 'T':
 
@@ -691,12 +697,17 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
             W = W*k
 
-        return r, W
+        eigenfunc_dict = {'r' : r, 'W' : W}
     
     # Error catching.
     else:
 
         raise NotImplementedError
+
+    # Convert to m (for consistency with Mineos).
+    eigenfunc_dict['r'] = eigenfunc_dict['r']*1.0E3
+
+    return eigenfunc_dict
 
 def load_potential_Ouroboros(Ouroboros_info, mode_type, n, l, norm_func = 'mineos', units = 'SI', omega = None):
 
@@ -855,11 +866,11 @@ def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     return dir_kernels
 
 # Loading data from Mineos. ---------------------------------------------------
-def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None, return_Q = False):
+def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None):
     
     # Find the Mineos output directory.
     _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
-    
+
     if n_skip == None:
 
         with open(run_info['path_model'], 'r') as in_id:
@@ -873,13 +884,7 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
     file_eigval = 'minos_bran_out_{:}.txt'.format(mode_type)
     path_eigval = os.path.join(run_info['dir_run'], file_eigval) 
 
-    if return_Q:
-
-        n, l, f, Q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
-
-    else:
-
-        n, l, f = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4)).T
+    n, l, f, Q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
 
     n = n.astype(np.int)
     l = l.astype(np.int)
@@ -889,25 +894,15 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
         i = np.where((n == n_q) & (l == l_q))[0][0]
 
         f_q = f[i]
+        Q_q = Q[i]
 
-        if return_Q:
-
-            Q_q = Q[i]
-            return f_q, Q_q
-
-        else:
-
-            return f_q
+        mode_info = {'f' : f_q, 'Q' : Q_q}
 
     else:
 
-        if return_Q:
+        mode_info = {'n' : n, 'l' : l, 'f' : f, 'Q' : Q}
 
-            return n, l, f, Q 
-
-        else:
-
-            return n, l, f
+    return mode_info
 
 def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units = 'SI', omega = None):
     '''
@@ -919,7 +914,6 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
     DT          Use the Dahlen and Tromp normalisation formula with SI units.
     '''
 
-    print(norm_func, units)
     # Find the Mineos output directory.
     _, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
     dir_eig_funcs = os.path.join(run_info['dir_run'], 'eigen_txt_{:}'.format(mode_type))
@@ -983,6 +977,8 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
         U  = En*U
         Up = Epn*Up
 
+        eigenfunc_dict = {'r' : r, 'U' : U, 'Up' : Up}
+
         return r, U, Up
 
     elif mode_type == 'S':
@@ -1002,7 +998,8 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
             V  = V*k
             Vp = Vp*k
 
-        return r, U, Up, V, Vp, P, Pp
+        eigenfunc_dict = {'r' : r, 'U' : U, 'Up' : Up, 'V' : V, 'Vp' : Vp,
+                            'P' : P, 'Pp' : Pp}
 
     elif mode_type in ['T', 'I']:
 
@@ -1017,11 +1014,104 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
             W  = W*k
             Wp = Wp*k
 
+        eigenfunc_dict = {'r' : r, 'W' : W, 'Wp' : Wp}
+
         return r, W, Wp
 
     else:
 
         raise ValueError
+
+    # Reverse the order of the output to conform with Ouroboros.
+    for var in eigenfunc_dict:
+
+        eigenfunc_dict[var] = eigenfunc_dict[var][::-1]
+
+    return eigenfunc_dict
+
+# Loading data wrappers. -------------------------------------------------------
+def read_input_file(path_input):
+
+    # Announcement
+    print('Reading input file, {:}'.format(path_input))
+
+    # Read line by line.
+    with open(path_input, 'r') as in_id:
+
+        code = in_id.readline().split()[1]
+
+    if code == 'ouroboros':
+
+        run_info = read_Ouroboros_input_file(path_input)
+
+    elif code == 'mineos':
+
+        run_info = read_Mineos_input_file(path_input)
+
+    else:
+
+        raise ValueError('Code {:} not recognised.'.format(code))
+
+    return run_info
+
+def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
+
+    if run_info['code'] == 'ouroboros':
+
+        mode_info = load_eigenfreq_Ouroboros(run_info, mode_type, n_q = n_q, l_q = l_q, i_toroidal = i_toroidal)
+
+    elif run_info['code'] == 'mineos':
+
+        mode_info = load_eigenfreq_Mineos(run_info, mode_type, n_q = n_q, l_q = l_q)
+
+    return mode_info
+
+def load_eigenfunc(run_info, mode_type, n, l, i_toroidal = None, norm_args = {'norm_func' : 'mineos', 'units' : 'SI', 'omega' : None}):
+
+    if run_info['code'] == 'ouroboros':
+
+        eigenfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal, **norm_args)
+
+    elif run_info['code'] == 'mineos':
+
+        eigenfunc_dict = load_eigenfunc_Mineos(run_info, mode_type, n, l, **norm_args)
+
+    else:
+
+        raise ValueError
+
+    return eigenfunc_dict
+
+def align_mode_lists(n_0, l_0, n_1, l_1):
+
+    num_modes_0 = len(n_0)
+    #f_1_sorted_by_0 = np.zeros(num_modes_0)
+    
+    i_align_0 = np.array(list(range(num_modes_0)), dtype = np.int)
+    i_align_1 = np.zeros(num_modes_0, dtype = np.int) - 1
+    for i in range(num_modes_0):
+
+        j = np.where((l_1 == l_0[i]) & (n_1 == n_0[i]))[0]
+        
+        assert len(j) < 2
+        if len(j) == 1:
+
+            #f_1_sorted_by_0[i] = f_1[j]
+            i_align_1[i] = j
+
+        else:
+
+            #f_1_sorted_by_0[i] = np.nan
+            i_align_0[i] = -1 
+
+    #i_good = np.where(~np.isnan(f_1_sorted_by_0))[0]
+    i_good = np.where(i_align_0 >= 0)[0]
+    n = n_0[i_good]
+    l = l_0[i_good]
+    i_align_0 = i_align_0[i_good]
+    i_align_1 = i_align_1[i_good]
+
+    return n, l, i_align_0, i_align_1
 
 # Manipulating Earth models. --------------------------------------------------
 def get_r_fluid_solid_boundary(radius, vs):
@@ -1063,6 +1153,8 @@ def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_bo
     i_fluid_solid_boundary_model = list(i_fluid_solid_boundary_model)
     i_fluid_solid_boundary_model.insert(0, 0)
     i_fluid_solid_boundary_model.append(None)
+
+
     
     x_list = []
     for i in range(n_parts):
@@ -1072,7 +1164,7 @@ def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_bo
 
         i0_model = i_fluid_solid_boundary_model[i]
         i1_model = i_fluid_solid_boundary_model[i + 1]
-
+        
         x_i = np.interp(r[i0 : i1], r_model[i0_model : i1_model], x_model[i0_model : i1_model])
         x_list.append(x_i)
 
