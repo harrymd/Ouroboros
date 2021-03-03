@@ -21,10 +21,10 @@ from scipy.linalg import block_diag
 from scipy.interpolate import interp1d
 import scipy.sparse as sps
 
-from common import mkdir_if_not_exist, load_model
-import FEM
-import lib
-import setup
+from Ouroboros.common import mkdir_if_not_exist, load_model, get_path_adjusted_model
+from Ouroboros.modes import FEM
+from Ouroboros.modes import lib
+from Ouroboros.modes import setup
 
 # Set G value (units of cm^3 g^(-1)s^(-2)*e-6). 
 ## G value updated to current value based on Wikipedia.
@@ -39,7 +39,14 @@ def toroidal_modes(run_info):
     '''
 
     # Unpack input.
-    model_path  = run_info['path_model']
+    if run_info['use_attenuation']:
+
+        model_path = get_path_adjusted_model(run_info)
+
+    else:
+
+        model_path  = run_info['path_model']
+
     dir_output  = run_info['dir_output']
     dir_type    = run_info['dirs_type']['T']
     lmin, lmax  = run_info['l_lims']
@@ -181,7 +188,13 @@ def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickne
 def radial_modes(run_info):
 
     # Unpack input.
-    model_path  = run_info['path_model']
+    if run_info['use_attenuation']:
+
+        model_path = get_path_adjusted_model(run_info)
+
+    else:
+
+        model_path  = run_info['path_model']
     dir_output  = run_info['dir_output']
     dir_type    = run_info['dirs_type']['R']
     nmin, nmax  = run_info['n_lims']
@@ -437,7 +450,13 @@ def helmholtz_R_GP(
 def spheroidal_modes(run_info):
 
     # Unpack input.
-    model_path  = run_info['path_model']
+    if run_info['use_attenuation']:
+
+        model_path = get_path_adjusted_model(run_info)
+
+    else:
+
+        model_path  = run_info['path_model']
     dir_output  = run_info['dir_output']
     dir_type    = run_info['dirs_type']['S']
     lmin, lmax  = run_info['l_lims']
@@ -996,8 +1015,14 @@ def process_eigen_radial_or_spheroidal(
             file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
             path_eigenfunc = os.path.join(dir_eigenfunc, file_eigenfunc)
             if switch in ['S_noGP', 'S_G', 'S_GP']:
+                
+                # Create columns in output array for gradient and potential
+                # which are calculated later.
+                Up = np.zeros(U_eigen.shape)
+                Vp = np.zeros(U_eigen.shape)
+                P = np.zeros(U_eigen.shape)
 
-                out_arr = np.array([1000.0*xx, U_eigen, V_eigen])
+                out_arr = np.array([1000.0*xx, U_eigen, V_eigen, Up, Vp, P])
 
             elif switch in['R_noGP', 'R_G', 'R_GP']:
 

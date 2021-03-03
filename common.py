@@ -131,6 +131,7 @@ def read_Ouroboros_input_file(path_input_file):
         l_min, l_max    = [int(x) for x in in_id.readline().split()[1:]]
         n_layers        = int(in_id.readline().split()[1])
         use_attenuation = bool(int(in_id.readline().split()[1]))
+        f_target_mHz    = float(in_id.readline().split()[1])
 
     name_model = os.path.splitext(os.path.basename(path_model))[0]
 
@@ -172,6 +173,7 @@ def read_Ouroboros_input_file(path_input_file):
     Ouroboros_info['n_lims']        = [n_min, n_max]
     Ouroboros_info['n_layers']      = n_layers
     Ouroboros_info['use_attenuation'] = use_attenuation
+    Ouroboros_info['f_target_mHz']  = f_target_mHz
 
     return Ouroboros_info
 
@@ -378,6 +380,7 @@ def load_model_full(model_path):
 
         in_id.readline()
         T_ref = float(in_id.readline().split()[1])
+        n_layers, i_icb, i_cmb = [int(x) for x in in_id.readline().split()]
 
     # Load the data.
     model_data = np.loadtxt(model_path, skiprows = 3)
@@ -399,6 +402,7 @@ def load_model_full(model_path):
     Q_mu    =  model_data[:, 5]
     v_ph    =  model_data[:, 6]
     v_sh    =  model_data[:, 7]
+    eta     =  model_data[:, 8]
 
     # Derived quantities.
     # v_p       Simple isotropic mean P-wave speed in m/s.
@@ -421,17 +425,29 @@ def load_model_full(model_path):
     model['v_sh']   = v_sh
     model['Q_ka']   = Q_ka
     model['Q_mu']   = Q_mu
+    model['eta']    = eta
     model['v_p']    = v_p
     model['v_s']    = v_s
     model['mu']     = mu
     model['ka']     = ka 
-    model['n_layers'] = len(r)
+    model['n_layers'] = n_layers
+    model['i_icb'] = i_icb
+    model['i_cmb'] = i_cmb
 
     return model
+
+def get_path_adjusted_model(run_info):
+
+    name_out = '{:}_at_{:>06.3f}_mHz.txt'.format(run_info['name_model'],
+                                               run_info[ 'f_target_mHz'])
+    path_out = os.path.join(run_info['dir_output'], name_out)
+
+    return path_out
 
 def mode_types_to_jcoms(mode_types):
 
     jcoms = []
+
     for i, mode_type in enumerate(['R', 'T', 'S', 'I']):
 
         if mode_type in mode_types:
@@ -634,18 +650,31 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # See Ouroboros/docs/Ouroboros_normalisation_notes.pdf.
     if units == 'ouroboros':
 
-        En = 1.0
+        eigfunc_norm = 1.0
+
+        grad_norm = 1.0
+
+        pot_norm = 1.0
 
     elif units == 'mineos':
 
         r_n = 6371.0E3 # m
         rho_n = 5515.0 # kg/m3
         G = 6.674E-11 # SI units.
-        En = rho_n*np.sqrt((1.0E-9)*np.pi*G*((r_n)**3.0))
+
+        eigfunc_norm = rho_n*np.sqrt((1.0E-9)*np.pi*G*((r_n)**3.0))
+
+        grad_norm = r_n*1.0E-3
+
+        pot_norm = np.sqrt(r_n/(1.0E3*np.pi*G)) 
 
     elif units == 'SI':
 
-        En = np.sqrt(1.0E-9)
+        eigfunc_norm = np.sqrt(1.0E-9)
+
+        grad_norm = 1.0E-3
+
+        pot_norm = 1.0E3*np.sqrt(1.0E-9)
 
     else:
 
@@ -653,13 +682,14 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
     if norm_func == 'DT':
 
-        assert omega is not None, 'To apply D&T normalisation, the angular frequency (rad per s) must be specified.'
-        En = En*omega
+        eigfunc_norm = eigfunc_norm*omega
+        pot_norm = pot_norm*omega
         k = np.sqrt(l*(l + 1.0))
 
     else:
-
+        
         assert norm_func == 'mineos', 'Options: mineos, DT'
+        #pot_norm = pot_norm/omega
 
     # Radial case.
     if mode_type == 'R':
@@ -668,23 +698,29 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
 
         # Apply normalisation.
-        U = En*U
+        U = eigfunc_norm*U
 
         eigenfunc_dict = {'r' : r, 'U' : U}
 
     # Spheroidal case.
     elif mode_type == 'S':
 
-        r, U, V = np.load(path_eigenfunc)
+        r, U, V, Up, Vp, P, Pp = np.load(path_eigenfunc)
 
         # Apply normalisation.
-        U = U*En
-        V = V*En
+        U   = U*eigfunc_norm
+        V   = V*eigfunc_norm
+        Up  = Up*eigfunc_norm*grad_norm
+        Vp  = Vp*eigfunc_norm*grad_norm
+        P   = P*pot_norm
+        Pp  = Pp*pot_norm*grad_norm
         if norm_func == 'DT':
 
-            V = V*k
+            V   = V*k
+            Vp  = Vp*k
 
-        eigenfunc_dict = {'r' : r, 'U' : U, 'V' : V}
+        eigenfunc_dict = {'r' : r, 'U' : U, 'V' : V, 'Up' : Up, 'Vp' : Vp,
+                            'P' : P, 'Pp' : Pp}
         
     # Toroidal case.
     elif mode_type == 'T':
@@ -692,7 +728,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         r, W = np.load(path_eigenfunc)
 
         # Apply normalisation.
-        W = W*En
+        W = W*eigfunc_norm
         if norm_func == 'DT':
 
             W = W*k
@@ -708,110 +744,6 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     eigenfunc_dict['r'] = eigenfunc_dict['r']*1.0E3
 
     return eigenfunc_dict
-
-def load_potential_Ouroboros(Ouroboros_info, mode_type, n, l, norm_func = 'mineos', units = 'SI', omega = None):
-
-    if mode_type != 'S':
-
-        raise NotImplementedError
-
-    # Find the directory containing the eigenfunctions (which is contained
-    # within the eigenvalue directory) based on the Ouroboros parameters.
-    _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-    dir_eigenfuncs  = os.path.join(dir_eigval, 'eigenfunctions')
-    dir_potential = os.path.join(dir_eigval, 'potential')
-    file_potential = 'P_{:>05d}_{:>05d}.npy'.format(n, l)
-    path_potential = os.path.join(dir_potential, file_potential)
-
-    ## Define normalisation constants.
-    if units in ['mineos']:
-
-        r_n = 6371.0E3 # m
-        rho_n = 5515.0 # kg/m3
-        G = 6.674E-11 # SI units.
-
-    if units == 'mineos':
-
-        Pn = np.sqrt(r_n/(1.0E3*np.pi*G)) 
-
-    elif units == 'ouroboros':
-
-        Pn = 1.0
-
-    elif units == 'SI':
-
-        Pn = 1.0E3*np.sqrt(1.0E-9)
-
-    if norm_func == 'mineos':
-
-        Pn = Pn/omega
-
-    else:
-
-        assert norm_func == 'DT'
-
-    # Load potential.
-    r, P = np.load(path_potential)
-
-    # Apply normalisation.
-    P = Pn*P
-
-    return r, P
-
-def load_gradient_Ouroboros(Ouroboros_info, mode_type, n, l, norm_func = 'mineos', units = 'SI', omega = None):
-
-    if mode_type != 'S':
-
-        raise NotImplementedError
-
-    # Find the directory containing the eigenfunctions (which is contained
-    # within the eigenvalue directory) based on the Ouroboros parameters.
-    _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-    dir_gradient = os.path.join(dir_eigval, 'gradient')
-    file_gradient = 'grad_{:>05d}_{:>05d}.npy'.format(n, l)
-    path_gradient = os.path.join(dir_gradient, file_gradient)
-
-    ## Define normalisation constants.
-    if units in ['mineos']:
-
-        r_n = 6371.0E3 # m
-        rho_n = 5515.0 # kg/m3
-        G = 6.674E-11 # SI units.
-    
-    print(units, norm_func)
-    if units == 'mineos':
-
-        Epn = rho_n*np.sqrt((1.0E-9)*np.pi*G*((r_n)**3.0))*(r_n*1.0E-3)
-
-    elif units == 'ouroboros':
-
-        Epn = 1.0
-
-    elif units == 'SI':
-
-        Epn = np.sqrt(1.0E-9)/1.0E3
-
-    if norm_func == 'mineos':
-
-        Epn = Epn/omega
-        k = np.sqrt(l*(l + 1.0))
-
-    else:
-
-        assert norm_func == 'DT'
-
-    # Load gradient.
-    r, Up, Vp = np.load(path_gradient)
-
-    # Apply normalisation.
-    Up = Up*Epn
-    Vp = Vp*Epn
-
-    if norm_func == 'mineos':
-
-        Vp = Vp/k
-
-    return r, Up, Vp 
 
 def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
     

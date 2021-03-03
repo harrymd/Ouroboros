@@ -5,14 +5,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from Ouroboros.plot.plot_kernels_brute import get_kernel_brute
-from Ouroboros.common import get_Ouroboros_out_dirs, mkdir_if_not_exist, read_Ouroboros_input_file
+from Ouroboros.common import get_Ouroboros_out_dirs, mkdir_if_not_exist, read_input_file
 
 def main():
 
     # Parse the command-line arguments.
     parser = argparse.ArgumentParser()
     #
-    parser.add_argument('path_to_input_file', help = 'File path (relative or absolute) to Ouroboros input file.')
+    parser.add_argument('path_input', help = 'File path (relative or absolute) to Ouroboros input file.')
     parser.add_argument('mode_type', choices = ['R', 'S', 'T'], help = 'Mode type (radial, spheroidal, or toroidal).')
     parser.add_argument('n', type = int, help = 'Radial order.')
     parser.add_argument('l', type = int, help = 'Angular order.')
@@ -22,7 +22,7 @@ def main():
     args = parser.parse_args()
 
     # Rename input arguments.
-    path_input = args.path_to_input_file
+    path_input = args.path_input
     mode_type = args.mode_type
     n = args.n
     l = args.l
@@ -31,7 +31,7 @@ def main():
     #i_toroidal = args.layer_number
 
     # Read the input file.
-    run_info = read_Ouroboros_input_file(path_input)
+    run_info = read_input_file(path_input)
 
     # Load the kernels for this mode.
     _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
@@ -44,15 +44,14 @@ def main():
     kernel_arr = np.load(path_kernel)
 
     # Unpack the array.
-    #r, g, P, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop = kernel_arr
-    r, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop = kernel_arr
+    r, K_ka, K_mu = kernel_arr
     # Convert from m to km.
     r = r*1.0E-3
 
     # Multiply the kernel by a fixed constant to give a value close to 1.
     #param_scale_exponent_dict = {'ka' : 6, 'mu' : 6, 'rho' : 3}
-    param_scale_exponent_dict = {'ka' : 7, 'mu' : 7, 'rho' : 4}
-    #param_scale_exponent_dict = {'ka' : 0, 'mu' : 0, 'rho' : 0}
+    #param_scale_exponent_dict = {'ka' : 7, 'mu' : 7, 'rho' : 4}
+    param_scale_exponent_dict = {'ka' : 0, 'mu' : 0, 'rho' : 0}
 
     # Get the label string for this parameter.
     param_unit_dict = {'ka' : 'GPa', 'mu' : 'GPa', 'rho' : '(g cm$^{-3}$)'}
@@ -63,9 +62,12 @@ def main():
     font_size_label = 12
 
     fig, ax_arr = plt.subplots(1, 3, figsize = (11.0, 8.5), sharey = True)
-    array_list = np.array([K_ka, K_mu, K_rho])
-    param_list = ['ka', 'mu', 'rho']
-    for i in range(3):
+    #array_list = np.array([K_ka, K_mu, K_rho])
+    array_list = np.array([K_ka, K_mu])
+    #param_list = ['ka', 'mu', 'rho']
+    param_list = ['ka', 'mu']
+    #for i in range(3):
+    for i in range(2):
         
         param = param_list[i]
 
@@ -114,19 +116,9 @@ def main():
     save = True
     if save:
         
-        run_info['use_mineos'] = False
-        if run_info['use_mineos']:
-            
-            raise NotImplementedError
-            #fig_name = 'eigfunc_Mineos'
-            #dir_out = run_info['dir_output']
-            #dir_plot = os.path.join(dir_out, 'plots')
-
-        else:
-
-            fig_name = 'eigfunc_Ouroboros'
-            _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
-            dir_plot = os.path.join(dir_out, 'plots')
+        fig_name = 'kernel'
+        _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
+        dir_plot = os.path.join(dir_out, 'plots')
 
         mkdir_if_not_exist(dir_plot)
 

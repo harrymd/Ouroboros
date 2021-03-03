@@ -4,15 +4,12 @@ Different scripts are required for radial/spheroidal/toroidal, solid/fluid and n
 '''
 
 import numpy as np
+    
+from Ouroboros.constants import G
+from Ouroboros.modes import lib
 
-import lib
-
-# Define constants.
-# G     Gravitational constant, units of cm^3 g^(-1) s^(-2) * e-6
-# Wikipedia.
-#G = 6.67408e-2 
-# Mineos. 
-G = 6.6723e-2 
+# Convert gravitational constant to units of cm^3 g^(-1) s^(-2) * e-6.
+G = G*1.0E9 # Convert to cm
 # tol_FEM   Used for checking if value is effectively 0.
 tol_FEM = 1e-16
 

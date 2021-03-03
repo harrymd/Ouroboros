@@ -10,22 +10,103 @@ from Ouroboros.common import (get_Ouroboros_out_dirs,
                         load_model, read_Ouroboros_input_file)
 from Ouroboros.constants import G
 
+def potential_all_modes(run_info, mode_type):
+
+    # Ignore attenuation re-labelling.
+    run_info['use_attenuation'] = False
+
+    # Set normalisation of eigenfunctions (and therefore potential).
+    # Use Dahlen and Tromp normalisation function ('DT') so that we can
+    # use expressions from Dahlen and Tromp without modification.
+    # Use Ouroboros units so output is consistent with eigenfunctions.
+    normalisation_args = {'norm_func' : 'DT', 'units' : 'ouroboros'}
+
+    # Get the density profile.
+    # r_rho km
+    # rho   kg/m3
+    r_rho, rho = get_rho(run_info)
+
+    # Loop over modes.
+
+    # Get output directory.
+    _, _, _, dir_output = \
+        get_Ouroboros_out_dirs(run_info, mode_type)
+
+    mode_info = load_eigenfreq_Ouroboros(run_info, mode_type)
+    n = mode_info['n']
+    l = mode_info['l']
+    f = mode_info['f']
+
+    num_modes = len(n)
+
+    for i in range(num_modes):
+
+        #print('{:>5d} {:>1} {:>5d}'.format(n[i], mode_type, l[i]))
+
+        # To convert from Ouroboros normalisation to Dahlen and Tromp
+        # normalisation we must provide the mode frequency in
+        # rad per s.
+        f_rad_per_s = f[i]*1.0E-3*2.0*np.pi
+        if normalisation_args['norm_func'] == 'DT':
+            normalisation_args['omega'] = f_rad_per_s
+
+        if mode_type == 'R':
+
+            raise NotImplementedError
+            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                        **normalisation_args)
+
+        elif mode_type == 'S': 
+
+            potential_wrapper(run_info, dir_output, mode_type, n[i], l[i], rho, **normalisation_args)
+
+        elif mode_type == 'T':
+
+            raise NotImplementedError
+            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal,
+                        **normalisation_args)
+
+            # Gradient not implemented yet.
+            Wp = np.zeros(W.shape)
+
+        else:
+
+            raise ValueError
+    
+    return
+
 def potential_wrapper(run_info, dir_output, mode_type, n, l, rho, **normalisation_args):
     
     # Load eigenfunction.
-    r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+    eigfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
                     **normalisation_args)
+    r = eigfunc_dict['r']*1.0E-3 # Units of km.
+    U = eigfunc_dict['U']
+    V = eigfunc_dict['V']
 
     # Calculate potential.
     P = potential(r, U, V, l, rho)
+    # Convert to Mineos normalisation function for consistency with other
+    # outputs.
+    P = P/normalisation_args['omega']
+
+    # Load eigenfunction again with Ouroboros units.
+    eigfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                        norm_func = 'mineos', units = 'ouroboros',
+                        omega = normalisation_args['omega'])
 
     # Save.
-    dir_potential = os.path.join(dir_output, 'potential')
-    file_out = 'P_{:>05d}_{:>05d}.npy'.format(n, l)
-    path_out = os.path.join(dir_potential, file_out)
+    file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
+    path_out = os.path.join(dir_output, 'eigenfunctions', file_eigenfunc)
+    #dir_potential = os.path.join(dir_output, 'potential')
+    #file_out = 'P_{:>05d}_{:>05d}.npy'.format(n, l)
+    #path_out = os.path.join(dir_potential, file_out)
     #
-    mkdir_if_not_exist(dir_potential)
-    out_arr = np.array([r, P])
+    #mkdir_if_not_exist(dir_potential)
+    out_arr = np.array([eigfunc_dict['r']*1.0E-3,
+                        eigfunc_dict['U'],  eigfunc_dict['V'],
+                        eigfunc_dict['Up'], eigfunc_dict['Vp'],
+                        P, eigfunc_dict['Pp']])
     print("Saving to {:}".format(path_out))
     np.save(path_out, out_arr)
 
@@ -124,9 +205,9 @@ def get_rho(run_info):
     n = mode_info['n']
     l = mode_info['l']
     f = mode_info['f']
-    eigfunc_list = load_eigenfunc_Ouroboros(run_info, mode_type, n[0], l[0])
-    r = eigfunc_list[0]
-    r = r
+    dummy_value = 1.0
+    eigfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n[0], l[0], omega = dummy_value)
+    r = eigfunc_dict['r']*1.0E-3
 
     # Find the fluid-solid boundary points in the model.
     i_fluid_model, r_solid_fluid_boundary_model, i_fluid_solid_boundary_model =\
@@ -153,67 +234,12 @@ def main():
 
     # Read input file.
     run_info = read_Ouroboros_input_file(path_input)
-
-    # Set normalisation of eigenfunctions (and therefore potential).
-    # Use Dahlen and Tromp normalisation function ('DT') so that we can
-    # use expressions from Dahlen and Tromp without modification.
-    # Use Ouroboros units so output is consistent with eigenfunctions.
-    normalisation_args = {'norm_func' : 'DT', 'units' : 'ouroboros'}
-
-    # Get the density profile.
-    r_rho, rho = get_rho(run_info)
-
-    # Loop over modes.
-
-    #
-    for mode_type in ['S']:
-
-        # Get output directory.
-        _, _, _, dir_output = \
-            get_Ouroboros_out_dirs(run_info, mode_type)
-
-        mode_info = load_eigenfreq_Ouroboros(run_info, mode_type)
-        n = mode_info['n']
-        l = mode_info['l']
-        f = mode_info['f']
-
-        num_modes = len(n)
-
-        for i in range(num_modes):
-        #for i in [5]:
-
-            #print('{:>5d} {:>1} {:>5d}'.format(n[i], mode_type, l[i]))
-
-            # To convert from Ouroboros normalisation to Dahlen and Tromp
-            # normalisation we must provide the mode frequency in
-            # rad per s.
-            f_rad_per_s = f[i]*1.0E-3*2.0*np.pi
-            if normalisation_args['norm_func'] == 'DT':
-                normalisation_args['omega'] = f_rad_per_s
-
-            if mode_type == 'R':
-
-                raise NotImplementedError
-                r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
-                            **normalisation_args)
-
-            elif mode_type == 'S': 
-
-                potential_wrapper(run_info, dir_output, mode_type, n[i], l[i], rho, **normalisation_args)
-
-            elif mode_type == 'T':
-
-                raise NotImplementedError
-                r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal,
-                            **normalisation_args)
-
-                # Gradient not implemented yet.
-                Wp = np.zeros(W.shape)
-
-            else:
-
-                raise ValueError
     
+    # Loop over modes.
+    for mode_type in run_info['mode_types']:
+
+        potential_all_modes(run_info, mode_type)
+
     return
 
 if __name__ == '__main__':

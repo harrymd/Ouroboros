@@ -8,8 +8,8 @@ import time
 import numpy as np
 from scipy.linalg import eigh
 
-from common import mkdir_if_not_exist, read_Ouroboros_input_file, get_Ouroboros_out_dirs
-from compute_modes import prep_fem, build_matrices_radial_or_spheroidal, build_matrices_toroidal_and_solve, process_eigen_radial_or_spheroidal, process_eigen_toroidal
+from Ouroboros.common import mkdir_if_not_exist, read_Ouroboros_input_file, get_Ouroboros_out_dirs
+from Ouroboros.modes.compute_modes import prep_fem, build_matrices_radial_or_spheroidal, build_matrices_toroidal_and_solve, process_eigen_radial_or_spheroidal, process_eigen_toroidal
 
 # -----------------------------------------------------------------------------
 def kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p): 
@@ -19,7 +19,7 @@ def kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p):
     #l_min, l_max    = run_info['l_lims']
     #n_min, n_max    = run_info['n_lims']
     num_elmt        = run_info['n_layers']
-    g_switch        = run_info['g_switch']
+    grav_switch        = run_info['grav_switch']
     
     # Create kernel dictionary.
     dir_kernel = os.path.join(dir_output, 'kernels_brute')
@@ -28,13 +28,13 @@ def kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p):
     # Get the switch string.
     if mode_type in ['R', 'S']:
 
-        g_switch_str_dict = {0 : 'noGP', 1 : 'G', 2 : 'GP'}
-        g_switch_str = g_switch_str_dict[g_switch]
-        switch = '{:}_{:}'.format(mode_type, g_switch_str)
+        grav_switch_str_dict = {0 : 'noGP', 1 : 'G', 2 : 'GP'}
+        grav_switch_str = grav_switch_str_dict[grav_switch]
+        switch = '{:}_{:}'.format(mode_type, grav_switch_str)
 
     else:
 
-        g_switch_str = None
+        grav_switch_str = None
         switch = 'T'
 
     # Set up the model and various finite-element parameters.
@@ -86,7 +86,7 @@ def kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p):
             rho, radius,
             block_type, brk_radius, brk_num, layers,
             dir_eigenfunc, path_eigenvalues,
-            d_p, switch, g_switch_str,
+            d_p, switch, grav_switch_str,
             dir_kernel)
 
 def kernel_wrapper(run_info, mode_type, param_switch, parallel):
@@ -105,7 +105,7 @@ def kernel_wrapper(run_info, mode_type, param_switch, parallel):
             mkdir_if_not_exist(dir_)
     
     ## Create the input file.
-    #write_input_file(dir_type, name_model, g_switch, mode_type, n_lims, l_lims, n_layers)
+    #write_input_file(dir_type, name_model, grav_switch, mode_type, n_lims, l_lims, n_layers)
     
     if mode_type == 'R':
     
@@ -119,29 +119,78 @@ def kernel_wrapper(run_info, mode_type, param_switch, parallel):
     
         if parallel:
             
-            kernel_spheroidal_parallel(run_info, dir_type, param_switch)
-    
-        else:
-    
-            kernel_spheroidal(run_info, dir_type, param_switch)
-    
-    elif mode_type == 'T':
+            #kernel_spheroidal_parallel(run_info, dir_type, param_switch)
+            kernel_spheroidal_single_parallel_wrapper(run_info, dir_type, param_switch)
 
-        if parallel:
-    
-            kernel_toroidal_parallel(run_info, dir_type, param_switch)
+    #mode_type = 'S'
 
-        else:
+    ## Unpack input dictionary.
+    #l_min, l_max    = run_info['l_lims']
+    #n_min, n_max    = run_info['n_lims']
+    #num_elmt        = run_info['n_layers']
 
-            kernel_toroidal(run_info, dir_type, param_switch)
-    
-    else:
-    
-        raise ValueError('Mode type {:} not recognised'.format(mode_type))
-    
-    end_time = time.time()
-    time_elapsed = end_time - start_time
-    print('Time used: {:.2f} seconds.'.format(time_elapsed)) 
+    ## Prepare grid.
+    #(model, vs, count_thick, thickness, essen,
+    # invV, invV_p, invV_V, invV_P,
+    # order, order_p, order_V, order_P,
+    # Dr, Dr_p, Dr_V, Dr_P,
+    # x, x_V, x_P, VX,
+    # rho, radius,
+    # block_type, brk_radius, brk_num, layers,
+    # dir_eigenfunc, path_eigenvalues,
+    # d_p, switch, grav_switch_str,
+    # dir_kernel) = \
+    #         kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p)
+
+    ## Loop over angular order.
+    #if l_min == 0:
+
+    #    l_min_loop = 1
+
+    #else:
+
+    #    l_min_loop = l_min
+
+    ##for l in range(l_min_loop, l_max):
+    #for l in range(l_min_loop, l_min_loop + 1):
+
+    #    if mode_type == 'S':
+
+    #        if parallel:
+
+    #            kernel_radial_or_spheroidal_single_parallel(
+    #                n_min, n_max, l_min, l_max, model, count_thick, thickness,
+    #                invV, invV_p, invV_V, invV_P,
+    #                order, order_p, order_V, order_P,
+    #                Dr, Dr_p, Dr_V, Dr_P,
+    #                rho, radius,
+    #                brk_radius, brk_num, layers, block_type,
+    #                essen, x, x_V, num_elmt,
+    #                d_p,
+    #                switch, param_switch, grav_switch_str,
+    #                dir_kernel, l)
+
+    #        else:
+    #
+    #            kernel_spheroidal(run_info, dir_type, param_switch)
+    #
+    #    elif mode_type == 'T':
+
+    #        if parallel:
+    #    
+    #            kernel_toroidal_parallel(run_info, dir_type, param_switch)
+
+    #        else:
+
+    #            kernel_toroidal(run_info, dir_type, param_switch)
+    #    
+    #    else:
+    #    
+    #        raise ValueError('Mode type {:} not recognised'.format(mode_type))
+    #
+    #end_time = time.time()
+    #time_elapsed = end_time - start_time
+    #print('Time used: {:.2f} seconds.'.format(time_elapsed)) 
 
     return
 
@@ -165,7 +214,7 @@ def kernel_spheroidal(run_info, dir_output, param_switch, d_p_over_p = 1.0E-2):
      rho, radius,
      block_type, brk_radius, brk_num, layers,
      dir_eigenfunc, path_eigenvalues,
-     d_p, switch, g_switch_str,
+     d_p, switch, grav_switch_str,
      dir_kernel) = \
              kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p)
 
@@ -189,7 +238,55 @@ def kernel_spheroidal(run_info, dir_output, param_switch, d_p_over_p = 1.0E-2):
             brk_radius, brk_num, layers, block_type,
             essen, x, x_V, num_elmt,
             d_p,
-            switch, param_switch, g_switch_str,
+            switch, param_switch, grav_switch_str,
+            dir_kernel, l)
+
+    return
+
+def kernel_spheroidal_single_parallel_wrapper(run_info, dir_output, param_switch, d_p_over_p = 1.0E-2):
+
+    mode_type = 'S'
+
+    # Unpack input dictionary.
+    l_min, l_max    = run_info['l_lims']
+    n_min, n_max    = run_info['n_lims']
+    num_elmt        = run_info['n_layers']
+
+    # Prepare grid.
+    (model, vs, count_thick, thickness, essen,
+     invV, invV_p, invV_V, invV_P,
+     order, order_p, order_V, order_P,
+     Dr, Dr_p, Dr_V, Dr_P,
+     x, x_V, x_P, VX,
+     rho, radius,
+     block_type, brk_radius, brk_num, layers,
+     dir_eigenfunc, path_eigenvalues,
+     d_p, switch, grav_switch_str,
+     dir_kernel) = \
+             kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p)
+
+    # Loop over angular order.
+    if l_min == 0:
+
+        l_min_loop = 1
+
+    else:
+
+        l_min_loop = l_min
+
+    #for l in range(l_min_loop, l_max):
+    for l in range(l_min_loop, l_min_loop + 1):
+        
+        kernel_radial_or_spheroidal_single_parallel(
+            n_min, n_max, l_min, l_max, model, count_thick, thickness,
+            invV, invV_p, invV_V, invV_P,
+            order, order_p, order_V, order_P,
+            Dr, Dr_p, Dr_V, Dr_P,
+            rho, radius,
+            brk_radius, brk_num, layers, block_type,
+            essen, x, x_V, num_elmt,
+            d_p,
+            switch, param_switch, grav_switch_str,
             dir_kernel, l)
 
     return
@@ -212,7 +309,7 @@ def kernel_spheroidal_parallel(run_info, dir_output, param_switch, d_p_over_p = 
      rho, radius,
      block_type, brk_radius, brk_num, layers,
      dir_eigenfunc, path_eigenvalues,
-     d_p, switch, g_switch_str,
+     d_p, switch, grav_switch_str,
      dir_kernel) = \
              kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p)
 
@@ -244,7 +341,7 @@ def kernel_spheroidal_parallel(run_info, dir_output, param_switch, d_p_over_p = 
                         brk_radius, brk_num, layers, block_type,
                         essen, x, x_V, num_elmt,
                         d_p,
-                        switch, param_switch, g_switch_str,
+                        switch, param_switch, grav_switch_str,
                         dir_kernel)
 
         pool.map(kernel_spheroidal_single_partial, l_span)
@@ -258,16 +355,16 @@ def kernel_radial_or_spheroidal_single(
         brk_radius, brk_num, layers, block_type,
         essen, x, x_V, num_elmt,
         d_p,
-        switch, param_switch, g_switch_str,
+        switch, param_switch, grav_switch_str,
         dir_kernel, l):
 
     if l == 0:
 
-        print('kernel_radial (switch = {:})'.format(g_switch_str))
+        print('kernel_radial (switch = {:})'.format(grav_switch_str))
 
     else:
 
-        print('kernel_spheroidal (switch = {:}): l = {:>5d} (from {:>5d} to {:>5d})'.format(g_switch_str, l, l_min, l_max))
+        print('kernel_spheroidal (switch = {:}): l = {:>5d} (from {:>5d} to {:>5d})'.format(grav_switch_str, l, l_min, l_max))
     
     # Get the reference frequencies (for the unperturbed model). ----------
 
@@ -378,6 +475,158 @@ def kernel_radial_or_spheroidal_single(
 
     return
 
+def kernel_radial_or_spheroidal_single_parallel(
+        n_min, n_max, l_min, l_max, model, count_thick, thickness,
+        invV, invV_p, invV_V, invV_P,
+        order, order_p, order_V, order_P,
+        Dr, Dr_p, Dr_V, Dr_P,
+        rho, radius,
+        brk_radius, brk_num, layers, block_type,
+        essen, x, x_V, num_elmt,
+        d_p,
+        switch, param_switch, grav_switch_str,
+        dir_kernel, l):
+
+    if l == 0:
+
+        print('kernel_radial (switch = {:})'.format(grav_switch_str))
+
+    else:
+
+        print('kernel_spheroidal (switch = {:}): l = {:>5d} (from {:>5d} to {:>5d})'.format(grav_switch_str, l, l_min, l_max))
+    
+    # Get the reference frequencies (for the unperturbed model). ----------
+
+    print('Calculating reference frequencies.')
+
+    # Construct the matrices A and B.
+    A_singularity, B_singularity, A0_inv,                   \
+    E_singularity, B_eqv_pressure, block_type, block_len =  \
+        build_matrices_radial_or_spheroidal(
+            l, model, count_thick,
+            invV, invV_p, invV_V, invV_P,
+            order, order_p, order_V, order_P,
+            Dr, Dr_p, Dr_V, Dr_P,
+            rho, radius,
+            block_type, brk_radius, brk_num, layers, switch)
+    
+    # Find the eigenvalues and eigenvectors. 
+    eigvals, eigvecs = eigh(A_singularity, B_singularity)
+    
+    # Convert to mHz, remove essential spectrum, renormalise and save.            
+    omega_ref, n_min_r = process_eigen_radial_or_spheroidal(
+        l, eigvals, eigvecs,
+        count_thick, thickness, essen, layers,
+        n_min, n_max, order, order_V,
+        x, x_V,
+        block_type, block_len, A0_inv, E_singularity, B_eqv_pressure,
+        None, None, switch, save = False)
+    
+    # For each element, apply a perturbation to the model and 
+    # calculate the new frequency.
+    n_freqs = len(omega_ref)
+    omega_ptb = np.zeros((num_elmt, n_freqs))
+
+    i_list = np.array(list(range(num_elmt)), dtype = np.int)
+    i_list = i_list[0 : 2]
+
+    # Solve in parallel.
+    n_processes = multiprocessing.cpu_count()
+    print('Creating pool with {:d} processes.'.format(n_processes))
+    with multiprocessing.Pool(processes = n_processes) as pool:
+
+        kernel_spheroidal_single_layer_partial = \
+            partial(
+                kernel_spheroidal_single_layer,
+                param_switch, l, model, count_thick, invV, invV_p, invV_P, invV_V, order, order_p, order_V, order_P, Dr, Dr_p, Dr_V, Dr_P, rho, radius, block_type, block_len, brk_radius, brk_num, layers, switch, thickness, essen, n_min, n_max, x, x_V, d_p)
+
+        results = pool.map(kernel_spheroidal_single_layer_partial, i_list)
+    
+    for i in i_list:
+
+        omega_ptb[i, :] = results[i]
+
+    # Save.
+    # Loop over radial order.
+    for i_n, n in enumerate(range(n_min_r, n_max + 1)): 
+        
+        file_omega_ptb = 'omega_ptb_{:}_{:>05d}_{:>05d}.txt'.format(param_switch, n, l)
+        path_omega_ptb = os.path.join(dir_kernel, file_omega_ptb) 
+    
+        with open(path_omega_ptb, 'w') as out_id:
+            
+            # Write a header with the reference frequency.
+            out_id.write('# Ref: {:>18.14f}\n'.format(omega_ref[i_n]))
+            
+            # Loop over the layers of the model.
+            for i in range(num_elmt):
+            #for i in range(2):
+
+                out_id.write('{:18.14f}\n'.format(omega_ptb[i, i_n]))
+
+    return
+
+def kernel_spheroidal_single_layer(param_switch, l, model, count_thick, invV, invV_p, invV_P, invV_V, order, order_p, order_V, order_P, Dr, Dr_p, Dr_V, Dr_P, rho, radius, block_type, block_len, brk_radius, brk_num, layers, switch, thickness, essen, n_min, n_max, x, x_V, d_p, i):
+
+    print('element: {:>5d}'.format(i)) # Apply the perturbation to the i_th layer.
+
+    if param_switch == 'ka':
+
+        model.ka[i] = model.ka[i] + d_p[i]
+
+    elif param_switch == 'mu':
+
+        if model.mu[i] == 0.0:
+
+            omega_ptb = 0.0    
+            return omega_ptb
+
+        else:
+
+            model.mu[i] = model.mu[i] + d_p[i]
+
+    elif param_switch == 'rho':
+
+        model.rho[i] = model.rho[i] + d_p[i]
+
+    # Construct the matrices A and B for the i_th perturbed model.
+    A_singularity, B_singularity, A0_inv,                   \
+    E_singularity, B_eqv_pressure, block_type, block_len =  \
+        build_matrices_radial_or_spheroidal(
+            l, model, count_thick,
+            invV, invV_p, invV_V, invV_P,
+            order, order_p, order_V, order_P,
+            Dr, Dr_p, Dr_V, Dr_P,
+            rho, radius,
+            block_type, brk_radius, brk_num, layers, switch)
+
+    # Find the eigenvalues and eigenvectors. 
+    eigvals, eigvecs = eigh(A_singularity, B_singularity)
+    
+    # Calculate the eigenfrequencies for the i_th perturbed model.
+    omega_ptb, _ = process_eigen_radial_or_spheroidal(
+        l, eigvals, eigvecs,
+        count_thick, thickness, essen, layers,
+        n_min, n_max, order, order_V,
+        x, x_V,
+        block_type, block_len, A0_inv, E_singularity, B_eqv_pressure,
+        None, None, switch, save = False)
+
+    # Remove the perturbation from the i_th layer.
+    if param_switch == 'ka':
+
+        model.ka[i] = model.ka[i] - d_p[i]
+
+    elif param_switch == 'mu':
+
+        model.mu[i] = model.mu[i] - d_p[i]
+
+    elif param_switch == 'rho':
+
+        model.rho[i] = model.rho[i] - d_p[i]
+
+    return omega_ptb
+
 # -----------------------------------------------------------------------------
 def kernel_radial(run_info, dir_output, param_switch, d_p_over_p = 1.0E-2):
     
@@ -400,7 +649,7 @@ def kernel_radial(run_info, dir_output, param_switch, d_p_over_p = 1.0E-2):
      rho, radius,
      block_type, brk_radius, brk_num, layers,
      dir_eigenfunc, path_eigenvalues,
-     d_p, switch, g_switch_str,
+     d_p, switch, grav_switch_str,
      dir_kernel) = \
              kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p)
 
@@ -414,7 +663,7 @@ def kernel_radial(run_info, dir_output, param_switch, d_p_over_p = 1.0E-2):
          brk_radius, brk_num, layers, block_type,
          essen, x, x_V, num_elmt,
          d_p,
-         switch, param_switch, g_switch_str,
+         switch, param_switch, grav_switch_str,
          dir_kernel, l)
 
     return
@@ -439,7 +688,7 @@ def kernel_toroidal(run_info, dir_output, param_switch, d_p_over_p = 1.0E-2):
      rho, radius,
      block_type, brk_radius, brk_num, layers,
      dir_eigenfunc, path_eigenvalues,
-     d_p, switch, g_switch_str,
+     d_p, switch, grav_switch_str,
      dir_kernel) = \
              kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p)
 
@@ -615,7 +864,7 @@ def kernel_toroidal_parallel(run_info, dir_output, param_switch, d_p_over_p = 1.
      rho, radius,
      block_type, brk_radius, brk_num, layers,
      dir_eigenfunc, path_eigenvalues,
-     d_p, switch, g_switch_str,
+     d_p, switch, grav_switch_str,
      dir_kernel) = \
              kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p)
 
@@ -686,20 +935,20 @@ def main():
     parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
     parser.add_argument("variable", choices = ['ka', 'mu', 'rho', 'all'], help = 'Variable for which the sensitivity kernels will be calculated (bulk modulus, ka; shear modulus, mu; density, rho; all variables, all')
     parser.add_argument("--parallel", action = 'store_true', help = 'Give this flag to run in parallel.')
-    parser.add_argument("--all_g_switches", action = 'store_true', help = 'Give this flag to override gravity switch in input file and calculate kernels for all three gravity switches.')
+    parser.add_argument("--all_grav_switches", action = 'store_true', help = 'Give this flag to override gravity switch in input file and calculate kernels for all three gravity switches.')
     input_args = parser.parse_args()
     Ouroboros_input_file = input_args.path_to_input_file
     name_input = os.path.splitext(os.path.basename(Ouroboros_input_file))[0]
     param_switch = input_args.variable
     parallel = input_args.parallel
-    all_g_switches = input_args.all_g_switches
+    all_grav_switches = input_args.all_grav_switches
 
     # Read the input file.
     Ouroboros_info = read_Ouroboros_input_file(Ouroboros_input_file)
 
-    ## Set the 'g_switch' string: 0 -> noG, 1 -> G, 2 -> GP.
-    #g_switch_strs = ['noGP', 'G', 'GP']
-    #g_switch_str = g_switch_strs[Ouroboros_info['g_switch']]
+    ## Set the 'grav_switch' string: 0 -> noG, 1 -> G, 2 -> GP.
+    #grav_switch_strs = ['noGP', 'G', 'GP']
+    #grav_switch_str = grav_switch_strs[Ouroboros_info['grav_switch']]
 
     for mode_type in Ouroboros_info['mode_types']:
     #for mode_type in ['S']:
@@ -716,13 +965,13 @@ def main():
 
                 param_switch_list = [param_switch]
 
-            if all_g_switches:
+            if all_grav_switches:
 
-                g_switch_list = [0, 1, 2]
+                grav_switch_list = [0, 1, 2]
 
             else:
 
-                g_switch_list = [Ouroboros_info['g_switch']]
+                grav_switch_list = [Ouroboros_info['grav_switch']]
 
         else:
 
@@ -734,11 +983,11 @@ def main():
 
                 param_switch_list = [param_switch]
 
-            g_switch_list = [Ouroboros_info['g_switch']]
+            grav_switch_list = [Ouroboros_info['grav_switch']]
 
-        for g_switch in g_switch_list:
+        for grav_switch in grav_switch_list:
 
-            Ouroboros_info['g_switch'] = g_switch
+            Ouroboros_info['grav_switch'] = grav_switch
 
             for param_switch_i in param_switch_list:
 
@@ -751,22 +1000,22 @@ if __name__ == '__main__':
     main()
 
 # -----------------------------------------------------------------------------
-def write_input_file(dir_out, name_model, g_switch, mode_type, n_lims, l_lims, n_layers):
+def write_input_file(dir_out, name_model, grav_switch, mode_type, n_lims, l_lims, n_layers):
     
     name_input_file = 'input.txt' 
     path_input_file = os.path.join(dir_out, name_input_file)
 
     print('Writing input file: {:}'.format(path_input_file))
 
-    g_switch_dict = { 0 : -1, 1 : 0, 2 : 1}
-    g_switch_val= g_switch_dict[g_switch]
+    grav_switch_dict = { 0 : -1, 1 : 0, 2 : 1}
+    grav_switch_val= grav_switch_dict[grav_switch]
 
     mode_type_dict = {'R': 1, 'T' : 2, 'S' : 3}
     mode_type_val = mode_type_dict[mode_type]
 
     lines = ['{:}.txt'.format(name_model),
                 'eigenvalues.txt',
-                '{:d}'.format(g_switch_val),
+                '{:d}'.format(grav_switch_val),
                 '{:d}'.format(mode_type_val),
                 '{:d} {:d} {:d} {:d}'.format(l_lims[0], l_lims[1], n_lims[0], n_lims[1]),
                 '{:d}'.format(n_layers)]

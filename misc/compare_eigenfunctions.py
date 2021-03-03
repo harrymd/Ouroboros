@@ -57,6 +57,15 @@ def check_sign_S(r, U, V):
 
     return sign
 
+def check_sign_P(r, P):
+
+    # Calculate sign.
+    iP = np.trapz(P, x = r)
+
+    sign = np.sign(iP)
+
+    return sign
+
 def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
 
     # Load eigenfunctions.
