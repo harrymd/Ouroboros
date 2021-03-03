@@ -98,7 +98,7 @@ def kernel_wrapper(run_info, mode_type, param_switch, parallel):
     
     # Create output directory chain.
     dir_model, dir_run, dir_g, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
-    for dir_ in [dir_model, dir_run, dir_g, dir_type]:
+    for dir_ in [run_info['dir_output'], dir_model, dir_run, dir_g, dir_type]:
     
         if dir_ is not None:
             
@@ -274,8 +274,8 @@ def kernel_spheroidal_single_parallel_wrapper(run_info, dir_output, param_switch
 
         l_min_loop = l_min
 
-    #for l in range(l_min_loop, l_max):
-    for l in range(l_min_loop, l_min_loop + 1):
+    for l in range(l_min_loop, l_max + 1):
+    #for l in range(l_min_loop, l_min_loop + 1):
         
         kernel_radial_or_spheroidal_single_parallel(
             n_min, n_max, l_min, l_max, model, count_thick, thickness,
@@ -528,7 +528,6 @@ def kernel_radial_or_spheroidal_single_parallel(
     omega_ptb = np.zeros((num_elmt, n_freqs))
 
     i_list = np.array(list(range(num_elmt)), dtype = np.int)
-    i_list = i_list[0 : 2]
 
     # Solve in parallel.
     n_processes = multiprocessing.cpu_count()
