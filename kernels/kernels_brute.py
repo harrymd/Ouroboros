@@ -9,7 +9,7 @@ import numpy as np
 from scipy.linalg import eigh
 
 from Ouroboros.common import mkdir_if_not_exist, read_Ouroboros_input_file, get_Ouroboros_out_dirs
-from Ouroboros.modes.compute_modes import prep_fem, build_matrices_radial_or_spheroidal, build_matrices_toroidal_and_solve, process_eigen_radial_or_spheroidal, process_eigen_toroidal
+from Ouroboros.modes.compute_modes import create_adjusted_model, prep_fem, build_matrices_radial_or_spheroidal, build_matrices_toroidal_and_solve, process_eigen_radial_or_spheroidal, process_eigen_toroidal
 
 # -----------------------------------------------------------------------------
 def kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p): 
