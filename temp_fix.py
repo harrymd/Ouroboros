@@ -11,10 +11,7 @@ def fix_wrapper(run_info, dir_output, mode_type, n, l, **normalisation_args):
     file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
     path_eigenfunc = os.path.join(dir_eigenfunc, file_eigenfunc)
 
-    r, U, V = np.load(path_eigenfunc)
-    Up = np.zeros(U.shape)
-    Vp = np.zeros(U.shape)
-    P = np.zeros(U.shape)
+    r, U, V, Up, Vp, P = np.load(path_eigenfunc)
     Pp = np.zeros(U.shape)
 
     out_arr = np.array([r, U, V, Up, Vp, P, Pp])

@@ -1021,8 +1021,9 @@ def process_eigen_radial_or_spheroidal(
                 Up = np.zeros(U_eigen.shape)
                 Vp = np.zeros(U_eigen.shape)
                 P = np.zeros(U_eigen.shape)
+                Pp = np.zeros(U_eigen.shape)
 
-                out_arr = np.array([1000.0*xx, U_eigen, V_eigen, Up, Vp, P])
+                out_arr = np.array([1000.0*xx, U_eigen, V_eigen, Up, Vp, P, Pp])
 
             elif switch in['R_noGP', 'R_G', 'R_GP']:
 

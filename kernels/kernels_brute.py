@@ -15,7 +15,13 @@ from Ouroboros.modes.compute_modes import prep_fem, build_matrices_radial_or_sph
 def kernel_prep(run_info, dir_output, mode_type, param_switch, d_p_over_p): 
 
     # Unpack input dictionary.
-    model_path      = run_info['path_model']
+    if run_info['use_attenuation']:
+
+        model_path = get_path_adjusted_model(run_info)
+
+    else:
+
+        model_path  = run_info['path_model']
     #l_min, l_max    = run_info['l_lims']
     #n_min, n_max    = run_info['n_lims']
     num_elmt        = run_info['n_layers']
@@ -944,6 +950,10 @@ def main():
 
     # Read the input file.
     Ouroboros_info = read_Ouroboros_input_file(Ouroboros_input_file)
+
+    if Ouroboros_info['use_attenuation']:
+
+        create_adjusted_model(Ouroboros_info)
 
     ## Set the 'grav_switch' string: 0 -> noG, 1 -> G, 2 -> GP.
     #grav_switch_strs = ['noGP', 'G', 'GP']

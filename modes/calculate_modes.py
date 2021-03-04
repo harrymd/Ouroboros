@@ -206,10 +206,10 @@ def main():
             out_id.write('{:>.3f} seconds'.format(elapsed_time))
         
         # Calculate potential.
-        potential_all_modes(run_info, mode_type)
+        potential_all_modes(Ouroboros_info, mode_type)
 
         # Calculate gradient.
-        gradient_all_modes(run_info, mode_type)
+        gradient_all_modes(Ouroboros_info, mode_type)
 
     return
 
