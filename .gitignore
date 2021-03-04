@@ -5,3 +5,5 @@ inputs/CMTs
 old/
 very_old/
 *.sbatch
+kernels_brute*.txt
+kernels_brute*.err
