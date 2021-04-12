@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
 
-from common import get_r_fluid_solid_boundary, load_eigenfreq_Ouroboros, load_model, read_Mineos_input_file, read_Ouroboros_input_file
+from common import get_r_fluid_solid_boundary, load_eigenfreq, load_model, read_input_file
 
 def main():
 
@@ -23,19 +23,21 @@ def main():
     print('Searching for modes in the frequency range {:>10.6f} to {:>10.6f} mHz.'.format(freq_lower, freq_upper))
 
     # Read the input file.
-    if use_mineos:
-    
-        raise NotImplementedError
-        # Read Mineos input file.
-        run_info = read_Mineos_input_file(path_input)
+    run_info = read_input_file(path_input)
 
-    else:
-        
-        # Read Ouroboros input file.
-        run_info = read_Ouroboros_input_file(path_input)
+    #if use_mineos:
+    #
+    #    raise NotImplementedError
+    #    # Read Mineos input file.
+    #    run_info = read_Mineos_input_file(path_input)
 
-    # Store whether Mineos is being used.
-    run_info['use_mineos'] = use_mineos
+    #else:
+    #    
+    #    # Read Ouroboros input file.
+    #    run_info = read_Ouroboros_input_file(path_input)
+
+    ## Store whether Mineos is being used.
+    #run_info['use_mineos'] = use_mineos
 
     # Find the number of solid regions.
     model = load_model(run_info['path_model'])
@@ -44,31 +46,34 @@ def main():
 
     # Load mode information for radial and spheroidal modes.
     mode_info = dict()
-    for mode_type in ['R', 'S']:
+    for mode_type in ['R', 'S', 'T', 'I']:
 
         # Load frequencies of modes.
-        n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type)
+        mode_info[mode_type] = load_eigenfreq(run_info, mode_type)
+        #n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type)
 
-        # Store in dictionary.
-        mode_info[mode_type] = dict()
-        mode_info[mode_type]['n'] = n
-        mode_info[mode_type]['l'] = l 
-        mode_info[mode_type]['f'] = f 
+        ## Store in dictionary.
+        #mode_info[mode_type] = dict()
+        #mode_info[mode_type]['n'] = n
+        #mode_info[mode_type]['l'] = l 
+        #mode_info[mode_type]['f'] = f 
 
-    # Load mode information for toroidal modes.
-    mode_type = 'T'
-    for i in range(n_solid_regions):
+    ## Load mode information for toroidal modes.
+    #if run_info['code'] == 'ouroboros':
 
-        mode_str = '{:}{:>1d}'.format(mode_type, i)
+    #    mode_type = 'T'
+    #    for i in range(n_solid_regions):
 
-        # Load frequencies of modes.
-        n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i)
+    #        mode_str = '{:}{:>1d}'.format(mode_type, i)
 
-        # Store in dictionary.
-        mode_info[mode_str] = dict()
-        mode_info[mode_str]['n'] = n
-        mode_info[mode_str]['l'] = l 
-        mode_info[mode_str]['f'] = f 
+    #        # Load frequencies of modes.
+    #        n, l, f = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i)
+
+    #        # Store in dictionary.
+    #        mode_info[mode_str] = dict()
+    #        mode_info[mode_str]['n'] = n
+    #        mode_info[mode_str]['l'] = l 
+    #        mode_info[mode_str]['f'] = f 
 
     # Count modes.
     sum_n_modes = 0

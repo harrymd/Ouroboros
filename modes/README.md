@@ -79,7 +79,7 @@ python3 plot/plot_dispersion.py inputs/example_input_Ouroboros.txt
 
 The plot will appear on your screen, and will also be saved in `dir_output`, in a subdirectory called `plots/`. By default, the spheroidal modes are plotted, and the radial modes, with *ℓ* = 0, are added automatically if they are found in the output directory:
 
-<img src="../docs/example_dispersion.png" width="90%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
+<img src="../docs/figs//example_dispersion.png" width="90%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
 
 For toroidal modes, you must specify the solid region whose modes you wish to plot (see discussion in section *The format of the output files*, above). For example, to plot the  Earth's mantle toroidal modes you would use the command
 
@@ -101,7 +101,7 @@ python3 plot/plot_eigenfunctions.py inputs/example_input_Ouroboros.txt S 2 4
 
 which yields the following figure:
 
-<img src="../docs/example_eigenfunction.png" width="40%" title ="Example of mode 2S4 from example input file."/>
+<img src="../docs/figs//example_eigenfunction.png" width="40%" title ="Example of mode 2S4 from example input file."/>
 
 Once again, for toroidal modes you must also specify the index of the solid region (see *Viewing the mode frequencies*, above) as follows:
 
@@ -129,7 +129,7 @@ To calculate the modes of a spherically-symmetric planet, we apply the Rayleigh-
 
 The structure of the code is described by the following flowchart:
 
-![](../docs/flowchart.png "Flowchart for Ouroboros code")
+![](../docs/figs//flowchart.png "Flowchart for Ouroboros code")
 
 <a href="#top">Back to top</a>
 
@@ -141,21 +141,43 @@ The structure of the code is described by the following flowchart:
 
 The *Mineos* code (Masters et al., 2011) is the *de facto* standard for calculation of Earth's normal modes. Here we present a comparison between *Ouroboros* (version 3.s) and *Mineos* (version 1.0.2). We calculated all of the spheroidal modes with *n* < 50, *ℓ* < 60 and *f* < 15 mHz. We used the `demos/prem_noocean.txt` model from *Mineos*, modified by setting attenuation to 0. For *Ouroboros*, we used `n_layers = 700`. We made comparisons with only gravity (`g_switch = 1`, *Mineos* gravity cut off of 0 mHz) and gravity with perturbation (`g_switch = 2`, *Mineos* gravity cut off at arbitrarily high frequency, e.g. 50 mHz). In *Mineos*, gravity cannot be neglected altogether (`g_switch = 0` in *Ouroboros*), so we did not test this case (although all three cases converge for higher-frequency modes). Comparison of the frequencies (shown for the case `g_switch = 1` below) shows that frequency differences are small: less than 0.5 % for all modes except for <sub>2</sub>S<sub>1</sub>. We are not sure the cause of the discrepancy for this mode, which vanishes in the case `g_switch = 2`. The figure shows that the frequencies calculated with *Ouroboros* are systematically higher than the frequencies from *Mineos*, and the discrepancies are largest for modes with low *n* and high *ℓ*. We do not know what causes these systematic differences.
 
-![](../docs/frac_freq_diff_Ouroboros_Mineos_1.png "Comparison of frequencies calculated with Ouroboros and Mineos")
+![](../docs/figs//frac_freq_diff_Ouroboros_Mineos_1.png "Comparison of frequencies calculated with Ouroboros and Mineos")
 
 We can also compare the eigenfunctions, as shown in the figure below. The agreement is within 0.5 % in most cases, but significant differences are observed for the mode <sub>2</sub>S<sub>1</sub> (discussed above) and modes near occurring near the intersections of branches. We discuss this latter case in detail in Ye (2018) and Matchette-Downes et al. (in prep.). In short, we believe that the discrepancy is due to the failure of the numerical integration approach of *Mineos* to guarantee the orthogonality of the eigenfunctions, especially for the Stoneley-type modes (solid-fluid interface modes) for which it is difficult to enforce the boundary conditions. Apart from near-intersection modes, discrepancies are also found for modes with higher *ℓ*. We do not think these differences are intrinsic, but probably just due to the coarse grid in the default *Mineos* model (*Mineos* models have a hard-coded limit of 350 nodes, although this could easily be changed and re-compiled). For most practical applications, the differences between *Mineos* and *Ouroboros* will probably not be significant.
 
-![](../docs/eigfunc_diff_Ouroboros_Mineos_1.png "Comparison of eigenfunctions calculated with Ouroboros and Mineos")
+![](../docs/figs//eigfunc_diff_Ouroboros_Mineos_1.png "Comparison of eigenfunctions calculated with Ouroboros and Mineos")
 
 ### Computational cost
 
 The code is not optimised for speed, and tends to be slower than *Mineos* for calculating a similar number of modes. This is probably due to use of double-precision variables, initialisation of many variables including complicated objects (*Mineos* is written in Fortran, which promotes very lean code) and intrinsic differences between our method (FEM) and the integration method used in *Mineos*. Nonetheless, the modes required for most Earth-science and planetary-science applications can be calculated on a laptop in a reasonable amount of time. 
 
+```
 spheroidal_modes (switch = S_G): l =    50 (from     0 to    50)
 Total time used: 2970.022 s
+```
 
 For example, the spheroidal modes of an Earth model with 700 layers can be calculated for *ℓ* up to 50 and *n* up to 60 in about X seconds without gravity, Y seconds with gravity, and Z seconds with gravity and perturbation using a single core of an [SKX compute node on the Stampede2 cluster](https://portal.tacc.utexas.edu/user-guides/stampede2#overview-skxcomputenodes). The eigenvalue problem at each value of *ℓ* is independent of the other *ℓ*-values, so it is trivial to parallelise the loop over *ℓ* ('embarrassingly parallel') if faster calculation is necessary.
 
 ### Computational limitations
 
 We have not explored the limits of the code for high frequencies, large values of *ℓ*, or very complicated models. Calculations are performed at double precision, so numerical errors are probably small compared to typical model or data uncertainties in geophysics.
+
+### Known issues
+
+#### Frequency shift relative to *Mineos*
+
+Discussed above.
+
+#### Instabilities in eigenfunctions
+
+At least one mode (2S1) shows numerical instability in the eigenfunction in the fluid outer core of an Earth model when using the full gravity setting and 700 elements.
+
+![](../docs/figs/error_mode_2S1_G2.png "An error in Ouroboros eigenfunctions.")
+
+#### Discrepancy in sensitivity kernels
+
+The sensitivity kernels are about 4% larger than those calculated with a brute-force approach.
+
+![](../docs/figs/kernel_00004_S_00004_2.png "Sensitivity kernels slightly too small.")
+
+Additionally, visual comparison with the examples given in Dahlen and Tromp (1998) figure 9.13 (page 352) shows a small disagreement in the toroidal sensitivity for mode 8S2.

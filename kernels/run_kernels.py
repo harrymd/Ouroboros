@@ -4,20 +4,34 @@ import os
 import numpy as np
 
 from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary,
+                        get_path_adjusted_model,
                         interp_n_parts, load_eigenfreq, load_eigenfunc,
                         mkdir_if_not_exist, load_model, read_input_file)
 from Ouroboros.kernels.kernels import get_kernels_S, gravitational_acceleration
 #from Ouroboros.kernels.kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
 
-def kernels_wrapper(run_info, mode_type, model):
+def kernels_wrapper(run_info, mode_type, j_skip = None):
+
+    # Kernels are calculated without attenuation.
+    if run_info['use_attenuation']:
+
+        model_path = get_path_adjusted_model(run_info)
+        #run_info['use_attenuation'] = False
+
+    else:
+        
+        model_path = run_info['path_model']
+
+    # Load the planetary model.
+    model = load_model(model_path)
 
     if mode_type in ['R', 'S']:
 
-        kernels_wrapper_R_or_S(run_info, model, mode_type)
+        kernels_wrapper_R_or_S(run_info, model, mode_type, j_skip = j_skip)
 
     elif mode_type == 'T':
 
-        kernels_wrapper_T(run_info, model)
+        kernels_wrapper_T(run_info, model, j_skip = j_skip)
 
     else:
 
@@ -25,7 +39,7 @@ def kernels_wrapper(run_info, mode_type, model):
 
     return
 
-def kernels_wrapper_R_or_S(run_info, model, mode_type):
+def kernels_wrapper_R_or_S(run_info, model, mode_type, j_skip = None):
 
     # Get a list of all the modes calculated by Ouroboros.
     mode_info = load_eigenfreq(run_info, mode_type) 
@@ -43,16 +57,13 @@ def kernels_wrapper_R_or_S(run_info, model, mode_type):
     # Define normalisation arguments.
     norm_args = {'norm_func' : 'DT', 'units' : 'SI'}
 
-    #for i in range(num_modes):
-    for i in [0]:
-        
+    for i in range(num_modes):
+    #for i in [0]:
+
         # Give shorter names to current n, l and f.
         n = n_list[i]
         l = l_list[i]
         omega_rad_per_s = f_rad_per_s_list[i]
-
-        # Make announcement.
-        print('Calculating kernels for mode type {:} number {:>5d} of {:>5d}, n = {:>5d}, l = {:>5d}'.format(mode_type, i + 1, num_modes, n, l))
 
         # Load eigenfunctions. On the first mode, also interpolate the model
         # properties at the eigenfunction grid points and calculate gravity.
@@ -60,8 +71,8 @@ def kernels_wrapper_R_or_S(run_info, model, mode_type):
             
             norm_args['omega'] = omega_rad_per_s
 
-            eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, norm_args = norm_args)
-            r = eigfunc_dict['r'] # m
+            eigfunc_dict_0 = load_eigenfunc(run_info, mode_type, n, l, norm_args = norm_args)
+            r = eigfunc_dict_0['r'] # m
             
             # Find indices of solid-fluid boundaries in the eigenfunction grid.
             i_fluid_solid_boundary = (np.where(np.diff(r) == 0.0))[0] + 1
@@ -84,59 +95,39 @@ def kernels_wrapper_R_or_S(run_info, model, mode_type):
             else:
 
                 g = None
-        
-        plot_model = False
-        if plot_model:
-
-            import matplotlib.pyplot as plt
-            fig, ax_arr = plt.subplots(1, 2, figsize = (11.0, 8.5))
-
-            ax = ax_arr[0]
-
-            ax.plot(rho, r, label = 'rho')
-            ax.plot(v_p, r, label = 'v_p')
-            ax.plot(v_s, r, label = 'v_s')
-
-            ax = ax_arr[1]
-
-            ax.plot(g, r, label = 'g')
-
-            for ax in ax_arr:
-
-                ax.legend()
-
-            plt.show()
-
-        # Load eigenfunction.
-        if mode_type == 'R':
-
-            mode_info = load_eigenfunc(run_info, 'R', n, l, norm_args = norm_args)
-            U = mode_info['U']
-            V = np.zeros(U.shape)
-
-        else:
-
-            mode_info = load_eigenfunc(run_info, 'S', n, l, norm_args = norm_args)
-            U = mode_info['U']
-            V = mode_info['V']
-        
-        # Calculate the kernels.
-        K_ka, K_mu = get_kernels_S(r, eigfunc_dict['U'], eigfunc_dict['V'],
-                        eigfunc_dict['Up'], eigfunc_dict['Vp'],
-                        l, omega_rad_per_s, i_fluid = i_fluid)
-
-        # Save the kernels.
-        if i == 0:
 
             _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
             dir_kernels = os.path.join(dir_out, 'kernels')
             mkdir_if_not_exist(dir_kernels)
-    
-        out_arr = np.array([r, K_ka, K_mu])
-        name_out = 'kernels_{:>05d}_{:>05d}.npy'.format(n, l)
-        path_out = os.path.join(dir_kernels, name_out)
-        print('Saving to {:}'.format(path_out))
-        np.save(path_out, out_arr)
+
+        if (j_skip is None) or not (i in j_skip):
+        
+            # Make announcement.
+            print('Calculating kernels for mode type {:} number {:>5d} of {:>5d}, n = {:>5d}, l = {:>5d}'.format(mode_type, i + 1, num_modes, n, l))
+
+            # Load eigenfunction.
+            eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, norm_args = norm_args)
+
+            if mode_type == 'R':
+
+                eigfunc_dict['V'] = np.zeros(eigfunc_dict['U'].shape)
+                eigfunc_dict['Vp'] = np.zeros(eigfunc_dict['Up'].shape)
+            
+            # Calculate the kernels.
+            K_ka, K_mu = get_kernels_S(r, eigfunc_dict['U'], eigfunc_dict['V'],
+                            eigfunc_dict['Up'], eigfunc_dict['Vp'],
+                            l, omega_rad_per_s, i_fluid = i_fluid)
+
+            #K_ka = K_ka*0.977
+            #K_mu = K_mu*0.977
+            #K_ka = K_ka*0.01
+
+            # Save the kernels.
+            out_arr = np.array([r, K_ka, K_mu])
+            name_out = 'kernels_{:>05d}_{:>05d}.npy'.format(n, l)
+            path_out = os.path.join(dir_kernels, name_out)
+            print('Saving to {:}'.format(path_out))
+            np.save(path_out, out_arr)
 
     return
 
@@ -223,15 +214,9 @@ def main():
     # Read the input file.
     run_info = read_input_file(path_input)
 
-    # Kernels are calculated without attenuation.
-    run_info['use_attenuation'] = False
-
-    # Load the planetary model.
-    model = load_model(run_info['path_model'])
-
     for mode_type in run_info['mode_types']:
 
-        kernels_wrapper(run_info, mode_type, model)
+        kernels_wrapper(run_info, mode_type)
     
     return
 

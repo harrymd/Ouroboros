@@ -195,6 +195,7 @@ def radial_modes(run_info):
     else:
 
         model_path  = run_info['path_model']
+
     dir_output  = run_info['dir_output']
     dir_type    = run_info['dirs_type']['R']
     nmin, nmax  = run_info['n_lims']
@@ -457,6 +458,7 @@ def spheroidal_modes(run_info):
     else:
 
         model_path  = run_info['path_model']
+
     dir_output  = run_info['dir_output']
     dir_type    = run_info['dirs_type']['S']
     lmin, lmax  = run_info['l_lims']
@@ -1008,8 +1010,10 @@ def process_eigen_radial_or_spheroidal(
 
             # Write eigenvalue.
             with open(path_eigenvalues, 'a') as f_out:
-
-                f_out.write('{:>10d} {:>10d} {:>16.12f}\n'.format(n, l, eigen[n]))
+                
+                # Write n, l, f, f_corrected, Q.
+                # For now f_corrected and Q are unknown, so just put f_uncorrected and 0.
+                f_out.write('{:>10d} {:>10d} {:>19.12e} {:>19.12e} {:>19.12e}\n'.format(n, l, eigen[n], eigen[n], 0.0))
 
             # Write eigenfunction. 
             file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
@@ -1023,11 +1027,15 @@ def process_eigen_radial_or_spheroidal(
                 P = np.zeros(U_eigen.shape)
                 Pp = np.zeros(U_eigen.shape)
 
-                out_arr = np.array([1000.0*xx, U_eigen, V_eigen, Up, Vp, P, Pp])
+                out_arr = np.array([1000.0*xx, U_eigen, Up, V_eigen, Vp, P, Pp])
 
             elif switch in['R_noGP', 'R_G', 'R_GP']:
 
-                out_arr = np.array([1000.0*xx, U_eigen])
+                Up = np.zeros(U_eigen.shape)
+                P = np.zeros(U_eigen.shape)
+                Pp = np.zeros(U_eigen.shape)
+
+                out_arr = np.array([1000.0*xx, U_eigen, Up, P, Pp])
 
             np.save(path_eigenfunc, out_arr)
     

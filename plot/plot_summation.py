@@ -91,6 +91,19 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
         ax.text(0.9, 0.9, label, transform = ax.transAxes, ha = 'right', va = 'top')
 
     ax.axhline(linestyle = '-', alpha = 0.5, c = 'k')
+    
+    if trace_comparison is not None:
+
+        t_min = np.min(np.concatenate([t_c, t]))
+        t_max = np.max(np.concatenate([t_c, t]))
+
+    else:
+
+        t_min = np.min(t)
+        t_max = np.max(t)
+
+    t_lims = np.array([t_min, t_max])
+    ax.set_xlim(t_lims*t_scale)
 
     if path_out is not None:
         
@@ -141,7 +154,8 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
     abs_X = np.abs(X)
     abs_X_max = np.max(abs_X)
     angle_X = np.angle(X)
-    i_peak, _ = find_peaks(abs_X, prominence = 0.01*abs_X)
+    prominence_factor = 1.0E-3
+    i_peak, _ = find_peaks(abs_X, prominence = prominence_factor*abs_X_max)
 
     # Do Fourier transform of comparison trace.
     if trace_comparison is not None:
@@ -150,11 +164,18 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
         abs_X_c = np.abs(X_c)
         abs_X_c_max = np.max(abs_X_c)
         angle_X_c = np.angle(X_c)
-        i_peak_c, _ = find_peaks(abs_X_c, prominence = 0.01*abs_X_c_max)
+        i_peak_c, _ = find_peaks(abs_X_c, prominence = prominence_factor*abs_X_c_max)
+
 
     else:
 
         abs_X_c_max = 0.0
+    
+    #print(i_peak, i_peak_c)
+    #for i in i_peak:
+
+        #print(f[i]*1.0E3, abs_X[i], abs_X_c[i], abs_X[i]/abs_X_c[i])
+        #print(f[i]*1.0E3, abs_X[i]/abs_X_c[i])
 
     # Get overall maximum amplitude.
     abs_X_all_max = np.max([abs_X_max, abs_X_c_max])
@@ -176,6 +197,7 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
     # Set plot properties.
     f_scale = 1.0E3 # Hz to mHz.
     f_lims = [0.0, 5.0]
+    #f_lims = [0.0, 2.0]
     X_scale = 1.0E-3 # 1.0E-3 for 1/Hz to 1/mHz
     font_size_label = 12
     line_width = 1
@@ -254,6 +276,7 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
 
         y_lims = [0.0, (1.0 + y_lim_buff)*abs_X_all_max*X_scale]
         ax.set_ylim(y_lims)
+        #ax.set_ylim([0.0, 2.0E3])
 
     if label_coeff_info is not None:
         
@@ -280,8 +303,6 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
         ax.text(0.1, 0.9, label, transform = ax.transAxes, ha = 'left')
 
     ax.set_xlabel('Frequency (mHz)', fontsize = font_size_label)
-
-    ax.set_ylim([0.0, 3000.0])
 
     # Save (if requested).
     if path_out is not None:
@@ -338,8 +359,8 @@ def align_traces(tr_1, tr_2, d_t):
 
     # This is a hack; for unknown reasons Mineos and Ouroboros differ
     # at the very start of their traces.
-    tr_1_data_interpolated[0:6] = 0.0
-    tr_2_data_interpolated[0:6] = 0.0
+    #tr_1_data_interpolated[0:6] = 0.0
+    #tr_2_data_interpolated[0:6] = 0.0
     
     tr_1_copy = tr_1.copy()
     tr_1_copy.data = tr_1_data_interpolated
@@ -392,7 +413,6 @@ def main():
     parser.add_argument("--use_mineos", action = 'store_true', help = 'Plot summation result from Mineos (default: Ouroboros).')
     parser.add_argument("--use_mineos_modes_only", action = 'store_true', help = 'Plot summation results using Ouroboros summation code with Mineos mode output. Note: This option is used only for testing purposes. Not compatible with --use_mineos flag.')
     parser.add_argument("--label", action = 'store_true', help = 'Add labels to modes with excitation coefficients above a certain threshold.')
-    parser.add_argument("--integrate", action = 'store_true', help = 'Differentiate acceleration to get velocity.')
     parser.add_argument("--path_comparison", help = 'Path to a real data trace to be plotted for comparison. Should have units of nm/s, or provide the --comparison_scale flag with a number to multiply the comparison trace so that the units are nm/s.')
     parser.add_argument("--comparison_scale", type = float, default = 1.0)
 
@@ -410,7 +430,6 @@ def main():
     path_comparison = input_args.path_comparison
     comparison_scale = input_args.comparison_scale
     add_labels = input_args.label
-    integrate = input_args.integrate
     assert not (use_mineos and add_labels), 'Cannot add mode labels to Mineos plot (excitation coefficients are not available).'
 
     if use_mineos:
@@ -440,6 +459,14 @@ def main():
         path_mseed = os.path.join(dir_sac, 'stream.mseed')
         stream = read(path_mseed)
         stream = stream.select(station = station, channel = channel)
+
+        if add_labels:
+
+            raise NotImplementedError
+
+        else:
+
+            label_coeff_info = None
 
     else:
 
@@ -507,13 +534,7 @@ def main():
 
             label_coeff_info = None
     
-    if integrate:
-
-        data_type = 'velocity'
-
-    else:
-
-        data_type = 'acceleration'
+    data_type = summation_info['output_type']
 
     if data_type == 'acceleration':
 
@@ -522,8 +543,13 @@ def main():
 
     elif data_type == 'velocity':
 
-        displacement_y_label = 'Velocity (nm s$^{-2}$)'
+        displacement_y_label = 'Velocity (nm s$^{-1}$)'
         spectrum_y_label = 'Spectral amplitude (nm s$^{-1}$ mHz$^{-1}$)'
+
+    elif data_type == 'displacement':
+
+        displacement_y_label = 'Displacement (nm)'
+        spectrum_y_label = 'Spectral amplitude (nm mHz$^{-1}$)'
 
     else:
 
@@ -531,11 +557,7 @@ def main():
     
     legend_keys = ['Synthetic', 'Observed']
     legend_keys = ['New code', 'Mineos']
-    legend_keys = ['New code', 'Data']
-
-    if integrate:
-
-        stream.integrate()
+    #legend_keys = ['New code', 'Data']
 
     trace = stream[0]
 
@@ -543,13 +565,13 @@ def main():
     mkdir_if_not_exist(dir_plot)
 
     if path_comparison is not None:
-
+        
         stream_comparison = read(path_comparison)
         if len(stream_comparison) > 1:
 
-            #stream_comparison = stream_comparison.select(station = station,
-            #                        channel = channel)
-            stream_comparison = stream_comparison.select(station = station)
+            stream_comparison = stream_comparison.select(station = station,
+                                    channel = channel)
+            #stream_comparison = stream_comparison.select(station = station)
 
         trace_comparison = stream_comparison[0]
         trace_comparison.normalize(norm = 1.0/comparison_scale)

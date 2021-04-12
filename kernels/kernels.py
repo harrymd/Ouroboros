@@ -41,7 +41,7 @@ def kernel_spheroidal_ka(r, U, V, dUdr, l, omega):
 
     return K_ka
 
-def kernel_spheroidal_mu(r, U, V, dUdr, dVdr, l, omega, i_fluid = None):
+def kernel_spheroidal_mu(r, U, V, dUdr, dVdr, l, omega, i_fluid = None, return_terms = False):
     '''
     D&T 1998 eq. 9.14.
     Sensitivity of spheroidal mode eigenfrequency with respect to mu with
@@ -51,7 +51,7 @@ def kernel_spheroidal_mu(r, U, V, dUdr, dVdr, l, omega, i_fluid = None):
     # Get asymptotic wavenumber.
     k2      = l*(l + 1.0)
     k       = np.sqrt(k2)
-
+    
     # Evaluate expression.
     a = ((2.0*r*dUdr - 2.0*U + k*V)**2.0)/3.0
     b = (r*dVdr - V + k*U)**2.0
@@ -63,8 +63,22 @@ def kernel_spheroidal_mu(r, U, V, dUdr, dVdr, l, omega, i_fluid = None):
     if i_fluid is not None:
         
         K_mu[i_fluid] = 0.0
+
+    if return_terms:
+        
+        a[i_fluid] = 0.0
+        b[i_fluid] = 0.0
+        c[i_fluid] = 0.0
+
+        a = a/(2.0*omega)
+        b = b/(2.0*omega)
+        c = c/(2.0*omega)
+
+        return a, b, c
+
+    else:
     
-    return K_mu
+        return K_mu
 
 def get_kernels_S(r, U, V, dUdr, dVdr, l, omega, i_fluid = None):
 

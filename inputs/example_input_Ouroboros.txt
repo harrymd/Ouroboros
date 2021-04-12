@@ -1,7 +1,0 @@
-path_to_model models/prem_noq_noocean.txt
-path_to_outdir ../../output/Ouroboros
-gravity_switch 0 
-mode_types R S T 
-n_limits 0 10 
-l_limits 0 5 
-n_layers 700

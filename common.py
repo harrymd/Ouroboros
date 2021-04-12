@@ -65,11 +65,22 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
 
     return dir_model, dir_run, dir_g, dir_type
 
-def get_Ouroboros_summation_out_dirs(run_info, summation_info):
+def get_Ouroboros_summation_out_dirs(run_info, summation_info, name_summation_dir = 'summation'):
 
-    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], 'summation')
+    summation_info['dir_summation'] = os.path.join(run_info['dir_run'], name_summation_dir)
     summation_info['dir_channels'] = os.path.join(summation_info['dir_summation'], summation_info['name_channels'])
     summation_info['dir_cmt'] = os.path.join(summation_info['dir_channels'], summation_info['name_cmt'])
+    
+    if summation_info['path_mode_list'] is not None:
+
+        summation_info['dir_mode_list'] = os.path.join(summation_info['dir_cmt'],
+                summation_info['name_mode_list'])
+        summation_info['dir_output'] = summation_info['dir_mode_list']
+
+    else:
+
+        summation_info['dir_mode_list'] = None
+        summation_info['dir_output'] = summation_info['dir_cmt']
 
     return summation_info
 
@@ -89,6 +100,17 @@ def get_Mineos_summation_out_dirs(run_info, summation_info, file_green_in = None
     summation_info['dir_summation'] = os.path.join(run_info['dir_run'], name_summation_dir) 
     summation_info['dir_channels'] = os.path.join(summation_info['dir_summation'], summation_info['name_channels'])
     summation_info['dir_cmt'] = os.path.join(summation_info['dir_channels'], summation_info['name_cmt'])
+
+    if ('path_mode_list' in summation_info.keys()) and (summation_info['path_mode_list'] is not None):
+
+        summation_info['dir_mode_list'] = os.path.join(summation_info['dir_cmt'],
+                summation_info['name_mode_list'])
+        summation_info['dir_output'] = summation_info['dir_mode_list']
+
+    else:
+
+        summation_info['dir_mode_list'] = None
+        summation_info['dir_output'] = summation_info['dir_cmt']
     
     summation_info['path_channel_db'] = os.path.join(summation_info['dir_channels'], 'channel_db')
     summation_info['path_green_out_db'] = os.path.join(summation_info['dir_cmt'], 'green')
@@ -131,7 +153,10 @@ def read_Ouroboros_input_file(path_input_file):
         l_min, l_max    = [int(x) for x in in_id.readline().split()[1:]]
         n_layers        = int(in_id.readline().split()[1])
         use_attenuation = bool(int(in_id.readline().split()[1]))
-        f_target_mHz    = float(in_id.readline().split()[1])
+        if use_attenuation:
+            f_target_mHz    = float(in_id.readline().split()[1])
+        else:
+            f_target_mHz = None
 
     name_model = os.path.splitext(os.path.basename(path_model))[0]
 
@@ -195,9 +220,20 @@ def read_Ouroboros_summation_input_file(path_input):
         output_type = in_id.readline().split()[-1]
         attenuation = in_id.readline().split()[-1]
         correct_response = bool(int(in_id.readline().split()[-1]))
+        epi_dist_azi_method = in_id.readline().split()[-1]
+        path_mode_list = in_id.readline().split()[-1]
 
     name_channels = os.path.splitext(os.path.basename(path_channels))[0]
     name_cmt = os.path.splitext(os.path.basename(path_cmt))[0]
+
+    if path_mode_list == 'none':
+        
+        path_mode_list = None
+        name_mode_list = None
+
+    else:
+
+        name_mode_list = os.path.splitext(os.path.basename(path_mode_list))[0]
 
     # Store in dictionary.
     summation_info = dict()
@@ -213,6 +249,9 @@ def read_Ouroboros_summation_input_file(path_input):
     summation_info['output_type'] = output_type
     summation_info['attenuation'] = attenuation
     summation_info['correct_response'] = correct_response
+    summation_info['epi_dist_azi_method'] = epi_dist_azi_method
+    summation_info['path_mode_list'] = path_mode_list
+    summation_info['name_mode_list'] = name_mode_list
 
     return summation_info
 
@@ -378,7 +417,7 @@ def load_model_full(model_path):
     # T_ref     Reference period in seconds.
     with open(model_path, 'r') as in_id:
 
-        in_id.readline()
+        header = in_id.readline().strip()
         T_ref = float(in_id.readline().split()[1])
         n_layers, i_icb, i_cmb = [int(x) for x in in_id.readline().split()]
 
@@ -416,7 +455,9 @@ def load_model_full(model_path):
     
     # Store in a dictionary.
     model = dict()
+    model['header'] = header
     model['T_ref']  = T_ref
+    model['f_ref_Hz'] = 1.0/T_ref
     model['r']      = r
     model['rho']    = rho
     model['v_pv']   = v_pv
@@ -506,18 +547,6 @@ def read_channel_file(path_channel):
 # Loading data from Ouroboros. ------------------------------------------------
 def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
     
-    ## Unpack the Ouroboros parameters.
-    #dir_output  = Ouroboros_info['dir_output']
-    #n_layers    = Ouroboros_info['n_layers']
-    #n_max       = Ouroboros_info['n_lims'][1]
-    #l_max       = Ouroboros_info['l_lims'][1]
-    #g_switch    = Ouroboros_info['g_switch']
-
-    ## By default, the toroidal modes have g_switch = 0.
-    #if mode_type == 'T':
-
-    #    g_switch = 0
-
     if mode_type == 'T':
 
         assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
@@ -525,15 +554,9 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
     # Generate the name of the output directory based on the Ouroboros
     # parameters.
     _, _, _, dir_eigval  = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-
-    # Generate the name of the output file.
-    if Ouroboros_info['use_attenuation']:
-
-        file_name = 'eigenvalues_relabelled'
-
-    else:
-
-        file_name = 'eigenvalues'
+    
+    # Get name of eigenvalues file.
+    file_name = 'eigenvalues'
 
     if i_toroidal is None:
 
@@ -542,17 +565,17 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
     else:
 
         file_eigval = '{:}_{:>03d}.txt'.format(file_name, i_toroidal)
-
+    
     path_eigval = os.path.join(dir_eigval, file_eigval)
 
     # Load the data from the output file.
-    if Ouroboros_info['use_attenuation']:
+    n, l, f_0, f, Q = np.loadtxt(path_eigval).T
+    #if Ouroboros_info['use_attenuation']:
 
-        n, l, f, Q = np.loadtxt(path_eigval).T
 
-    else:
+    #else:
 
-        n, l, f = np.loadtxt(path_eigval).T
+    #    n, l, f = np.loadtxt(path_eigval).T
     
     # Convert single-value output files to arrays.
     n = np.atleast_1d(n)
@@ -575,9 +598,10 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
         f_q = f[i]
 
         if Ouroboros_info['use_attenuation']:
-
+            
             Q_q = Q[i]
-            mode_info = {'f' : f_q, 'Q' : Q_q}
+            f_0_q = f_0[i]
+            mode_info = {'f' : f_q, 'f_0' : f_0_q, 'Q' : Q_q}
 
         else:
 
@@ -587,7 +611,7 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
 
         if Ouroboros_info['use_attenuation']:
 
-            mode_info = {'n' : n, 'l' : l, 'f' : f, 'Q' : Q} 
+            mode_info = {'n' : n, 'l' : l, 'f' : f, 'Q' : Q, 'f_0' : f_0}
 
         else:
 
@@ -621,16 +645,8 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
         assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
 
-    # The eigenfunction files files have different names depending on the mode type.
     # This is due to the automatic separation of uncoupled toroidal modes
-    if Ouroboros_info['use_attenuation']:
-
-        dir_name = 'eigenfunctions_relabelled'
-
-    else:
-
-        dir_name = 'eigenfunctions'
-    
+    dir_name = 'eigenfunctions'
     if i_toroidal is None:
 
         dir_eigenfuncs = '{:}'.format(dir_name)
@@ -694,18 +710,21 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # Radial case.
     if mode_type == 'R':
 
-        r, U = np.load(path_eigenfunc)
+        r, U, Up, P, Pp = np.load(path_eigenfunc)
         U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
 
         # Apply normalisation.
-        U = eigfunc_norm*U
+        U   = U*eigfunc_norm
+        Up  = Up*eigfunc_norm*grad_norm
+        P   = P*pot_norm
+        Pp  = Pp*pot_norm*grad_norm
 
-        eigenfunc_dict = {'r' : r, 'U' : U}
+        eigenfunc_dict = {'r' : r, 'U' : U, 'Up' : Up, 'P' : P, 'Pp' : Pp}
 
     # Spheroidal case.
     elif mode_type == 'S':
 
-        r, U, V, Up, Vp, P, Pp = np.load(path_eigenfunc)
+        r, U, Up, V, Vp, P, Pp = np.load(path_eigenfunc)
 
         # Apply normalisation.
         U   = U*eigfunc_norm
@@ -797,6 +816,54 @@ def get_kernel_dir(dir_output, Ouroboros_info, mode_type):
 
     return dir_kernels
 
+def load_kernel(run_info, mode_type, n, l, units = 'standard'):
+
+    # Load kernel.
+    _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
+    dir_kernels = os.path.join(dir_out, 'kernels')
+    name_kernel_file = 'kernels_{:>05d}_{:>05d}.npy'.format(n, l)
+    path_kernel = os.path.join(dir_kernels, name_kernel_file)
+    kernel_arr = np.load(path_kernel)
+
+    # Unpack the array.
+    r, K_ka, K_mu = kernel_arr
+
+    # Load mode frequency (necessary for normalisation).
+    mode_info = load_eigenfreq(run_info, mode_type, n_q = n, l_q = l)
+    f_mHz = mode_info['f']
+
+    # Get to the right units.
+    if units == 'standard':
+
+        # Convert from (Hz 1/Pa 1/m) to (mHz 1/GPa 1/km).
+        Hz_to_mHz   = 1.0E3
+        Pa_to_GPa   = 1.0E-9
+        m_to_km     = 1.0E-3
+        #
+        scale_ka = Hz_to_mHz/(Pa_to_GPa*m_to_km)
+        scale_mu = scale_ka
+        #
+        K_ka = K_ka*scale_ka
+        K_mu = K_mu*scale_mu
+        
+    elif units == 'SI':
+
+        # The kernels are already in SI units.
+        pass
+
+    else:
+
+        print(units)
+        raise ValueError
+
+    # For unknown reasons, it is necessary to multiply by
+    # omega**2.0 where omega is measured in mHz.
+    scale = (f_mHz**2.0)
+    K_ka = K_ka*scale
+    K_mu = K_mu*scale
+
+    return r, K_ka, K_mu
+
 # Loading data from Mineos. ---------------------------------------------------
 def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None):
     
@@ -816,7 +883,8 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
     file_eigval = 'minos_bran_out_{:}.txt'.format(mode_type)
     path_eigval = os.path.join(run_info['dir_run'], file_eigval) 
 
-    n, l, f, Q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
+    #n, l, f, Q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 4, 7)).T
+    n, l, c, f, u, Q = np.loadtxt(path_eigval, skiprows = n_skip, usecols = (0, 2, 3, 4, 6, 7)).T
 
     n = n.astype(np.int)
     l = l.astype(np.int)
@@ -826,13 +894,15 @@ def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = 
         i = np.where((n == n_q) & (l == l_q))[0][0]
 
         f_q = f[i]
+        c_q = c[i]
+        u_q = u[i]
         Q_q = Q[i]
 
-        mode_info = {'f' : f_q, 'Q' : Q_q}
+        mode_info = {'f' : f_q, 'Q' : Q_q, 'c' : c_q, 'u' : u_q}
 
     else:
 
-        mode_info = {'n' : n, 'l' : l, 'f' : f, 'Q' : Q}
+        mode_info = {'n' : n, 'l' : l, 'f' : f, 'Q' : Q, 'c' : c, 'u' : u}
 
     return mode_info
 
@@ -911,8 +981,6 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
 
         eigenfunc_dict = {'r' : r, 'U' : U, 'Up' : Up}
 
-        return r, U, Up
-
     elif mode_type == 'S':
 
         r, U, Up, V, Vp, P, Pp  = data
@@ -947,8 +1015,6 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
             Wp = Wp*k
 
         eigenfunc_dict = {'r' : r, 'W' : W, 'Wp' : Wp}
-
-        return r, W, Wp
 
     else:
 
@@ -985,6 +1051,22 @@ def read_input_file(path_input):
         raise ValueError('Code {:} not recognised.'.format(code))
 
     return run_info
+
+def read_summation_input_file(path_input, code):
+
+    if code == 'mineos':
+
+        summation_info = read_Mineos_summation_input_file(path_input)
+
+    elif code == 'ouroboros':
+
+        summation_info = read_Ouroboros_summation_input_file(path_input)
+
+    else:
+
+        raise ValueError
+
+    return summation_info
 
 def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
 
@@ -1045,6 +1127,25 @@ def align_mode_lists(n_0, l_0, n_1, l_1):
 
     return n, l, i_align_0, i_align_1
 
+def filter_mode_list(mode_info, path_mode_list):
+    
+    mode_type = 'S'
+
+    n_choose, l_choose = np.loadtxt(path_mode_list, dtype = np.int).T
+
+    i_choose = []
+    for i in range(len(n_choose)):
+
+        i_choose.append(np.where((n_choose[i] == mode_info[mode_type]['n']) & (l_choose[i] == mode_info[mode_type]['l']))[0][0])
+    
+    mode_info_new = dict()
+    mode_info_new[mode_type] = dict()
+    for key in mode_info[mode_type]:
+
+        mode_info_new[mode_type][key] = mode_info[mode_type][key][i_choose]
+    
+    return mode_info_new
+
 # Manipulating Earth models. --------------------------------------------------
 def get_r_fluid_solid_boundary(radius, vs):
 
@@ -1074,7 +1175,7 @@ def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_bo
     '''
     Careful interpolation of model parameters, preserving the fluid-solid discontinuities.
     '''
-
+    
     n_parts = len(i_fluid_solid_boundary) + 1
     assert n_parts == (len(i_fluid_solid_boundary_model) + 1)
     
@@ -1085,8 +1186,6 @@ def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_bo
     i_fluid_solid_boundary_model = list(i_fluid_solid_boundary_model)
     i_fluid_solid_boundary_model.insert(0, 0)
     i_fluid_solid_boundary_model.append(None)
-
-
     
     x_list = []
     for i in range(n_parts):
@@ -1103,6 +1202,28 @@ def interp_n_parts(r, r_model, x_model, i_fluid_solid_boundary, i_fluid_solid_bo
     x = np.concatenate(x_list)
 
     return x
+
+def write_model(model, path_out, header_str):
+
+    print("Writing to {:}".format(path_out))
+
+    out_fmt = '{:>7.0f}. {:>8.2f} {:>8.2f} {:>8.2f} {:>8.1f} {:>8.1f} {:>8.2f} {:>8.2f} {:>8.5f}\n'
+
+    with open(path_out, 'w') as out_id:
+
+        out_id.write(header_str + '\n')
+        out_id.write('{:>4d} {:>8.5f} {:>3d}\n'.format(0, 1.0/model['f_ref_Hz'], 1))
+        out_id.write('{:>6d} {:>3d} {:>3d}\n'.format(model['n_layers'], model['i_icb'],
+                        model['i_cmb']))
+        
+        for i in range(model['n_layers']):
+
+            out_id.write(out_fmt.format(
+                model['r'][i], model['rho'][i], model['v_pv'][i], model['v_sv'][i],
+                model['Q_ka'][i], model['Q_mu'][i], model['v_ph'][i],
+                model['v_sh'][i], model['eta'][i]))
+
+    return
 
 # Manipulating waveform data. -------------------------------------------------
 def add_epi_dist_and_azim(inv, cmt, stream):

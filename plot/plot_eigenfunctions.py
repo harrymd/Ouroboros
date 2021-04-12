@@ -10,7 +10,7 @@ from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary
                             load_eigenfreq, load_eigenfunc,
                             load_model, mkdir_if_not_exist,
                             read_input_file)
-from Ouroboros.misc.compare_eigenfunctions import check_sign_S, check_sign_P
+from Ouroboros.misc.compare_eigenfunctions import check_sign_R, check_sign_S, check_sign_P
 
 def get_title_str(mode_type, n, l, code):
 
@@ -43,12 +43,12 @@ def get_title_str(mode_type, n, l, code):
 
     return title
 
-def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0): 
+def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0, r_lims = None): 
     
     # Get model information for axis limits, scaling and horizontal lines.
     model = load_model(run_info['path_model'])
     # Convert to km.
-    model['r'] = model['r']
+    model['r'] = model['r']*1.0E-3
     # r_srf Radius of planet.
     # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
     r_srf = model['r'][-1]
@@ -65,12 +65,13 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     # Get eigenfunction information.
     eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, i_toroidal = i_toroidal, norm_args = normalisation_args)
+    eigfunc_dict['r'] = eigfunc_dict['r']*1.0E-3 # Convert to km.
 
     # Get title string.
     title = get_title_str(mode_type, n, l, run_info['code'])
 
     if plot_potential:
-
+        
         sign = check_sign_P(eigfunc_dict['r'], eigfunc_dict['P'])
 
     else:
@@ -79,6 +80,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
             sign = check_sign_S(eigfunc_dict['r'], eigfunc_dict['U'],
                                 eigfunc_dict['V'])
+
+        elif mode_type == 'R':
+
+            sign = check_sign_R(eigfunc_dict['r'], eigfunc_dict['U'])
     
     # Find axis limits.
     if plot_gradient:
@@ -116,7 +121,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
             # Find axis limits.
             if mode_type == 'R':
-
+                
                 vals = eigfunc_dict['U']
 
             elif mode_type == 'S':
@@ -159,16 +164,34 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
                 eigfunc_dict[val] = eigfunc_dict[val][i_0 : i_1]
 
     # Create axes if not provided.
-    if ax is None:
-        
+    if r_lims is None:
+
         r_range = np.max(eigfunc_dict['r']) - np.min(eigfunc_dict['r'])
         r_frac = r_range/r_srf
-        fig = plt.figure(figsize = (5.5, 11.0*r_frac))
+        imag_x = 5.5
+        imag_y = 11.0*r_frac
+
+    else:
+
+        imag_x = 5.5
+        imag_y = 7.0
+
+    if ax is None:
+
+        fig = plt.figure(figsize = (imag_x, imag_y))
         ax  = plt.gca()
+
+    else:
+    
+        imag_x_pre, imag_y_pre = ax.figure.get_size_inches()
+        if imag_y_pre < imag_y:
+
+            ax.figure.set_size_inches((imag_x, imag_y))
 
     # Arguments for all possibilities.
     common_args = {'ax' : ax, 'show' : False, 'title' : title,
-            'x_label' : x_label, 'alpha' : alpha}
+            'x_label' : x_label, 'alpha' : alpha,
+            'r_lims' : r_lims}
 
     if plot_gradient:
 
@@ -313,7 +336,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
     return ax
 
-def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
+def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12, r_lims = None):
     
     if ax is None:
 
@@ -332,7 +355,7 @@ def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunctio
     max_abs_V_plot = np.max(np.abs(V))
     E_max = np.max([max_abs_U_plot, max_abs_V_plot])
     
-    tidy_axes(ax, r, E_max, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label)
+    tidy_axes(ax, r, E_max, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label, r_lims = r_lims)
 
     if show:
 
@@ -362,7 +385,7 @@ def plot_P(r, P, ax = None, h_lines = None, x_label = 'Potential', y_label = 'Ra
 
     return ax, P_max
 
-def tidy_axes(ax, r, E_max, h_lines = None, add_legend = True, legend_loc = 'best', title = None, x_label = 'Eigenfunction', y_label = 'Radius / km'):
+def tidy_axes(ax, r, E_max, h_lines = None, add_legend = True, legend_loc = 'best', title = None, x_label = 'Eigenfunction', y_label = 'Radius / km', r_lims = None):
     
     font_size_label = 16
     font_size_title = 36 
@@ -377,7 +400,14 @@ def tidy_axes(ax, r, E_max, h_lines = None, add_legend = True, legend_loc = 'bes
     
     buff = 1.05
     ax.set_xlim([-buff*E_max, buff*E_max])
-    ax.set_ylim([np.min(r), np.max(r)])
+
+    if r_lims is None:
+
+        ax.set_ylim([np.min(r), np.max(r)])
+
+    else:
+
+        ax.set_ylim(r_lims)
     
     if add_legend:
 
@@ -440,7 +470,8 @@ def get_label_suffixes(path_compare, code, code_compare, plot_gradient):
         
         elif code == 'ouroboros':
 
-            label_suffix = '\' (Ouroboros)'
+            #label_suffix = '\' (Ouroboros)'
+            label_suffix = '\' (RadialPNM)'
 
         else:
 
@@ -450,11 +481,14 @@ def get_label_suffixes(path_compare, code, code_compare, plot_gradient):
 
             if code_compare == 'mineos':
 
-                label_suffix_compare = '\' (Mineos)'
+                #label_suffix_compare = '\' (Mineos)'
+                label_suffix_compare = ''
             
             elif code_compare == 'ouroboros':
 
-                label_suffix_compare = '\' (Ouroboros)'
+                #label_suffix_compare = '\' (Ouroboros)'
+                #label_suffix_compare = '\' (RadialPNM)'
+                label_suffix_compare = ''
 
             else:
 
@@ -472,7 +506,9 @@ def get_label_suffixes(path_compare, code, code_compare, plot_gradient):
         
         elif code == 'ouroboros':
 
-            label_suffix = ' (Ouroboros)'
+            #label_suffix = ' (Ouroboros)'
+            #label_suffix = ' (RadialPNM)'
+            label_suffix = ''
 
         else:
 
@@ -482,11 +518,13 @@ def get_label_suffixes(path_compare, code, code_compare, plot_gradient):
 
             if code_compare == 'mineos':
 
-                label_suffix_compare = ' (Mineos)'
+                #label_suffix_compare = ' (Mineos)'
+                label_suffix_compare = ''
             
             elif code_compare == 'ouroboros':
 
-                label_suffix_compare = ' (Ouroboros)'
+                #label_suffix_compare = ' (Ouroboros)'
+                label_suffix_compare = ''
 
             else:
 
@@ -513,6 +551,7 @@ def main():
     parser.add_argument("--path_compare", help = "Provide input path to plot a second eigenfunction for comparison.")
     parser.add_argument("--norm_func", choices = ['mineos', 'DT'], default = 'DT', help = "Specify normalisation function. \'mineos\' is the normalisation function used by Mineos and Ouroboros. \'DT\' is the normalisation function used in the Dahlen and Tromp textbook. It does not include the factor of k. See also the --units flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.")
     parser.add_argument("--units", choices = ['SI', 'ouroboros', 'mineos'], default = 'mineos', help = 'Specify units used when applying normalisation to eigenfunction. \'SI\' is SI units. \'mineos\' is Mineos units. \'ouroboros\' is Ouroboros units. See also the --norm_func flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.')
+    parser.add_argument("--r_lims", nargs = 2, type = float, help = 'Specify radius limits of plot (km).')
     args = parser.parse_args()
 
     # Rename input arguments.
@@ -526,6 +565,7 @@ def main():
     path_compare = args.path_compare
     norm_func = args.norm_func
     units = args.units
+    r_lims = args.r_lims
 
     # Check input arguments.
     if mode_type == 'R':
@@ -555,7 +595,6 @@ def main():
 
     # Read input file.
     run_info = read_input_file(path_input)
-    run_info['use_attenuation'] = False
     if path_compare is not None:
 
         run_info_compare = read_input_file(path_compare)
@@ -615,7 +654,7 @@ def main():
 
     else:
 
-        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None, plot_gradient = plot_gradient, plot_potential = plot_potential, label_suffix = label_suffix, x_label = x_label, norm_func = norm_func, units = units) 
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None, plot_gradient = plot_gradient, plot_potential = plot_potential, label_suffix = label_suffix, x_label = x_label, norm_func = norm_func, units = units, r_lims = r_lims) 
 
     return
 

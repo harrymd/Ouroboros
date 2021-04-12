@@ -6,11 +6,11 @@ import numpy as np
 
 from common import read_Ouroboros_input_file, get_Ouroboros_out_dirs
 
-def get_kernel_brute(path_input, mode_type, n, l, param):
+def get_kernel_brute(path_input, mode_type, n, l, param, units = 'standard'):
 
     # Found output files.
     run_info = read_Ouroboros_input_file(path_input)
-    run_info['dir_output'] = os.path.join(run_info['dir_output'], 'cluster')
+    #run_info['dir_output'] = os.path.join(run_info['dir_output'], 'cluster')
     _, _, _, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
     dir_kernels_brute = os.path.join(dir_type, 'kernels_brute')
     #
@@ -51,6 +51,27 @@ def get_kernel_brute(path_input, mode_type, n, l, param):
     # Calculate kernel.
     # Units of mHz per GPa per km for kappa and mu, mHz per 
     K = (d_omega/d_param)/d_r
+
+    # Convert to requested units.
+    # By default the units are mHz per GPa per km and do not need to be
+    # adjusted.
+    if units == 'standard':
+
+        pass
+
+    # Otherwise, convert to SI units.
+    elif units == 'SI':
+
+        # Convert from (mHz 1/GPa 1/km) to (Hz 1/Pa 1/m).
+        Hz_to_mHz   = 1.0E3
+        Pa_to_GPa   = 1.0E-9
+        m_to_km     = 1.0E-3
+
+        K = K*Pa_to_GPa*m_to_km/Hz_to_mHz
+
+    else:
+
+        raise ValueError
 
     # Thresholding for numerical noise on thin layers.
     d_r_thresh = 1.0

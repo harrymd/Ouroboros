@@ -10,10 +10,10 @@ from Ouroboros.common import (get_Ouroboros_out_dirs,
                         load_model, read_Ouroboros_input_file)
 from Ouroboros.constants import G
 
-def potential_all_modes(run_info, mode_type):
+def potential_all_modes(run_info, mode_type, j_skip = None):
 
     # Ignore attenuation re-labelling.
-    run_info['use_attenuation'] = False
+    #run_info['use_attenuation'] = False
 
     # Set normalisation of eigenfunctions (and therefore potential).
     # Use Dahlen and Tromp normalisation function ('DT') so that we can
@@ -24,7 +24,7 @@ def potential_all_modes(run_info, mode_type):
     # Get the density profile.
     # r_rho km
     # rho   kg/m3
-    r_rho, rho = get_rho(run_info)
+    r_rho, rho = get_rho(run_info, mode_type)
 
     # Loop over modes.
 
@@ -41,38 +41,19 @@ def potential_all_modes(run_info, mode_type):
 
     for i in range(num_modes):
 
-        #print('{:>5d} {:>1} {:>5d}'.format(n[i], mode_type, l[i]))
+        if (j_skip is None) or not (i in j_skip):
 
-        # To convert from Ouroboros normalisation to Dahlen and Tromp
-        # normalisation we must provide the mode frequency in
-        # rad per s.
-        f_rad_per_s = f[i]*1.0E-3*2.0*np.pi
-        if normalisation_args['norm_func'] == 'DT':
-            normalisation_args['omega'] = f_rad_per_s
+            #print('{:>5d} {:>1} {:>5d}'.format(n[i], mode_type, l[i]))
 
-        if mode_type == 'R':
-
-            raise NotImplementedError
-            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
-                        **normalisation_args)
-
-        elif mode_type == 'S': 
+            # To convert from Ouroboros normalisation to Dahlen and Tromp
+            # normalisation we must provide the mode frequency in
+            # rad per s.
+            f_rad_per_s = f[i]*1.0E-3*2.0*np.pi
+            if normalisation_args['norm_func'] == 'DT':
+                normalisation_args['omega'] = f_rad_per_s
 
             potential_wrapper(run_info, dir_output, mode_type, n[i], l[i], rho, **normalisation_args)
 
-        elif mode_type == 'T':
-
-            raise NotImplementedError
-            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal,
-                        **normalisation_args)
-
-            # Gradient not implemented yet.
-            Wp = np.zeros(W.shape)
-
-        else:
-
-            raise ValueError
-    
     return
 
 def potential_wrapper(run_info, dir_output, mode_type, n, l, rho, **normalisation_args):
@@ -82,7 +63,18 @@ def potential_wrapper(run_info, dir_output, mode_type, n, l, rho, **normalisatio
                     **normalisation_args)
     r = eigfunc_dict['r']*1.0E-3 # Units of km.
     U = eigfunc_dict['U']
-    V = eigfunc_dict['V']
+
+    if mode_type == 'S':
+
+        V = eigfunc_dict['V']
+
+    elif mode_type == 'R':
+
+        V = np.zeros(U.shape)
+
+    else:
+
+        raise ValueError
 
     # Calculate potential.
     P = potential(r, U, V, l, rho)
@@ -98,15 +90,25 @@ def potential_wrapper(run_info, dir_output, mode_type, n, l, rho, **normalisatio
     # Save.
     file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
     path_out = os.path.join(dir_output, 'eigenfunctions', file_eigenfunc)
-    #dir_potential = os.path.join(dir_output, 'potential')
-    #file_out = 'P_{:>05d}_{:>05d}.npy'.format(n, l)
-    #path_out = os.path.join(dir_potential, file_out)
-    #
-    #mkdir_if_not_exist(dir_potential)
-    out_arr = np.array([eigfunc_dict['r']*1.0E-3,
-                        eigfunc_dict['U'],  eigfunc_dict['V'],
-                        eigfunc_dict['Up'], eigfunc_dict['Vp'],
-                        P, eigfunc_dict['Pp']])
+
+    if mode_type == 'S':
+
+        out_arr = np.array([eigfunc_dict['r']*1.0E-3,
+                            eigfunc_dict['U'],  eigfunc_dict['Up'],
+                            eigfunc_dict['V'], eigfunc_dict['Vp'],
+                            P, eigfunc_dict['Pp']])
+
+    elif mode_type == 'R':
+
+        out_arr = np.array([eigfunc_dict['r']*1.0E-3,
+                            eigfunc_dict['U'], 
+                            eigfunc_dict['Up'],
+                            P, eigfunc_dict['Pp']])
+
+    else:
+
+        raise ValueError
+
     print("Saving to {:}".format(path_out))
     np.save(path_out, out_arr)
 
@@ -194,13 +196,12 @@ def potential_upper_integral(ri, r, U, V, l, rho, contains_r0 = False):
     
     return I
 
-def get_rho(run_info):
+def get_rho(run_info, mode_type):
 
     # Load the planetary model.
     model = load_model(run_info['path_model'])
 
     # Load the radial coordinate.
-    mode_type = 'S'
     mode_info = load_eigenfreq_Ouroboros(run_info, mode_type)
     n = mode_info['n']
     l = mode_info['l']

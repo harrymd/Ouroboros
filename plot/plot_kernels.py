@@ -6,6 +6,7 @@ import numpy as np
 
 from Ouroboros.plot.plot_kernels_brute import get_kernel_brute
 from Ouroboros.common import get_Ouroboros_out_dirs, mkdir_if_not_exist, read_input_file
+from Ouroboros.common import load_eigenfreq, load_kernel, load_model, get_r_fluid_solid_boundary
 
 def main():
 
@@ -19,6 +20,7 @@ def main():
     #parser.add_argument('param', choices = ['ka', 'mu', 'rho'], help = 'Plot sensitivity to bulk modulus (ka), shear modulus (mu), density (rho)')
     #parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
     parser.add_argument('--include_brute_force', action = 'store_true', help = 'Also include brute-force kernels in the plots.')
+    parser.add_argument('--units', choices = ['SI', 'standard'], default = 'standard', help = 'Choose between SI units or \'standard\' units (km for distance, mHz for freq., GPa for elastic moduli')
     args = parser.parse_args()
 
     # Rename input arguments.
@@ -28,46 +30,88 @@ def main():
     l = args.l
     #param = args.param
     include_brute_force = args.include_brute_force
+    units = args.units
     #i_toroidal = args.layer_number
 
     # Read the input file.
     run_info = read_input_file(path_input)
 
-    # Load the kernels for this mode.
-    _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
-    dir_kernels = os.path.join(dir_out, 'kernels')
-    #
-    #out_arr = np.array([r, g, P, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop])
-    name_kernel_file = 'kernels_{:>05d}_{:>05d}.npy'.format(n, l)
-    path_kernel = os.path.join(dir_kernels, name_kernel_file)
-    print('Loading {:}'.format(path_kernel))
-    kernel_arr = np.load(path_kernel)
+    # Get model information for axis limits, scaling and horizontal lines.
+    model = load_model(run_info['path_model'])
+    # Convert to km.
+    model['r'] = model['r']*1.0E-3 # Convert to km.
+    # r_srf Radius of planet.
+    # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
+    r_srf = model['r'][-1]
+    i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(model['r'], model['v_s'])
+    h_lines = r_solid_fluid_boundary
+    
+    # Load kernel.
+    # Units are mHz per GPa per km.
+    r, K_ka, K_mu = load_kernel(run_info, mode_type, n, l, units = units)
+    r = r*1.0E-3 # Convert to km.
+
+    ## Load the kernels for this mode.
+    #_, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
+    #dir_kernels = os.path.join(dir_out, 'kernels')
+    ##
+    ##out_arr = np.array([r, g, P, K_ka, K_mu, K_rho, K_alpha, K_beta, K_rhop])
+    #name_kernel_file = 'kernels_{:>05d}_{:>05d}.npy'.format(n, l)
+    #path_kernel = os.path.join(dir_kernels, name_kernel_file)
+    #print('Loading {:}'.format(path_kernel))
+    #kernel_arr = np.load(path_kernel)
 
     # Unpack the array.
-    r, K_ka, K_mu = kernel_arr
-    # Convert from m to km.
-    r = r*1.0E-3
+    #r, K_ka, K_mu = kernel_arr
+    ## Convert from m to km.
+    #r = r*1.0E-3
+    ## Convert from (Hz 1/Pa 1/m) to (mHz 1/GPa 1/km).
+    #K_ka = K_ka*1.0E9
+    #K_mu = K_mu*1.0E9
 
+    #mode_info = load_eigenfreq(run_info, mode_type, n_q = n, l_q = l)
+    #f_mHz = mode_info['f']
+    #f_Hz = mode_info['f']*1.0E-3
+    #f_rad_per_s = f_Hz*2.0*np.pi
+    #    
+    #scale = (f_rad_per_s**2.0)*1.0E10
+    #K_ka = K_ka*scale
+    #K_mu = K_mu*scale
+    
     # Multiply the kernel by a fixed constant to give a value close to 1.
     #param_scale_exponent_dict = {'ka' : 6, 'mu' : 6, 'rho' : 3}
     #param_scale_exponent_dict = {'ka' : 7, 'mu' : 7, 'rho' : 4}
-    param_scale_exponent_dict = {'ka' : 0, 'mu' : 0, 'rho' : 0}
+    if units == 'standard':
 
-    # Get the label string for this parameter.
-    param_unit_dict = {'ka' : 'GPa', 'mu' : 'GPa', 'rho' : '(g cm$^{-3}$)'}
+        param_scale_exponent_dict = {'ka' : -7, 'mu' : -6, 'rho' : 0}
+
+        # Get the label string for this parameter.
+        param_unit_dict = {'freq' : 'mHz', 'dist' : 'km', 'ka' : 'GPa', 'mu' : 'GPa', 'rho' : '(g cm$^{-3}$)'}
+
+    elif units == 'SI':
+
+        param_scale_exponent_dict = {'ka' : -22, 'mu' : -21, 'rho' : 0}
+
+        # Get the label string for this parameter.
+        param_unit_dict = {'freq' : 'Hz', 'dist' : 'm', 'ka' : 'Pa', 'mu' : 'Pa', 'rho' : 'kg m$^{-3}$'}
+
+    else:
+
+        raise ValueError
 
     #
     param_symbol_dict = {'ka' : 'kappa', 'mu' : 'mu', 'rho' : 'rho'}
 
     font_size_label = 12
 
-    fig, ax_arr = plt.subplots(1, 3, figsize = (11.0, 8.5), sharey = True)
     #array_list = np.array([K_ka, K_mu, K_rho])
     array_list = np.array([K_ka, K_mu])
     #param_list = ['ka', 'mu', 'rho']
     param_list = ['ka', 'mu']
     #for i in range(3):
-    for i in range(2):
+    n_params = len(param_list)
+    fig, ax_arr = plt.subplots(1, n_params, figsize = (11.0, 4.25*n_params), sharey = True, constrained_layout = True)
+    for i in range(n_params):
         
         param = param_list[i]
 
@@ -75,11 +119,14 @@ def main():
         param_scale = 10.0**param_exponent
         #
         param_unit = param_unit_dict[param]
+        freq_unit = param_unit_dict['freq']
+        dist_unit = param_unit_dict['dist']
         #
         param_symbol = param_symbol_dict[param]
 
+
         K_plt = array_list[i]
-        K_plt = K_plt*param_scale
+        K_plt = K_plt/param_scale
         #if param == 'rho':
         #    K_plt = K_plt*1.0E-12
         #scale = (4.0/np.pi)**2.0
@@ -89,7 +136,7 @@ def main():
         #K_plt = K_plt/scale
         #K_plt = K_plt/(((np.pi)**2.0)/6.0)
         #
-        K_label = '$K_{{\{:}}}$ (10$^{{{:d}}}$ mHz {:}$^{{-1}}$ km$^{{-1}})$'.format(param_symbol, param_exponent, param_unit)
+        K_label = '$K_{{\{:}}}$ (10$^{{{:d}}}$ {:} {:}$^{{-1}}$ {:}$^{{-1}})$'.format(param_symbol, param_exponent, freq_unit, param_unit, dist_unit)
 
         ax = ax_arr[i]
         
@@ -97,8 +144,8 @@ def main():
 
         if include_brute_force:
             
-            r_bf, K_bf = get_kernel_brute(path_input, mode_type, n, l, param)
-            K_bf = K_bf*param_scale
+            r_bf, K_bf = get_kernel_brute(path_input, mode_type, n, l, param, units = units)
+            K_bf = K_bf/param_scale
 
             ax.plot(K_bf, r_bf, label = 'Brute force')
 
@@ -106,6 +153,12 @@ def main():
 
         ax.set_xlabel(K_label, fontsize = font_size_label)
         ax.axvline(linestyle = ':', color = 'k')
+
+        if h_lines is not None:
+
+            for h_line in h_lines:
+                
+                ax.axhline(h_line, linestyle = ':', color = 'k')
 
         #print(param, np.max(np.abs(K_plt))/np.nanmax(np.abs(K_bf)))
 
@@ -134,7 +187,6 @@ def main():
         print('Saving figure to {:}'.format(fig_path))
         plt.savefig(fig_path, dpi = 300, bbox_inches = 'tight')
 
-    plt.tight_layout()
     plt.show()
 
     return

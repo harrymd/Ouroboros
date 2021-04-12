@@ -122,6 +122,15 @@ def read_ndk(path_ndk):
     secs_int = int(np.floor(secs))
     microsecs_int = int(round(1.0E6*(secs - secs_int)))
 
+    # Global CMT catalog has some cases where secs = 60.
+    if secs_int == 60:
+        
+        secs_int = 0
+        hours_int = int(hhmm_str[0:2])
+        minutes_int = int(hhmm_str[3:])
+        minutes_int = minutes_int + 1
+        hhmm_str = '{:>02d}:{:>02d}'.format(hours_int, minutes_int)
+
     hhmmss_str = '{:}:{:>02d}'.format(hhmm_str, secs_int) 
 
     assert microsecs_int < 1000000

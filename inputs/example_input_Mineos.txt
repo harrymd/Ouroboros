@@ -1,9 +1,0 @@
-path_model models/prem_noocean.txt
-path_out_dir ../../output/mineos
-grav_switch 2
-mode_types S
-n_limits 0 15 
-l_limits 0 30 
-f_limits 0.0 5.5
-eps 1.0E-10
-max_depth all

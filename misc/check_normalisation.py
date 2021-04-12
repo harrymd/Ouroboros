@@ -3,11 +3,10 @@ import argparse
 import numpy as np
 
 from common import (    get_r_fluid_solid_boundary,
-                        load_eigenfreq_Ouroboros, load_eigenfunc_Ouroboros,
-                        load_eigenfreq_Mineos, load_eigenfunc_Mineos,
+                        load_eigenfreq,
+                        load_eigenfunc,
                         load_model,
-                        read_Ouroboros_input_file,
-                        read_Mineos_input_file)
+                        read_input_file)
 from kernels.run_kernels import interp_n_parts
 
 def main():
@@ -75,20 +74,12 @@ def main():
     eig_norm    = args.eig_norm
     eig_norm_units = args.eig_norm_units
 
-
-
     if use_mineos:
 
         assert i_toroidal is None, 'The i_toroidal flag is not used with Mineos, try using mode_type == \'T\' for mantle toroidal modes and mode_type == \'I\' for inner-core toroidal modes.'
     
     # Read the input file and command-line arguments.
-    if use_mineos:
-
-        run_info = read_Mineos_input_file(path_input)
-
-    else:
-
-        run_info = read_Ouroboros_input_file(path_input)
+    run_info = read_input_file(path_input)
 
     # Load the planetary model.
     model = load_model(run_info['path_model'])
@@ -98,13 +89,8 @@ def main():
         model['rho'] = model['rho']*rho_scale
 
     # Load frequency information.
-    if use_mineos:
-    
-        f_mHz = load_eigenfreq_Mineos(run_info, mode_type, n_q = n, l_q = l)
-        
-    else:
-        
-        f_mHz = load_eigenfreq_Ouroboros(run_info, mode_type, n_q = n, l_q = l, i_toroidal = i_toroidal)
+    mode_info = load_eigenfreq(run_info, mode_type, n_q = n, l_q = l)
+    f_mHz = mode_info['f']
 
     if freq_scale is not None:
 
@@ -120,58 +106,25 @@ def main():
         load_eigfunc_norm_args['omega'] = f_rad_per_s
 
     # Load eigenfunction(s).
-    if use_mineos:
+    eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, norm_args = load_eigfunc_norm_args)
+    r = eigfunc_dict['r']
+    if mode_type == 'R':
+        
+        U = eigfunc_dict['U']
 
-        if mode_type == 'R':
-            
-            print('Loading raw values of r and U from Ouroboros output files.')
-            r, U, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l, **load_eigfunc_norm_args)
-            r = r[::-1]
-            U = U[::-1]
+    elif mode_type == 'S':
 
-        elif mode_type == 'S': 
+        U = eigfunc_dict['U']
+        V = eigfunc_dict['V']
 
-            r, U, _, V, _, _, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l, **load_eigfunc_norm_args)
-            r = r[::-1]
-            U = U[::-1]
-            V = V[::-1]
+    elif mode_type in ['T', 'I']:
 
-        elif mode_type in ['T', 'I']:
-
-            r, W, _ = load_eigenfunc_Mineos(run_info, mode_type, n, l, **load_eigfunc_norm_args)
-            r = r[::-1]
-            W = W[::-1]
-
-    else:
-
-        if mode_type == 'R':
-            
-            print('Loading raw values of r and U from Ouroboros output files.')
-            r, U = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, **load_eigfunc_norm_args)
-            U[0] = 0.0 # Value of U at planet core appears to be buggy for R modes.
-
-        elif mode_type == 'S': 
-
-            r, U, V = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, **load_eigfunc_norm_args)
-
-        elif mode_type == 'T':
-
-            r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal, **load_eigfunc_norm_args)
+        W = eigfunc_dict['W']
 
     if mode_type in ['S', 'T']:
 
         k = np.sqrt(l*(l + 1.0))
 
-    #
-    print('Converting radius to m')
-    if use_mineos:
-
-        pass
-
-    else:
-
-        r = r*1.0E3
-    
     # Apply scaling.
     if r_scale is not None:
         
