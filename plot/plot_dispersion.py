@@ -3,13 +3,14 @@ import os
 import sys
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 from Ouroboros.common import align_mode_lists, get_Ouroboros_out_dirs, load_eigenfreq, mkdir_if_not_exist, read_input_file
 from Ouroboros.misc.compare_eigenfunctions import get_eigfunc_comparison_out_path
 
-def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = True, i_toroidal = None, f_lims = 'auto', l_lims = 'auto', colors = ['k', 'k'], apply_atten_correction = False, var = None, path_highlight = None):
+def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = True, i_toroidal = None, f_lims = 'auto', l_lims = 'auto', colors = ['k', 'k'], apply_atten_correction = False, var = None, path_highlight = None, highlight_box = None):
     
     # Get mode information.
     mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal)
@@ -72,7 +73,7 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
 
         add_legend = False
         
-    ax = plot_dispersion(n, l, f, ax = ax, show = False, color = colors[0], c_scatter = colors[1], alpha = alpha, add_legend = add_legend, nlf_radial = nlf_radial, f_lims = f_lims, l_lims = l_lims, size_info = size_info)
+    ax = plot_dispersion(n, l, f, ax = ax, show = False, color = colors[0], c_scatter = colors[1], alpha = alpha, add_legend = add_legend, nlf_radial = nlf_radial, f_lims = f_lims, l_lims = l_lims, size_info = size_info, highlight_box = highlight_box)
 
     if path_highlight is not None:
 
@@ -115,7 +116,7 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
 
     return ax
 
-def plot_dispersion(n, l, f, ax = None, l_lims = 'auto', f_lims = 'auto', x_label = 'Angular order, $\ell$', y_label = 'Frequency / mHz', title = None, h_lines = None, path_fig = None, show = True, color = 'k', c_scatter = 'k', alpha = 1.0, label = None, add_legend = False, nlf_radial = None, size_info = None, colors = None, legend_label = None):
+def plot_dispersion(n, l, f, ax = None, l_lims = 'auto', f_lims = 'auto', x_label = 'Angular order, $\ell$', y_label = 'Frequency / mHz', title = None, h_lines = None, path_fig = None, show = True, color = 'k', c_scatter = 'k', alpha = 1.0, label = None, add_legend = False, nlf_radial = None, size_info = None, colors = None, legend_label = None, highlight_box = None):
 
     n_list = sorted(list(set(n)))
     
@@ -194,6 +195,15 @@ def plot_dispersion(n, l, f, ax = None, l_lims = 'auto', f_lims = 'auto', x_labe
 
         legend_label = size_info['legend_label']
 
+    if highlight_box is not None:
+
+        rect = Rectangle((highlight_box[0], highlight_box[1]),
+                    highlight_box[2], highlight_box[3],
+                    transform = ax.transData,
+                    facecolor = 'none',
+                    edgecolor = 'r')
+        ax.add_artist(rect)
+
     if add_legend:
 
         plt.legend(title = legend_label)
@@ -258,6 +268,12 @@ def get_var_aligned(mode_type, run_info_0, run_info_1, var, f_lims):
     f_0 = mode_info_0['f']
     var_0 = mode_info_0[var]
 
+    i = np.where((n_0 == 2) & (l_0 == 1))[0]
+    n_0 = np.delete(n_0, i)
+    l_0 = np.delete(l_0, i)
+    f_0 = np.delete(f_0, i)
+    var_0 = np.delete(var_0, i)
+
     mode_info_1 = load_eigenfreq(run_info_1, mode_type, i_toroidal = None)
     n_1 = mode_info_1['n']
     l_1 = mode_info_1['l']
@@ -302,10 +318,22 @@ def plot_differences(run_info_0, run_info_1, mode_type, diff_type = 'eigenvalues
 
             print('Comparison file {:} not found. Try running the misc/compare_eigenfunctions.py command.'.format(path_rms))
             return
+
+
         
         n, l, f_0, f_1, rms_diff, rms_A, rms_B = np.loadtxt(path_rms).T
         n = n.astype(np.int)
         l = l.astype(np.int)
+        
+        # 
+        i = np.where((n == 2) & (l == 1))[0]
+        n = np.delete(n, i)
+        l = np.delete(l, i)
+        f_0 = np.delete(f_0, i)
+        f_1 = np.delete(f_1, i)
+        rms_diff = np.delete(rms_diff, i)
+        rms_A = np.delete(rms_A, i)
+        rms_B = np.delete(rms_B, i)
         
         f_mean = (f_0 + f_1)/2.0
         i_f = get_f_lims_indices(f_mean, f_lims)
@@ -422,6 +450,7 @@ def main():
     parser.add_argument("--plot_diff", choices = ['eigvals', 'eigvecs', 'Q'], help = 'Plot differences between mode frequencies (option \'eigvals\') or eigenfunctions (option \'eigvecs\').')
     parser.add_argument("--plot_var", choices = ['Q'], help = 'Plot a variable. Options: Q (attenuation quality factor).')
     parser.add_argument("--var_lims", type = float, nargs = 2)
+    parser.add_argument("--highlight_box", type = float, nargs = 4, help = "(x0, y0, width, height) of highlight box.")
     args = parser.parse_args()
 
     # Rename input arguments.
@@ -432,6 +461,7 @@ def main():
     diff_type = args.plot_diff
     plot_var = args.plot_var
     var_lims = args.var_lims
+    highlight_box = args.highlight_box
     if diff_type is not None:
 
         assert path_input_comparison is not None, 'To plot differences, you must specify --path_input_comparison.'
@@ -520,7 +550,8 @@ def main():
 
         else:
 
-            plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal, f_lims = f_lims, l_lims = l_lims, var = plot_var, path_highlight = path_highlight)
+            plot_dispersion_wrapper(run_info, mode_type, i_toroidal = i_toroidal, f_lims = f_lims, l_lims = l_lims, var = plot_var, path_highlight = path_highlight,
+                                        highlight_box = highlight_box)
 
     return
 

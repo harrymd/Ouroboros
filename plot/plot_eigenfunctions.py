@@ -10,9 +10,9 @@ from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary
                             load_eigenfreq, load_eigenfunc,
                             load_model, mkdir_if_not_exist,
                             read_input_file)
-from Ouroboros.misc.compare_eigenfunctions import check_sign_R, check_sign_S, check_sign_P
+from Ouroboros.misc.compare_eigenfunctions import check_sign_R, check_sign_S, check_sign_P, check_sign_T
 
-def get_title_str(mode_type, n, l, code):
+def get_title_str(mode_type, n, l, code, i_toroidal = None):
 
     # Get title string information.
     if mode_type in ['R', 'S']:
@@ -68,7 +68,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     eigfunc_dict['r'] = eigfunc_dict['r']*1.0E-3 # Convert to km.
 
     # Get title string.
-    title = get_title_str(mode_type, n, l, run_info['code'])
+    title = get_title_str(mode_type, n, l, run_info['code'], i_toroidal = i_toroidal)
 
     if plot_potential:
         
@@ -84,6 +84,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         elif mode_type == 'R':
 
             sign = check_sign_R(eigfunc_dict['r'], eigfunc_dict['U'])
+
+        elif mode_type in ['I', 'T']:
+
+            sign = check_sign_T(eigfunc_dict['r'], eigfunc_dict['W'])
     
     # Find axis limits.
     if plot_gradient:
@@ -436,7 +440,7 @@ def set_patch_facecolors(fig, ax):
 
     return
 
-def plot_eigenfunc_R_or_T(r, U_or_W, ax = None, show = False, h_lines = None, add_legend = True, legend_loc = 'best', title = None, label = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', linestyle = '-', alpha = 1.0):
+def plot_eigenfunc_R_or_T(r, U_or_W, ax = None, show = False, h_lines = None, add_legend = True, legend_loc = 'best', title = None, label = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', linestyle = '-', alpha = 1.0, r_lims = None):
 
     ax.plot(U_or_W, r, color = 'r', label = label, linestyle = linestyle, alpha = alpha)
 
@@ -445,7 +449,7 @@ def plot_eigenfunc_R_or_T(r, U_or_W, ax = None, show = False, h_lines = None, ad
 
     max_abs_U_or_W_plot = np.max(np.abs(U_or_W))
     
-    tidy_axes(ax, r, max_abs_U_or_W_plot, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label)
+    tidy_axes(ax, r, max_abs_U_or_W_plot, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label, r_lims = r_lims)
 
     return
 

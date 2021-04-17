@@ -79,6 +79,15 @@ def check_sign_R(r, U):
 
     return sign
 
+def check_sign_T(r, W):
+
+    # Calculate sign.
+    iW = np.trapz(r*W, x = r)
+
+    sign = np.sign(iW)
+
+    return sign
+
 def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
 
     # Load eigenfunctions.
@@ -171,6 +180,7 @@ def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
     
     if n == 0 and l == 22:
         plot = True 
+        plot = False
 
     else:
         plot = False

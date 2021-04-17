@@ -572,7 +572,6 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
     n, l, f_0, f, Q = np.loadtxt(path_eigval).T
     #if Ouroboros_info['use_attenuation']:
 
-
     #else:
 
     #    n, l, f = np.loadtxt(path_eigval).T
@@ -744,15 +743,16 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # Toroidal case.
     elif mode_type == 'T':
 
-        r, W = np.load(path_eigenfunc)
+        r, W, Wp = np.load(path_eigenfunc)
 
         # Apply normalisation.
         W = W*eigfunc_norm
+        Wp = Wp*eigfunc_norm*grad_norm
         if norm_func == 'DT':
 
             W = W*k
 
-        eigenfunc_dict = {'r' : r, 'W' : W}
+        eigenfunc_dict = {'r' : r, 'W' : W, 'Wp' : Wp}
     
     # Error catching.
     else:
@@ -1002,7 +1002,7 @@ def load_eigenfunc_Mineos(run_info, mode_type, n, l, norm_func = 'mineos', units
                             'P' : P, 'Pp' : Pp}
 
     elif mode_type in ['T', 'I']:
-
+        
         r, W, Wp = data
 
         # Apply normalisation.
@@ -1127,17 +1127,28 @@ def align_mode_lists(n_0, l_0, n_1, l_1):
 
     return n, l, i_align_0, i_align_1
 
-def filter_mode_list(mode_info, path_mode_list):
+def filter_mode_list(mode_info, path_mode_list = None, f_lims = None):
     
     mode_type = 'S'
-
-    n_choose, l_choose = np.loadtxt(path_mode_list, dtype = np.int).T
-
-    i_choose = []
-    for i in range(len(n_choose)):
-
-        i_choose.append(np.where((n_choose[i] == mode_info[mode_type]['n']) & (l_choose[i] == mode_info[mode_type]['l']))[0][0])
     
+    assert (path_mode_list is not None) or (f_lims is not None)
+    
+    i_choose = []
+    if path_mode_list is not None:
+
+        n_choose, l_choose = np.loadtxt(path_mode_list, dtype = np.int).T
+
+        for i in range(len(n_choose)):
+
+            i_choose.append(np.where((n_choose[i] == mode_info[mode_type]['n']) & (l_choose[i] == mode_info[mode_type]['l']))[0][0])
+    
+    if f_lims is not None:
+
+        i_choose.extend(list(np.where((mode_info[mode_type]['f'] < f_lims[1]) & (mode_info[mode_type]['f'] > f_lims[0]))[0]))
+
+    i_choose = list(set(i_choose))
+    i_choose.sort()
+
     mode_info_new = dict()
     mode_info_new[mode_type] = dict()
     for key in mode_info[mode_type]:
@@ -1224,6 +1235,28 @@ def write_model(model, path_out, header_str):
                 model['v_sh'][i], model['eta'][i]))
 
     return
+
+def get_n_solid_layers(model):
+
+    is_fluid = (model['v_s'] == 0.0)
+    is_fluid_layer = []
+    for i in range(len(model['v_s'])):
+
+        if (i == 0):
+
+            is_fluid_layer.append(is_fluid[i])
+
+        else:
+
+            if is_fluid[i] != is_fluid[i - 1]:
+
+                is_fluid_layer.append(is_fluid[i])
+
+    n_layers = len(is_fluid_layer)
+    n_fluid_layers = sum(is_fluid_layer)
+    n_solid_layers = n_layers - n_fluid_layers
+
+    return n_solid_layers
 
 # Manipulating waveform data. -------------------------------------------------
 def add_epi_dist_and_azim(inv, cmt, stream):

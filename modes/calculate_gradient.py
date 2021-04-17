@@ -3,9 +3,9 @@ import os
 
 import numpy as np
 
-from Ouroboros.common import (get_Ouroboros_out_dirs, 
+from Ouroboros.common import (get_n_solid_layers, get_Ouroboros_out_dirs, 
                         load_eigenfreq_Ouroboros,
-                        load_eigenfunc_Ouroboros, mkdir_if_not_exist,
+                        load_eigenfunc_Ouroboros, load_model, mkdir_if_not_exist,
                         read_Ouroboros_input_file)
 
 def get_indices_of_discontinuities(r):
@@ -91,7 +91,30 @@ def gradient_wrapper_S(run_info, dir_output, n, l, **normalisation_args):
 
     return
 
-def gradient_all_modes(run_info, mode_type, j_skip = None):
+def gradient_wrapper_T(run_info, dir_output, n, l, i_toroidal, **normalisation_args):
+
+    mode_type = 'T'
+
+    # Load eigenfunction.
+    eigfunc_info = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal, **normalisation_args)
+    r = eigfunc_info['r']
+    r = r*1.0E-3 # Units of km.
+    W = eigfunc_info['W']
+
+    # Calculate derivatives.
+    Wp = radial_derivative(r, W)
+
+    # Save.
+    file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
+    path_out = os.path.join(dir_output, 'eigenfunctions_{:>03d}'.format(i_toroidal),
+                file_eigenfunc)
+    out_arr = np.array([r, W, Wp])
+    print("Saving to {:}".format(path_out))
+    np.save(path_out, out_arr)
+
+    return
+
+def gradient_all_modes_R_or_S(run_info, mode_type, j_skip = None):
 
     # Calculate eigenfunction gradients before attenuation re-labelling.
     #run_info['use_attenuation'] = False
@@ -134,13 +157,49 @@ def gradient_all_modes(run_info, mode_type, j_skip = None):
 
                 gradient_wrapper_S(run_info, dir_output, n[i], l[i], **normalisation_args)
 
-            elif mode_type == 'T':
+    return
 
-                raise NotImplementedError
+def gradient_all_modes_T(run_info, j_skip = None):
 
-            else:
+    mode_type = 'T'
 
-                raise ValueError
+    # Set normalisation of eigenfunctions (and therefore potential).
+    # Use Mineos normalisation and Ouroboros units so output is consistent
+    # with eigenfunctions.
+    #normalisation_args = {'norm_func' : 'DT', 'units' : 'ouroboros'}
+    normalisation_args = {'norm_func' : 'mineos', 'units' : 'ouroboros'}
+    #
+    # Get output directory.
+    _, _, _, dir_output = \
+        get_Ouroboros_out_dirs(run_info, mode_type)
+
+    # Determine how many layers there are.
+    model = load_model(run_info['path_model'])
+    n_solid_layers = get_n_solid_layers(model)
+
+    for i in range(n_solid_layers):
+
+        # Get list of modes.
+        mode_info = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i)
+        n = mode_info['n']
+        l = mode_info['l']
+        f = mode_info['f']
+
+        num_modes = len(n)
+
+        for j in range(num_modes):
+
+            if (j_skip is None) or (not (j in j_skip)):
+
+                #print('{:>5d} {:>1} {:>5d}'.format(n[j], mode_type, l[j]))
+
+                # To convert from Ouroboros normalisation to Dahlen and Tromp
+                # normalisation we must provide the mode frequency in
+                # rad per s.
+                f_rad_per_s = f[j]*1.0E-3*2.0*np.pi
+                normalisation_args['omega'] = f_rad_per_s
+
+                gradient_wrapper_T(run_info, dir_output, n[j], l[j], i, **normalisation_args)
     
     return
 

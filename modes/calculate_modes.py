@@ -10,7 +10,7 @@ from Ouroboros.kernels.run_kernels import kernels_wrapper
 from Ouroboros.modes.attenuation_correction import apply_atten_correction_all_modes, dispersion_correction
 from Ouroboros.modes.compute_modes import radial_modes, spheroidal_modes, toroidal_modes
 from Ouroboros.modes.calculate_potential import potential_all_modes
-from Ouroboros.modes.calculate_gradient import gradient_all_modes
+from Ouroboros.modes.calculate_gradient import gradient_all_modes_R_or_S, gradient_all_modes_T
 
 def create_adjusted_model(run_info):
     '''
@@ -413,11 +413,20 @@ def main():
 
         else:
 
-            # Calculate potential.
-            potential_all_modes(Ouroboros_info, mode_type)
+            if mode_type in ['R', 'S']:
 
-            # Calculate gradient.
-            gradient_all_modes(Ouroboros_info, mode_type)
+                # Calculate potential.
+                potential_all_modes(Ouroboros_info, mode_type)
+
+            if mode_type in ['R', 'S']:
+
+                # Calculate gradient.
+                gradient_all_modes_R_or_S(Ouroboros_info, mode_type)
+
+            elif mode_type == 'T':
+
+                # Calculate gradient.
+                gradient_all_modes_T(Ouroboros_info)
 
             # Calculate kernels.
             kernels_wrapper(Ouroboros_info, mode_type)

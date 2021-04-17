@@ -86,3 +86,10 @@ def get_kernels_S(r, U, V, dUdr, dVdr, l, omega, i_fluid = None):
     K_mu = kernel_spheroidal_mu(r, U, V, dUdr, dVdr,    l, omega, i_fluid = i_fluid)
 
     return K_ka, K_mu
+
+def get_kernels_T(r, W, dWdr, l, omega):
+
+    K_mu = np.zeros(W.shape)
+    K_rho = np.zeros(W.shape)
+
+    return K_mu, K_rho

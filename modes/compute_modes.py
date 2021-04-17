@@ -174,12 +174,14 @@ def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickne
             # Write out the eigenvalues.
             with open(path_eigenvalues, 'a') as f_out:
     
-                f_out.write('{:>10d} {:>10d} {:>16.12f}\n'.format(n, l, omega[n]))
+                f_out.write('{:>10d} {:>10d} {:>19.12e} {:>19.12e} {:>19.12e}\n'.format(n, l, omega[n], omega[n], 0.0))
+                #f_out.write('{:>10d} {:>10d} {:>16.12f}\n'.format(n, l, omega[n]))
     
             # Write eigenfunction.
             file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
             path_eigenfunc = os.path.join(dir_eigenfunc, file_eigenfunc)
-            out_arr = np.array([1000.0*xx, W_eigen])
+            Wp_dummy = np.zeros(len(W_eigen))
+            out_arr = np.array([1000.0*xx, W_eigen, Wp_dummy])
             np.save(path_eigenfunc, out_arr)
     
     return omega

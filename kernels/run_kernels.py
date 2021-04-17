@@ -7,8 +7,7 @@ from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary
                         get_path_adjusted_model,
                         interp_n_parts, load_eigenfreq, load_eigenfunc,
                         mkdir_if_not_exist, load_model, read_input_file)
-from Ouroboros.kernels.kernels import get_kernels_S, gravitational_acceleration
-#from Ouroboros.kernels.kernels import get_kernels_spheroidal, get_kernels_toroidal, gravitational_acceleration, potential
+from Ouroboros.kernels.kernels import get_kernels_T, get_kernels_S, gravitational_acceleration
 
 def kernels_wrapper(run_info, mode_type, j_skip = None):
 
@@ -131,7 +130,7 @@ def kernels_wrapper_R_or_S(run_info, model, mode_type, j_skip = None):
 
     return
 
-def kernels_wrapper_T(run_info, model):
+def kernels_wrapper_T(run_info, model, j_skip = None):
 
     mode_type = 'T'
     
@@ -148,16 +147,17 @@ def kernels_wrapper_T(run_info, model):
     for i_toroidal in range(n_solid_regions):
         
         # Get a list of all the modes calculated by Ouroboros.
-        n_list, l_list, f_list = load_eigenfreq_Ouroboros(run_info, mode_type, i_toroidal = i_toroidal) 
-        num_modes = len(n_list)
+        mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal) 
+        num_modes = len(mode_info['n'])
 
         for i in range(num_modes):
         #for i in [0]:
             
             # Give shorter names to current n, l and f.
-            n = n_list[i]
-            l = l_list[i]
-            f = f_list[i]
+            n = mode_info['n'][i]
+            l = mode_info['l'][i]
+            f = mode_info['f'][i]
+            omega_rad_per_s = f*1.0E-3*2.0*np.pi
 
             # Make announcement.
             mode_key = 'T{:}'.format(i_toroidal)
@@ -167,35 +167,23 @@ def kernels_wrapper_T(run_info, model):
 
                 # Load eigenfunctions. On the first mode, also interpolate the model
                 # properties at the eigenfunction grid points and calculate gravity.
-                r, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+                eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+                r = eigfunc_dict['r']
 
                 rho = np.interp(r, model['r'], model['rho']) 
-                #v_p = np.interp(r, model['r'], model['v_p']) 
                 v_s = np.interp(r, model['r'], model['v_s']) 
             
             else:
 
-                _, W = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal)
+                eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, i_toroidal = i_toroidal)
 
+            if (j_skip is None) or not (i in j_skip):
 
-            # Convert to Mineos normalisation.
-            W = W*ratio
+                # Convert to Mineos normalisation.
+                eigfunc_dict['W'] = eigfunc_dict['W']*ratio
 
-            K_mu, K_rho, K_beta, K_rhop = \
-                get_kernels_toroidal(f, r, W, l, rho, v_s)
-
-        #import matplotlib.pyplot as plt
-
-        #fig, ax_arr  = plt.subplots(1, 2, figsize = (6.0, 6.0), sharey = True)
-        #ax_arr[0].plot(K_mu,  r)
-        #ax_arr[1].plot(K_rho,  r)
-        #plt.show()
-
-        #fig, ax_arr  = plt.subplots(1, 3, figsize = (10.0, 6.0))
-        #ax_arr[0].plot(K_alpha, r, label = 'vp')
-        #ax_arr[1].plot(K_beta,  r, label = 'vs')
-        #ax_arr[2].plot(K_rhop,  r, label = 'rho')
-        #plt.show()
+                K_mu, K_rho = get_kernels_T(r, eigfunc_dict['W'],
+                                eigfunc_dict['Wp'], l, omega_rad_per_s)
 
     return
 
