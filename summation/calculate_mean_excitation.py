@@ -1,3 +1,8 @@
+'''
+Calculates the mean excitation coefficients of a given mode due to a 
+given source.
+'''
+
 import argparse
 from glob import glob
 import os
@@ -13,6 +18,7 @@ from Ouroboros.summation.run_summation import (calculate_source_coefficients_sph
 
 def calculate_mean_coeff_spheroidal(source_coeffs, l, Ur):
     '''
+    Calculates the mean excitation coefficient for a given spheroidal mode.
     See Ouroboros/doc/summation_notes.pdf
     '''
 
@@ -41,6 +47,10 @@ def calculate_mean_coeff_spheroidal(source_coeffs, l, Ur):
     return coeff
 
 def calculate_mean_excitation(run_info, summation_info, overwrite = False, response_correction_params = None, path_suffix = ''):
+    '''
+    Calculate the mean excitation coefficients of all modes due to a given
+    source.
+    '''
 
     # Receiver depth (km).
     z_receiver = 0.0
@@ -196,13 +206,16 @@ def calculate_mean_excitation(run_info, summation_info, overwrite = False, respo
     return coeff_data_frame, mode_data_frame 
 
 def calculate_mean_excitation_multi_event(run_info, summation_info, overwrite = False, response_correction_params = None):
+    '''
+    Calculates the mean excitation coefficients for more than one event.
+    In the summation input, specify path_cmt as a directory, and give
+    each event file in the format *.txt.
+    '''
 
     cmt_list_regex = os.path.join(summation_info['path_cmt'], '*.txt')
     cmt_path_list = glob(cmt_list_regex)
     cmt_path_list.sort()
 
-    #cmt_path_list = cmt_path_list[0:5]
-    
     n_events = len(cmt_path_list)
     for i in range(n_events):
         
@@ -218,7 +231,7 @@ def calculate_mean_excitation_multi_event(run_info, summation_info, overwrite = 
 
 def main():
     '''
-    See Ouroboros/doc/summation_notes.pdf
+    Main script for calculating mean excitation coefficient.
     '''
 
     # Parse input arguments.

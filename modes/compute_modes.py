@@ -21,7 +21,8 @@ from scipy.linalg import block_diag
 from scipy.interpolate import interp1d
 import scipy.sparse as sps
 
-from Ouroboros.common import mkdir_if_not_exist, load_model, get_path_adjusted_model
+from Ouroboros.common import (  mkdir_if_not_exist, load_model,
+                                get_path_adjusted_model)
 from Ouroboros.modes import FEM
 from Ouroboros.modes import lib
 from Ouroboros.modes import setup
@@ -35,7 +36,8 @@ G = 6.6723e-2
 # Toroidal modes. -------------------------------------------------------------
 def toroidal_modes(run_info):
     '''
-    Get toroidal modes of each layer from inside to outside(inner core to mantle for earth), returning with several layers of modes.
+    Calculate toroidal modes (frequencies and eigenfunctions) for each solid
+    region from inside to outside (inner core and then mantle for Earth).
     '''
 
     # Unpack input.
@@ -67,6 +69,7 @@ def toroidal_modes(run_info):
     dir_eigenfunc_list, path_eigenvalues_list) = \
         prep_fem(model_path, dir_type, num_elmt, switch)
 
+    # Loop over l-value.
     for l in range(lmin,lmax+1):
         
         print('toroidal_modes: l = {:>5d} (from {:>5d} to {:>5d})'.format(l, lmin, lmax))
@@ -78,19 +81,22 @@ def toroidal_modes(run_info):
             continue
         
         # Build the matrices, solve and save.
-        solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_eigenfunc_list, path_eigenvalues_list)
+        solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num,
+                count_thick, thickness, invV, order, Dr,
+                dir_eigenfunc_list, path_eigenvalues_list)
 
     return 
 
 def solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_eigenfunc_list, path_eigenvalues_list):
+    '''
+    For each solid region, construct mass and stiffness matrices and solve,
+    saving the eigenfunctions and eigenvalues.
+    '''
     
     # Calculate asymptotic wavenumber.
     k = np.sqrt(l*(l + 1.0))
     model.set_k(k)
 
-    #path_eigenvalues_list = iter(path_eigenvalues_list)
-    #dir_eigenfunc_list = iter(dir_eigenfunc_list)
-    
     # Loop over the layers of the model.
     j = 0
     for i in range(layers):
@@ -100,16 +106,24 @@ def solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, th
 
             # Build the matrices A and B and solve to get the eigenvalues
             # and eigenvectors.
-            eigvals, eigvecs = build_matrices_toroidal_and_solve(model, count_thick, i, invV, order, Dr)
+            eigvals, eigvecs = build_matrices_toroidal_and_solve(model,
+                                count_thick, i, invV, order, Dr)
 
             # 
-            process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickness, order, x, i, path_eigenvalues_list[j], dir_eigenfunc_list[j], save = True)
+            process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax,
+                    count_thick, thickness, order, x, i,
+                    path_eigenvalues_list[j], dir_eigenfunc_list[j],
+                    save = True)
 
             j = j + 1
 
     return
 
 def build_matrices_toroidal_and_solve(model, count_thick, i, invV, order, Dr):
+    '''
+    Construct mass and stiffness matrices for toroidal modes, and solve the
+    eigenvalue equation.
+    '''
 
     cur_model = lib.modelDiv(model,np.arange(count_thick[i],count_thick[i+1]))
     # generate matrices A and B such that Ax  =  omega^2*Bx
@@ -147,15 +161,14 @@ def build_matrices_toroidal_and_solve(model, count_thick, i, invV, order, Dr):
     return eigvals, eigvecs
 
 def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickness, order, x, i_layer, path_eigenvalues, dir_eigenfunc, save = True):
+    '''
+    Process the eigenvalues and eigenfunctions.
+    '''
 
     # Transform from eigenvalues (square of angular frequency (rad/s)) to
     # frequencies (mHz).
     omega = np.sqrt(eigvals)/(2.0*np.pi)
     omega = omega*1000.0
-    
-    # Get output paths and directories.
-    #path_eigenvalues    = next(path_eigenvalues_list)
-    #dir_eigenfunc       = next(dir_eigenfunc_list)
     
     # Loop over radial order.
     for n in range(nmin, nmax+1):
@@ -188,6 +201,10 @@ def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickne
 
 # Radial modes. ---------------------------------------------------------------
 def radial_modes(run_info):
+    '''
+    Calculate radial modes (frequencies and eigenfunctions) for the planetary
+    model.
+    '''
 
     # Unpack input.
     if run_info['use_attenuation']:
@@ -248,6 +265,10 @@ def radial_modes(run_info):
 def helmholtz_R_noGP_or_G(
                 block_type, block_len, layers,
                 A, A_bdr_cond, B, B_bdr_cond, switch):
+    '''
+    Do generalised Helmholtz decomposition for radial modes.
+    Can be used with or without gravity, but not with gravity perturbation.
+    '''
 
     # first layer
     if block_type[0] == 0:
@@ -333,6 +354,10 @@ def helmholtz_R_noGP_or_G(
 def helmholtz_R_GP(
                 block_type, block_len, layers,
                 A, A_bdr_cond, B, B_bdr_cond):
+    '''
+    Do generalised Helmholtz decomposition for radial modes.
+    Includes gravity and perturbation.
+    '''
 
     #squeeze P
     #do I really need to do that?
@@ -451,6 +476,10 @@ def helmholtz_R_GP(
 
 # Spheroidal modes. -----------------------------------------------------------
 def spheroidal_modes(run_info):
+    '''
+    Calculate spheroidal modes (frequencies and eigenfunctions) for the
+    planetary model.
+    '''
 
     # Unpack input.
     if run_info['use_attenuation']:
@@ -517,6 +546,10 @@ def spheroidal_modes(run_info):
 def helmholtz_S_noGP_or_G(
         block_type, block_len, layers,
         A, A_bdr_cond, B, B_bdr_cond):
+    '''
+    Do generalised Helmholtz decomposition for spheroidal modes.
+    Can be used with or without gravity, but not with gravity perturbation.
+    '''
     
     # first layer
     if block_type[0] == 0:
@@ -600,6 +633,10 @@ def helmholtz_S_noGP_or_G(
 def helmholtz_S_GP(
         block_type, block_len, layers,
         A, A_bdr_cond, B, B_bdr_cond):
+    '''
+    Do generalised Helmholtz decomposition for spheroidal modes.
+    Includes gravity and perturbation.
+    '''
 
     #squeeze P
     #do I really need to do that?
@@ -726,6 +763,9 @@ def build_matrices_radial_or_spheroidal(
         Dr, Dr_p, Dr_V, Dr_P,
         rho, radius,
         block_type, brk_radius, brk_num, layers, switch):
+    '''
+    Construct mass and stiffness matrix for radial or spheroidal modes.
+    '''
     
     # Calculate k (asymptotic wavenumber).
     k = np.sqrt(l*(l + 1.0))
@@ -902,6 +942,9 @@ def process_eigen_radial_or_spheroidal(
         x, x_V,
         block_type, block_len, A0_inv, E_singularity, B_eqv_pressure,
         path_eigenvalues, dir_eigenfunc, switch, save = True):
+    '''
+    Process eigenfunctions and eigenvalues of radial or spheroidal modes.
+    '''
     
     # Transform from eigenvalues (square of angular frequency (rad/s)) to
     # frequencies (mHz).
@@ -1056,6 +1099,9 @@ def process_eigen_radial_or_spheroidal(
 
 # All modes. ------------------------------------------------------------------
 def prep_fem(model_path, dir_output, num_elmt, switch): 
+    '''
+    Prepare variables required for constructing finite-element matrices.
+    '''
 
     # Set finite-element order for various parameters.
     # Some parameters are only required for certain cases, and they are 
@@ -1278,12 +1324,18 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
 
 # Generic utilities. ----------------------------------------------------------
 def rm_file_if_exist(path):
+    '''
+    Remove a file (if it exists).
+    '''
 
     if os.path.exists(path):
 
         os.remove(path)
 
 def set_if_needed(value, switch, switch_list):
+    '''
+    Sets a variable to 'value' if 'switch' is in 'switch_list'.
+    '''
 
     if switch in switch_list:
 

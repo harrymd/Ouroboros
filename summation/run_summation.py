@@ -1,3 +1,7 @@
+'''
+Scripts for generating synthetic seismograms by mode summation.
+'''
+
 import argparse
 import datetime
 import os
@@ -5,10 +9,8 @@ import os
 import numpy as np
 from obspy.core.stream import Stream
 from obspy.core.trace import Trace
-#from scipy.integrate import simps#, trapz
 from scipy.integrate import cumulative_trapezoid
 from scipy.special import  lpmn as associated_Legendre_func_series
-#from scipy.special import lpmv as associated_Legendre_func
 import pandas
 
 #from Ouroboros.constants import G
@@ -24,6 +26,7 @@ from Ouroboros.common import (  filter_mode_list,
                                 read_Ouroboros_summation_input_file)
 from Ouroboros.misc.cmt_io import read_mineos_cmt
 
+# Define mappings between mode types and integers.
 mode_type_to_int = {'R' : 0, 'S' : 1, 'T' : 2}
 mode_int_to_type = {0 : 'R', 1 : 'S', 2 : 'T'}
 
@@ -61,6 +64,8 @@ def calculate_azimuth(lon_A, lat_A, lon_B, lat_B, io_in_degrees = True):
 
 def calculate_epicentral_distance(lon_A, lat_A, lon_B, lat_B, io_in_degrees = True):
     '''
+    Calculate epicentral distance between two points.
+    By default, input in output is in degrees, but can be radians if preferred.
     Dahlen and Tromp (1998) eq. 10.1.
     '''
 
@@ -91,7 +96,10 @@ def calculate_epicentral_distance(lon_A, lat_A, lon_B, lat_B, io_in_degrees = Tr
 
 def calculate_epi_dist_azi_mineos(lon_0, lat_0, lon_1, lat_1):
     '''
-    Copied from mineos/green.f:
+    Calculates the epicentral distance and azimuth between two points.
+    Applies a hard-coded correction for Earth's flattening.
+
+    Copied from Mineos, specifically mineos/green.f:
 
           data pi,rad,tstart/3.14159265359,57.29578,0./
 
@@ -196,6 +204,7 @@ def calculate_epi_dist_azi_mineos(lon_0, lat_0, lon_1, lat_1):
 
 def polar_coords_to_unit_vector(theta, phi):
     '''
+    Creates a unit vector pointing to a specific point on a sphere.
     See diagram in [1] for definitions of angles.
     theta   Azimuth (radians).
     phi     Polar angle (radian). 
@@ -211,8 +220,12 @@ def polar_coords_to_unit_vector(theta, phi):
 
     return x, y, z
 
-#
+# Planetary models. -----------------------------------------------------------
 def get_surface_gravity(run_info):
+    '''
+    Calculates surface gravity assuming a spherically-symmetrical planet
+    by integrating the mass and using Newton's formula.
+    '''
     
     # Load the planetary model.
     model = load_model(run_info['path_model'])
@@ -227,8 +240,11 @@ def get_surface_gravity(run_info):
 
     return g_srf
 
-#
+# Earthquake sources. ---------------------------------------------------------
 def moment_sinc(omega, t_half):
+    '''
+    A sinc function. Represents the Fourier transform of a top-hat function.
+    '''
 
     x = omega*t_half
     sinc = np.sin(x)/x
@@ -237,101 +253,25 @@ def moment_sinc(omega, t_half):
 
 def moment_triangle(omega, t_half):
     '''
-    Fourier transform of triangular pulse with half-width t_half and unit
+    Fourier transform of triangular pulse with half-width of t_half and unit
     area.
-    See mineos/syndat.f 
+
+    Based on mineos/syndat.f 
     '''
-
-    #x = omega*t_half
-
-    #f = (2.0/(x**2.0))*(1.0 - np.cos(x))
 
     x = 0.5*0.5*t_half*omega
     f = (np.sin(x)/x)**2.0
 
     return f 
 
-def old_calculate_excitation_factor(l, cosTheta, Phi, cmt_info, eigfunc_source, verbose = True):
-    '''
-    Dahlen and Tromp (1998) eq. 10.53.
-    '''
-    
-    if verbose:
-
-        print('Calculating excitation factor.')
-
-    # Associated Legendre function Plm.
-    Pl0 = associated_Legendre_func(0, l, cosTheta)
-    Pl1 = associated_Legendre_func(1, l, cosTheta)
-    Pl2 = associated_Legendre_func(2, l, cosTheta)
-    #
-    Pl_list = [Pl0, Pl1, Pl2]
-    
-    # Azimuthal terms.
-    cos0Phi = np.cos(0*Phi)
-    cos1Phi = np.cos(1*Phi)
-    cos2Phi = np.cos(2*Phi)
-    cosPhi_list = [cos0Phi, cos1Phi, cos2Phi]
-    #
-    sin0Phi = np.sin(0*Phi)
-    sin1Phi = np.sin(1*Phi)
-    sin2Phi = np.sin(2*Phi)
-    sinPhi_list = [sin0Phi, sin1Phi, sin2Phi]
-
-    # Unpack dictionaries.
-    r = cmt_info['r_centroid']
-    Mrr = cmt_info['Mrr']
-    Mtt = cmt_info['Mtt']
-    Mpp = cmt_info['Mpp']
-    Mrt = cmt_info['Mrt']
-    Mrp = cmt_info['Mrp']
-    Mtp = cmt_info['Mtp']
-    #
-    U = eigfunc_source['U']
-    V = eigfunc_source['V']
-    #
-    dUdr = eigfunc_source['Up']
-    dVdr = eigfunc_source['Vp']
-
-    # Coefficients.
-    # D&T eq. 10.54-10.59.
-    k = np.sqrt(l*(l + 1.0))
-    #
-    A0 = Mrr*dUdr + ((Mtt + Mpp)*(U - 0.5*k*V)*(1.0/r))
-    B0 = 0.0
-    #
-    C = dVdr - (V/r) + ((k*U)/r)
-    A1 = Mrt*C/k
-    B1 = Mrp*C/k
-    #
-    D = (0.5*V)/(k*r)
-    A2 = D*(Mtt - Mpp)
-    B2 = D*Mtp
-    #
-    A_list = [A0, A1, A2]
-    B_list = [B0, B1, B2]
-    
-    #scale = 1.0E4
-    #print(Mrr*dUdr*scale)
-    #print(((Mtt + Mpp)*(U - 0.5*k*V)*(1.0/r))*scale)
-    #print(A0*scale, B0*scale)
-    #print(A1*scale, B2*scale)
-    #print(A2*scale, B2*scale)
-    ##print(C)
-
-    #import sys
-    #sys.exit()
-
-    # Summation (D&T eq. 10.53).
-    excitation = 0.0
-    for m in range(3):
-        
-        term = Pl_list[m]*(A_list[m]*cosPhi_list[m] + B_list[m]*sinPhi_list[m])
-        excitation = excitation + term 
-
-    return excitation
-
 def scale_moment_tensor(cmt_info, omega, pulse_type):
+    '''
+    The convolution with the earthquake source can be done in the frequency
+    domain. In this case, the moment tensor is multiplied by a frequency-
+    dependent value determined by the shape of the source-time function.
+
+    This function also converts from dyn-cm to N-m.
+    '''
 
     # Dahlen and Tromp (1998), eq. 5.92.
     comp_list = ['rr', 'tt', 'pp', 'rt', 'rp', 'tp']
@@ -361,8 +301,13 @@ def scale_moment_tensor(cmt_info, omega, pulse_type):
 
     return M
 
+# Calculation of excitation coefficients. -------------------------------------
 def calculate_source_coefficients_spheroidal(l, omega, cmt_info, eigfunc_source, pulse_type):
     '''
+    Calculates the coefficients A0, A1, A2, B0, B1, B2 in the expressions for
+    excitation of a spheroidal mode, which depend on the eigenfunction
+    evaluated at the source location.
+
     Dahlen and Tromp (1998) eq. 10.53.
     '''
 
@@ -372,11 +317,6 @@ def calculate_source_coefficients_spheroidal(l, omega, cmt_info, eigfunc_source,
     # Apply appropriate frequency scaling to moment tensor.
     M = scale_moment_tensor(cmt_info, omega, pulse_type)
     
-    ## Get unit moment tensor (Dahlen and Tromp, 1998, p. 167).
-    ## Dahlen and Tromp (1998) eq. 5.91
-    #M0 = (1.0/np.sqrt(2.0))*np.sqrt(Mrr**2.0 + Mtt**2.0 + Mpp**2.0
-    #                                + 2.0*(Mrt**2.0) + 2.0*(Mrp**2.0) + 2.0*(Mtp**2.0))
-
     # Unpack eigenfunction information.
     U = eigfunc_source['U']
     V = eigfunc_source['V']
@@ -406,9 +346,12 @@ def calculate_source_coefficients_spheroidal(l, omega, cmt_info, eigfunc_source,
 
 def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Plm_series, Plm_prime_series, sin_cos_Phi_list):
     '''
+    Calculate the excitation coefficients for a given spheroidal mode due to
+    a given source, observed at a given receiver location.
+
     Reference
 
-    [1] Ouroboros/summation/notes.pdf
+    [1] Ouroboros/docs/summation_notes.pdf
     '''
 
     # Unpack source coefficients.
@@ -475,6 +418,10 @@ def calculate_coeffs_spheroidal(source_coeffs, eigfunc_receiver, l, sinTheta, Pl
 
 def calculate_source_coefficients_radial(omega, cmt_info, eigfunc_source, pulse_type):
     '''
+    Calculates the coefficient A0 in the expression for excitation of a
+    radial mode, which depend on the eigenfunction evaluated at the
+    source location.
+
     Dahlen and Tromp (1998) eq. 10.53.
     '''
 
@@ -500,9 +447,12 @@ def calculate_source_coefficients_radial(omega, cmt_info, eigfunc_source, pulse_
 
 def calculate_coeffs_radial(source_coeffs, eigfunc_receiver):
     '''
+    Calculate the excitation coefficients for a given radial mode due to
+    a given source, observed at a given receiver location.
+
     Reference
 
-    [1] Ouroboros/summation/notes.pdf
+    [1] Ouroboros/docs/summation_notes.pdf
     '''
 
     # Unpack source coefficients.
@@ -523,7 +473,7 @@ def calculate_coeffs_radial(source_coeffs, eigfunc_receiver):
 
     return A
 
-#
+# Special functions. ---------------------------------------------------------- 
 def associated_Legendre_func_series_no_CS_phase(m_max, l_max, cosTheta):
     '''
     Get the associated Legendre function Plm from m = 0 to m_max and
@@ -535,8 +485,11 @@ def associated_Legendre_func_series_no_CS_phase(m_max, l_max, cosTheta):
     [1] https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.lpmv.html
     '''
 
-    Plm_series, Plm_prime_series = associated_Legendre_func_series(m_max, l_max, cosTheta)
+    # Use SciPy to calculate associated Legendre function and gradient.
+    Plm_series, Plm_prime_series = associated_Legendre_func_series(m_max,
+                                        l_max, cosTheta)
 
+    # Remove Condon-Shortley phase factor.
     for m in range(0, m_max + 1):
         
         if (m % 2) != 0:
@@ -544,17 +497,14 @@ def associated_Legendre_func_series_no_CS_phase(m_max, l_max, cosTheta):
             Plm_series[m, :] = -1.0*Plm_series[m, :]
             Plm_prime_series[m, :] = -1.0*Plm_prime_series[m, :]
 
-    #for m in range(0, m_max + 1):
-    #    
-    #    if (m % 2) != 0:
-
-    #        Plm_series[:, m] = -1.0*Plm_series[:, m]
-    #        Plm_prime_series[:, m] = -1.0*Plm_prime_series[:, m]
-
     return Plm_series, Plm_prime_series
 
-# -----------------------------------------------------------------------------
+# Loading data, getting file paths. -------------------------------------------
 def get_output_dir_info(run_info, summation_info):
+    '''
+    Get information about output directories, and create necessary
+    directories if they do not exist.
+    '''
 
     # Get information about output dirs.
     if run_info['code'] == 'mineos':
@@ -582,7 +532,10 @@ def get_output_dir_info(run_info, summation_info):
 
     return run_info, summation_info
 
-def load_mode_info(run_info, summation_info, use_mineos = False):
+def load_mode_info(run_info, summation_info):
+    '''
+    Load the list of modes, their frequencies, and Q-factors.
+    '''
 
     # Load mode information.
     mode_info = dict()
@@ -638,7 +591,13 @@ def load_mode_info(run_info, summation_info, use_mineos = False):
     return mode_info
 
 def get_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver = 0.0, response_correction_params = None):
+    '''
+    Load eigenfunction of a specific mode, and interpolate it at the locations
+    of the source and receiver. If requested, response correction will be
+    applied.
+    '''
 
+    # Specify normalisation arguments.
     norm_args = {'norm_func' : 'DT', 'units' : 'SI', 'omega' : f_rad_per_s}
 
     # Load eigenfunction information for this mode.
@@ -650,42 +609,6 @@ def get_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver =
         
         print('Mode summation only implemented for R and S modes.')
         raise NotImplementedError
-
-    #if mode_type == 'S':
-    if False:
-
-        import matplotlib.pyplot as plt
-        
-        n_subplots  = len(eigenfunc_dict.keys()) - 1
-        fig, ax_arr = plt.subplots(1, n_subplots, figsize = (14.0, 8.0), sharey = True)
-        i = 0
-        for key in eigenfunc_dict:
-            if key != 'r':
-                ax = ax_arr[i]
-                ax.plot(eigenfunc_dict[key], eigenfunc_dict['r'], label = key)
-                ax.set_title(key)
-
-                i = i + 1
-
-        plt.show()
-        import sys
-        sys.exit()
-
-    #if response_correction_params is not None:
-
-    #    if mode_type == 'S':
-
-    #        eigenfunc_dict['P'] = P
-
-    #    elif mode_type == 'R':
-    #        
-    #        # Radial modes do have a perturbation to the potential
-    #        # but only internally, so here we just set P = 0.
-    #        eigenfunc_dict['P'] = np.zeros(U.shape)
-
-    #    else:
-
-    #        raise ValueError('Response correction can only be applied to R and S modes.')
 
     # Convert r to depth.
     r_planet = eigenfunc_dict['r'][-1]
@@ -708,14 +631,6 @@ def get_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver =
     elif mode_type == 'R':
 
         keys = ['U', 'Up']
-
-        #if response_correction_params is not None:
-
-        #    keys = ['U', 'Up', 'P']
-
-        #else:
-
-        #    keys = ['U', 'Up']
 
     else:
         
@@ -762,7 +677,59 @@ def get_eigenfunc(run_info, mode_type, n, l, f_rad_per_s, z_source, z_receiver =
 
     return eigfunc_source, eigfunc_receiver, r_planet
 
+def load_time_info(path_timing):
+    '''
+    Read timing information (number of samples and sampling interval).
+    '''
+
+    with open(path_timing, 'r') as in_id:
+
+        line = in_id.readline().split()
+        num_t = int(line[0])
+        d_t   = float(line[1])
+
+    return num_t, d_t
+
+def check_channel_output_files_exist(dir_np_arrays, station_list, channel_dict, var_name):
+    '''
+    Check if the output NumPy arrays already exist.
+    '''
+
+    # Get output path list.
+    num_stations = len(station_list)
+    path_out_dict = dict()
+    for i in range(num_stations):
+
+        station = station_list[i]
+        path_out_dict[station] = dict()
+
+        channels = channel_dict[station]['channels']
+        for channel in channels:
+
+            name_out = '{:}_{:}_{:}.npy'.format(var_name, station, channel)
+            path_out = os.path.join(dir_np_arrays, name_out)
+            path_out_dict[station][channel] = path_out
+
+    # Check output files already exist.
+    out_files_exist = []
+    #if (not overwrite):
+    if True:
+
+        for station in path_out_dict:
+
+            for channel in path_out_dict[station]:
+
+                out_files_exist.append(os.path.exists((path_out_dict[station][channel])))
+
+    return all(out_files_exist)
+
+# Response correction. --------------------------------------------------------
 def seismometer_response_correction(l, f_rad_per_s, r_planet, g, U, P):
+    '''
+    Apply the seismometer response corrections to the eigenfunctions
+    due to free-air and tilt effects.
+    Dahlen and Tromp (1998) eq. 10.70-10.72.
+    '''
 
     # Dahlen and Tromp (1998) eq. 10.70-10.72.
     k = np.sqrt(l*(l + 1))
@@ -772,11 +739,14 @@ def seismometer_response_correction(l, f_rad_per_s, r_planet, g, U, P):
     V_tilt = -k*g*U/c
     V_pot = -k*P/c
 
-    #print('{:>5d} {:>10.3f} {:>10.3e} {:10.3e} {:>10.3e} {:>10.3e}'.format(l, f_rad_per_s/(2.0*np.pi*1.0E-3), U_free, U_pot, V_tilt, V_pot))
-
     return U_free, U_pot, V_tilt, V_pot
 
+# Calculation of excitation coefficients. -------------------------------------
 def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite = False, response_correction_params = None):
+    '''
+    A wrapper script for calculating the excitation coefficients for all of
+    the modes, given information about the source and receivers.
+    '''
 
     # Get name of output file.
     name_coeffs_data_frame = 'coeffs.pkl'
@@ -815,7 +785,7 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
     channel_dict = read_channel_file(summation_info['path_channels'])
     
     # Load mode information.
-    mode_info = load_mode_info(run_info, summation_info, use_mineos = use_mineos)
+    mode_info = load_mode_info(run_info, summation_info)
     if summation_info['path_mode_list'] is not None:
 
         mode_info = filter_mode_list(mode_info, summation_info['path_mode_list'])
@@ -841,15 +811,10 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
     A_r_list     = np.zeros((num_station, num_modes_total), dtype = np.float) 
     A_Theta_list = np.zeros((num_station, num_modes_total), dtype = np.float)
     A_Phi_list   = np.zeros((num_station, num_modes_total), dtype = np.float)
-    #A_r_list     = np.zeros((num_station, num_modes_total), dtype = np.complex) 
-    #A_Theta_list = np.zeros((num_station, num_modes_total), dtype = np.complex)
-    #A_Phi_list   = np.zeros((num_station, num_modes_total), dtype = np.complex)
     Theta_list   = np.zeros(num_station, dtype = np.float)
     Phi_list     = np.zeros(num_station, dtype = np.float)
 
     # Do summation.
-    #epi_dist_azi_method = 'mineos'
-    #epi_dist_azi_method = 'spherical'
     station_list = []
     for j, station in enumerate(channel_dict):
 
@@ -864,20 +829,12 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
         # Includes a correction to latitude for Earth's flattening.
         if summation_info['epi_dist_azi_method'] == 'mineos':
 
-            #Theta_deg, Azi_deg = calculate_epi_dist_azi_mineos(
-            #                cmt['lon_centroid'], cmt['lat_centroid'],
-            #                channel_dict[station]['coords']['longitude'],
-            #                channel_dict[station]['coords']['latitude'])
             Theta_deg, Azi_deg = calculate_epi_dist_azi_mineos(
                             channel_dict[station]['coords']['longitude'],
                             channel_dict[station]['coords']['latitude'],
                             cmt['lon_centroid'], cmt['lat_centroid'])
 
             Phi_deg = 180.0 - Azi_deg
-            #Phi_deg = calculate_azimuth(cmt['lon_centroid'], cmt['lat_centroid'],
-            #                            channel_dict[station]['coords']['longitude'],
-            #                            channel_dict[station]['coords']['latitude'],
-            #                            io_in_degrees = True)
 
             cosTheta = np.cos(np.deg2rad(Theta_deg))
         
@@ -898,12 +855,6 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
         else:
 
             raise ValueError
-
-        #Theta_deg = 83.268
-        #cosTheta = np.cos(np.deg2rad(Theta_deg))
-        #Theta_deg = 83.268
-        #Phi_deg =    -48.589
-        #cosTheta = np.cos(np.deg2rad(Theta_deg))
 
         # Convert to radians.
         Theta = np.deg2rad(Theta_deg)
@@ -928,18 +879,18 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
             l_max_legendre = 2
         else:
             l_max_legendre = l_max
-        #print('Theta {:>.3f}'.format(Theta_deg))
-        #print('CosTheta: {:>18.12f}'.format(cosTheta))
         Plm_series, Plm_prime_series = \
                 associated_Legendre_func_series_no_CS_phase(
                         2, l_max_legendre, cosTheta)
 
+        # Loop over mode types.
         i_offset = 0
         for mode_type in summation_info['mode_types']:
 
             num_modes = num_modes_dict[mode_type]
             print('Mode type: {:>3}, mode count: {:>5d}'.format(mode_type, num_modes))
 
+            # Loop over modes of the given mode type.
             for i in range(num_modes):
                 
                 # Unpack.
@@ -1062,7 +1013,11 @@ def get_coeffs_wrapper(run_info, summation_info, use_mineos = False, overwrite =
 
     return coeff_data_frame, station_data_frame, mode_data_frame 
 
+# Summation of coefficients. --------------------------------------------------
 def make_time_array(num_t, d_t):
+    '''
+    Create uniformly-space time sample array.
+    '''
 
     # Create time span and output arrays.
     t_max = (num_t - 1)*d_t
@@ -1070,17 +1025,10 @@ def make_time_array(num_t, d_t):
 
     return t
 
-def load_time_info(path_timing):
-
-    with open(path_timing, 'r') as in_id:
-
-        line = in_id.readline().split()
-        num_t = int(line[0])
-        d_t   = float(line[1])
-
-    return num_t, d_t
-
 def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, path_cmt, output_type = 'acceleration', attenuation = 'full', overwrite = False):
+    '''
+    Do the summation of sinusoids weighted by the excitation coefficients.
+    '''
 
     # Get output path.
     path_timing = os.path.join(dir_out, 'timing.txt')
@@ -1304,230 +1252,12 @@ def sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, path_cmt, output_ty
 
     return t, s
 
-def old_sum_coeffs(stations, modes, coeffs, num_t, d_t, dir_out, path_cmt, output_type = 'acceleration', attenuation = 'full', overwrite = False, integration_method = 'numerical'):
-
-    assert integration_method in ['numerical', 'analytical']
-
-    # Get output path.
-    path_timing = os.path.join(dir_out, 'timing.txt')
-    var_name_dict = {'displacement' : 's', 'velocity' : 'v', 'acceleration' : 'a'}
-    path_out = os.path.join(dir_out, '{:}_r_Theta_Phi.npy'.format(var_name_dict[output_type]))
-    if os.path.exists(path_timing) and os.path.exists(path_out) and (not overwrite):
-
-        print('Summation file already exists, skipping calculation and loading: {:}'.format(path_out))
-        s_r_Theta_Phi = np.load(path_out)
-        print('Loading {:}'.format(path_timing))
-        num_t, d_t = load_time_info(path_timing)
-        t = make_time_array(num_t, d_t)
-
-        return t, s_r_Theta_Phi
-
-    # Load CMT information.
-    cmt = read_mineos_cmt(path_cmt)
-
-    # Get time values.
-    t = make_time_array(num_t, d_t)
-
-    # Get station list.
-    station_list = list(stations.index)
-    num_stations = len(station_list)
-
-    # s is displacement in r, Theta, Phi components.
-    s     = np.zeros((3, num_stations, num_t))
-    key_list = ['A_r', 'A_Theta', 'A_Phi']
-    
-    if (attenuation == 'approx') and (output_type == 'acceleration'):
-
-        print('Cannot use \'approx\' attenuation with \'acceleration\' output. Use \'full\' attenuation instead (the results are equivalent).')
-        raise ValueError
-
-    # Decide whether to neglect attenuation.
-    if np.any(modes['Q'] == 0.0):
-
-        if attenuation in ['full', 'approx']:
-
-            print("Found modes with Q = 0, ignoring attenuation.")
-            attenuation = 'none'
-
-    for i in range(num_stations):
-
-        station = station_list[i]
-        print('Summing for station: {:>5}'.format(station))
-        coeffs_station = coeffs.loc[station]
-
-        if i == 0:
-
-            n_modes = len(coeffs_station)
-
-        for j in range(n_modes):
-
-            # Angular frequency, rad per s.
-            omega = modes['f'][j]*1.0E-3*2.0*np.pi
-
-            if (output_type == 'displacement') & (integration_method == 'analytical'):
-
-                if attenuation == 'none':
-                    
-                    k0 = 1.0/(omega**2.0)
-                    cos_wt = np.cos(omega*t)    
-
-                    for k in range(3):
-
-                        key = key_list[k]
-                        A = coeffs_station[key][j]
-
-                        s[k, i, :] = s[k, i, :] + k0*A*(1.0 - cos_wt)
-                        #s[k, i, :] = s[k, i, :] + np.real(k0*A)
-
-                elif attenuation in ['approx', 'full']:
-
-                    # Gamma (decay rate), 1/s.
-                    # Dahlen and Tromp (1998), eq. 9.53.
-                    gamma = omega/(2.0*modes['Q'][j])
-
-                    # Sinusoids and decay.
-                    cos_wt = np.cos(omega*t)
-                    exp_wt = np.exp(-1.0*gamma*t)
-
-                    # Low-attenuation approximation.
-                    if attenuation == 'approx':
-
-                        # Evaluate D&T equation 10.61.
-                        for k in range(3):
-
-                            key = key_list[k]
-                            A = coeffs_station[key][j]
-
-                            s[k, i, :] = s[k, i, :] + (1.0/omega**2.0)*A*(1.0 - cos_wt*exp_wt)
-
-                    # Full form of attenuation.
-                    elif attenuation == 'full':
-
-                        # Evaluate D&T eq. 10.51
-                        #
-                        # Constants relating to omega and gamma.
-                        c0 = (omega**2.0 + gamma**2.0)
-                        c1 = (omega**2.0 - gamma**2.0) 
-                        c2 = (2.0*omega*gamma)
-                        #
-                        k0 = 1.0/c0
-                        k1 = c1/c0
-                        k2 = c2/c0
-                        #
-                        # Sinusoids and decay.
-                        sin_wt = np.sin(omega_t_with_phase_shift)
-                        #
-                        for k in range(3):
-
-                            key = key_list[k]
-                            A = coeffs_station[key][j]
-
-                            s[k, i, :] = s[k, i, :] + k0*A*(k1*(1.0 - cos_wt*exp_wt) - k2*sin_wt*exp_wt)
-
-                else:
-
-                    raise ValueError
-
-            elif (output_type == 'acceleration') or (integration_method == 'numerical'):
-
-                # Evaluate D&T eq. 10.63.
-
-                # This modification seems to be necessary to agree with
-                # phase of Mineos output.
-                # Based on a section of mineos/syndat.f starting with comment
-                # "make correction for halfduratio, if tconst > 0"
-                x = 0.5*cmt['half_duration']*omega
-                cos_wt = np.cos(omega*t - x)
-
-                if attenuation == 'none':
-
-                    for k in range(3):
-
-                        key = key_list[k]
-                        A = coeffs_station[key][j]
-
-                        s[k, i, :] = s[k, i, :] + A*cos_wt
-
-
-                elif attenuation == 'full':
-
-                    # Gamma (decay rate), 1/s.
-                    # Dahlen and Tromp (1998), eq. 9.53.
-                    gamma = omega/(2.0*modes['Q'][j])
-
-                    exp_gt = np.exp(-1.0*gamma*t)
-                    #
-                    for k in range(3):
-
-                        key = key_list[k]
-                        A = coeffs_station[key][j]
-
-                        s[k, i, :] = s[k, i, :] + A*cos_wt*exp_gt
-
-                else:
-
-                    raise ValueError
-
-            else:
-
-                raise ValueError
-
-    # Integrate numerically if requested.
-    if (output_type == 'velocity') and (integration_method == 'numerical'):
-
-        print("Integrating once to get velocity.")
-
-        omega_span_Hz = np.fft.rfftfreq(num_t, d = d_t)
-        omega_span_rad_per_s = omega_span_Hz*2.0*np.pi
-
-        for i in range(num_stations):
-
-            for k in range(3):
-
-                # Go to frequency domain. 
-                S = np.fft.rfft(s[k, i, :])
-                
-                # Integrate in Fourier domain and convert back to 
-                V = S 
-                V[1:] = -1.0j*S[1:]/omega_span_rad_per_s[1:]
-
-                # Go back to time domain.
-                s[k, i, :] = np.fft.irfft(V, n = num_t)
-
-    # Integrate numerically if requested.
-    if (output_type == 'displacement') and (integration_method == 'numerical'):
-
-        print("Integrating twice to get displacement.")
-
-        omega_span_Hz = np.fft.rfftfreq(num_t, d = d_t)
-        omega_span_rad_per_s = omega_span_Hz*2.0*np.pi
-
-        for i in range(num_stations):
-
-            for k in range(3):
-
-                # Go to frequency domain. 
-                S = np.fft.rfft(s[k, i, :])
-                
-                # Integrate twice in Fourier domain and convert back to 
-                # time domain.
-                A = np.zeros(S.shape, dtype = S.dtype)  
-                A[1:] = -1.0*S[1:]/(omega_span_rad_per_s[1:]**2.0)
-
-                # Go back to time domain.
-                s[k, i, :] = np.fft.irfft(A, n = num_t)
-
-    # Save.
-    print('Writing {:}'.format(path_out))
-    np.save(path_out, s)
-    print ('Writing {:}'.format(path_timing))
-    with open(path_timing, 'w') as out_id:
-
-        out_id.write('{:>10d} {:>18.12f}'.format(num_t, d_t))
-
-    return t, s
-
+# Rotation of components. -----------------------------------------------------
 def rotate_r_Theta_Phi_to_e_n_z(station_info, s_r_Theta_Phi):
+    '''
+    Rotate from source-receiver coordinates (r, Theta, Phi) to geographic
+    coordinates (east, north, vertical).
+    '''
 
     # Get station list.
     station_list = list(station_info.index)
@@ -1562,6 +1292,10 @@ def rotate_r_Theta_Phi_to_e_n_z(station_info, s_r_Theta_Phi):
     return s_e_n_z
 
 def rotate_e_n_z_to_channels(station_info, s_e_n_z, path_channels, dir_out, output_type, overwrite = False):
+    '''
+    Rotate from geographic coordinates (east, north, vertical) into the
+    direction of the channels.
+    '''
 
     # Load channel information.
     channel_dict = read_channel_file(path_channels)
@@ -1570,6 +1304,7 @@ def rotate_e_n_z_to_channels(station_info, s_e_n_z, path_channels, dir_out, outp
     station_list = list(station_info.index)
     num_stations = len(station_list)
 
+    # Specify directory with output arrays.
     dir_np_arrays = os.path.join(dir_out, 'np_arrays')
     mkdir_if_not_exist(dir_np_arrays)
 
@@ -1611,37 +1346,14 @@ def rotate_e_n_z_to_channels(station_info, s_e_n_z, path_channels, dir_out, outp
 
     return
 
-def check_channel_output_files_exist(dir_np_arrays, station_list, channel_dict, var_name):
-
-    # Get output path list.
-    num_stations = len(station_list)
-    path_out_dict = dict()
-    for i in range(num_stations):
-
-        station = station_list[i]
-        path_out_dict[station] = dict()
-
-        channels = channel_dict[station]['channels']
-        for channel in channels:
-
-            name_out = '{:}_{:}_{:}.npy'.format(var_name, station, channel)
-            path_out = os.path.join(dir_np_arrays, name_out)
-            path_out_dict[station][channel] = path_out
-
-    # Check output files already exist.
-    out_files_exist = []
-    #if (not overwrite):
-    if True:
-
-        for station in path_out_dict:
-
-            for channel in path_out_dict[station]:
-
-                out_files_exist.append(os.path.exists((path_out_dict[station][channel])))
-
-    return all(out_files_exist)
-
 def rotate_r_Theta_Phi_to_channels(stations, s_r_Theta_Phi, path_channels, dir_output, output_type, overwrite = False):
+    '''
+    A wrapper for the two-step rotation process:
+    1. Rotate from source-receiver coordinates (r, Theta, Phi) to geographic
+    coordinates (east, north, vertical).
+    2. Rotate from geographic coordinates (east, north, vertical) into the
+    direction of the channels.
+    '''
 
     # Check if out files exist.
     if not overwrite:
@@ -1672,7 +1384,12 @@ def rotate_r_Theta_Phi_to_channels(stations, s_r_Theta_Phi, path_channels, dir_o
 
     return
 
+# Conversion to MSEED format. -------------------------------------------------
 def convert_to_mseed(dir_out, path_channels, station_info, path_cmt, output_type, overwrite = False):
+    '''
+    Convert the output arrays into MSEED format, used by ObsPy and useful 
+    for associating time series and metadata.
+    '''
     
     # Get name of variable for output file.
     var_name_dict = {'displacement' : 's', 'velocity' : 'v', 'acceleration' : 'a'}
@@ -1733,6 +1450,7 @@ def convert_to_mseed(dir_out, path_channels, station_info, path_cmt, output_type
 
     return stream
 
+# Main function.
 def main():
 
     # Parse input arguments.

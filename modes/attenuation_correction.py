@@ -1,10 +1,80 @@
+'''
+Scripts for correcting models and eigenfrequencies due to the effects of
+attenuation.
+'''
+
 import argparse
 import os
 from shutil import copyfile
 
 import numpy as np
 
-from Ouroboros.common import get_path_adjusted_model, load_eigenfreq_Ouroboros, load_kernel, load_model_full, mkdir_if_not_exist, get_Ouroboros_out_dirs, read_Ouroboros_input_file
+from Ouroboros.common import (get_path_adjusted_model, load_eigenfreq_Ouroboros,
+        load_kernel, load_model_full, mkdir_if_not_exist,
+        get_Ouroboros_out_dirs, read_Ouroboros_input_file)
+
+def create_adjusted_model(run_info):
+    '''
+    Anelasticity causes dispersion so the elastic parameters are effectively
+    reduced at frequencies below the reference frequency of the model.
+    We use the constant-Q equations from
+    (Equations in Dahlen and Tromp, 1998, p. 350.)
+    '''
+
+    # Load the reference model.
+    model = load_model_full(run_info['path_model'])
+
+    # Get target and reference frequencies.
+    f_target_rad_per_s = run_info['f_target_mHz']*1.0E-3*2.0*np.pi
+    f_ref_Hz = (1.0/model['T_ref'])
+    f_ref_mHz = f_ref_Hz*1.0E3
+    f_ref_rad_per_s = f_ref_Hz*2.0*np.pi
+    
+    # Calculate dispersion corrections.
+    d_mu = dispersion_correction(model['mu'], model['Q_mu'],
+                f_target_rad_per_s, f_ref_rad_per_s)
+    mu_new = model['mu'] + d_mu
+
+    d_ka = dispersion_correction(model['ka'], model['Q_ka'],
+                f_target_rad_per_s, f_ref_rad_per_s)
+    ka_new = model['ka'] + d_ka
+
+    # Calculate P- and S-wave speeds.
+    # (Equations in Dahlen and Tromp, 1998, p. 350.)
+    alpha_new = np.sqrt((ka_new + (4.0/3.0)*mu_new)/model['rho'])
+    beta_new = np.sqrt(mu_new/model['rho'])
+    
+    # Store new model.
+    model_new = dict()
+    # Some parameters do not change.
+    var_unchanged = ['r', 'rho', 'Q_mu', 'Q_ka', 'n_layers', 'i_icb', 'i_cmb']
+    for var in var_unchanged:
+
+        model_new[var] = model[var]
+
+    # Store other parameters.
+    # Note: Here assume isotropic wavespeeds.
+    model_new['v_pv'] = alpha_new
+    model_new['v_ph'] = alpha_new
+    model_new['v_sv'] = beta_new
+    model_new['v_sh'] = beta_new
+    model_new['eta']  = np.zeros(model['n_layers']) + 1.0
+    #
+    model_new['f_ref_Hz'] = run_info['f_target_mHz']*1.0E-3
+
+    # Get path out and header string.
+    path_out = get_path_adjusted_model(run_info)
+
+    #
+    header_str = 'Model {:} adjusted from freq. {:>8.2f} to {:>8.2f} mHz' \
+                    .format(run_info['name_model'], f_ref_mHz,
+                            run_info['f_target_mHz'])
+    assert len(header_str) <= 80
+
+    # Write the new model.
+    write_model(model_new, path_out, header_str)
+
+    return
 
 def dispersion_correction(x, Q_x, omega, omega_ref):
     '''
@@ -16,99 +86,25 @@ def dispersion_correction(x, Q_x, omega, omega_ref):
     omega_ref   Reference frequency (rad/s).
     '''
 
+    # Equation 9.50/9.51.
     d_x = (2.0 * x * np.log(omega / omega_ref)) / (np.pi * Q_x)
 
+    # No perturbation for zero-Q regions (usually this indicates infinite
+    # Q, i.e. no attenuation, so no correction is necessary).
     i_bad = np.where(Q_x == 0.0)[0]
     d_x[i_bad] = 0.0
 
     return d_x
 
-def relabel_modes(dir_output, n_orig, l, f_old, f_new, Q_new):
-
-    l_vals = np.sort(np.unique(l))
-
-    num_modes = len(f_new)
-    n_old_list = np.zeros(num_modes, dtype = np.int)
-    n_new_list = np.zeros(num_modes, dtype = np.int)
-    l_list = np.zeros(num_modes, dtype = np.int)
-    f_old_list = np.zeros(num_modes)
-    f_new_list = np.zeros(num_modes)
-    Q_new_list = np.zeros(num_modes)
-    
-    k = 0
-    for l_i in l_vals:
-
-        i = np.where(l == l_i)[0]
-        
-        n_orig_i = n_orig[i]
-        n_min_orig_i = np.min(n_orig_i)
-        
-        num_i = len(i)
-        n_new_i = np.array(range(n_min_orig_i, n_min_orig_i + num_i), dtype = np.int)
-        l_new_i = np.zeros(num_i, dtype = np.int) + l_i
-
-        j = np.argsort(f_new[i])
-        n_orig_i_sorted = n_orig_i[j]
-        f_new_i_sorted = f_new[i][j]
-        f_old_i_sorted = f_old[i][j]
-        Q_new_i_sorted = Q_new[i][j]
-
-        l_list    [k : k + num_i] = l_i
-        n_new_list[k : k + num_i] = n_new_i
-        n_old_list[k : k + num_i] = n_orig_i_sorted
-        f_new_list[k : k + num_i] = f_new_i_sorted
-        f_old_list[k : k + num_i] = f_old_i_sorted
-        Q_new_list[k : k + num_i] = Q_new_i_sorted
-
-        k = k + num_i
-    
-    #fmt = '{:>5d} {:>5d} {:>5d} {:>8.3f} {:}'
-    #fmt = '{:>5d} {:>5d} {:>5d} {:>5d}'
-    #dir_eigenfunctions_old = os.path.join(dir_output, 'eigenfunctions')
-    #dir_eigenfunctions_new = os.path.join(dir_output, 'eigenfunctions_relabelled')
-    #mkdir_if_not_exist(dir_eigenfunctions_new)
-    #with open(path_relabel_list, 'w') as out_id:
-
-    for k in range(num_modes):
-
-            #print(fmt.format(n_old_list[k], n_new_list[k], l_list[k], f_new_list[k], n_old_list[k] == n_new_list[k]))
-
-
-
-        if n_new_list[k] != n_old_list[k]:
-
-            print('{:>3d} S {:>3d} ({:>6.2f}) --> {:>3d} S {:>3d} ({:>6.2f})'.format(n_old_list[k], l_list[k], f_old_list[k],  n_new_list[k], l_list[k], f_new_list[k]))
-
-            #name_eigfunc_old = '{:>05d}_{:>05d}.npy'.format(n_old_list[k], l_list[k])
-            #path_eigfunc_old = os.path.join(dir_eigenfunctions_old, name_eigfunc_old)
-            ##
-            #name_eigfunc_new = '{:>05d}_{:>05d}.npy'.format(n_new_list[k], l_list[k])
-            #path_eigfunc_new = os.path.join(dir_eigenfunctions_new, name_eigfunc_new)
-            #
-            ##print('cp {:} {:}'.format(path_eigfunc_old, path_eigfunc_new))
-            #copyfile(path_eigfunc_old, path_eigfunc_new)
-
-    #path_eigvals_new = os.path.join(dir_output, 'eigenvalues_relabelled.txt')
-    path_eigvals = os.path.join(dir_output, 'eigenvaluesd.txt')
-    print("Writing {:}".format(path_eigvals_new))
-    #fmt = '{:>10d} {:>10d} {:>10d} {:>10d} {:>19.12e} {:>19.12e} {:>19.12e}'
-    fmt = '{:>10d} {:>10d} {:>10d} {:>10d} {:>19.12e} {:>19.12e} {:>19.12e}'
-    with open(path_eigvals_new, 'w') as out_id:
-
-        for k in range(num_modes):
-
-            out_id.write(fmt.format(n_old_list[k], l_list[k], n_new_list[k], l_list[k], f_old_list[k], f_new_list[k], Q_new_list[k]) + '\n') 
-
-    # Re-scale the eigenfunctions.
-
-    return
-
 def calculate_Q_wrapper(run_info, model, mode_type, n, l, f_rad_per_s, neglect_ka = False):
+    '''
+    Calculates the Q-factor of a mode using D&T 1998 eq. 9.54.
+    '''
 
     # Load kernel.
     r, K_ka, K_mu = load_kernel(run_info, mode_type, n, l, units = 'SI')
 
-    # Interpolate the model.
+    # Interpolate the model at the eigenfunction sample points.
     model_interpolated = dict()
     model_interpolated['T_ref'] = model['T_ref']
     model_interpolated['f_ref_rad_per_s'] = 2.0*np.pi/model_interpolated['T_ref']
@@ -119,26 +115,8 @@ def calculate_Q_wrapper(run_info, model, mode_type, n, l, f_rad_per_s, neglect_k
 
     model  = model_interpolated
 
-    ## Calculate dispersion corrections.
-    #d_mu = dispersion_correction(model['mu'], model['Q_mu'],
-    #            f_rad_per_s, model['f_ref_rad_per_s'])
-    #model['mu'] = model['mu'] + d_mu
-
-    #d_ka = dispersion_correction(model['ka'], model['Q_ka'],
-    #            f_rad_per_s, model['f_ref_rad_per_s'])
-    #model['ka'] = model['ka'] + d_ka
-    
-    verbose = False
-    if verbose:
-
-        print('max(Q_mu): {:>10.3e}'.format(np.max(np.abs(model['Q_mu']))))
-        print('max(Q_ka): {:>10.3e}'.format(np.max(np.abs(model['Q_ka']))))
-        print('max(mu): {:>10.3e}'.format(np.max(np.abs(model['mu']))))
-        print('max(ka): {:>10.3e}'.format(np.max(np.abs(model['ka']))))
-        print('max(K_mu): {:>10.3e}'.format(np.max(np.abs(K_mu))))
-        print('max(K_ka): {:>10.3e}'.format(np.max(np.abs(K_ka))))
-
     # Evaluate the integral (D&T 1998 eq. 9.54).
+    # Define the integrand.
     I_mu = (model['mu']*K_mu/model['Q_mu'])
     i_fluid = np.where(model['mu'] == 0.0)[0]
     I_mu[i_fluid] = 0.0
@@ -147,19 +125,20 @@ def calculate_Q_wrapper(run_info, model, mode_type, n, l, f_rad_per_s, neglect_k
 
         integrand = I_mu
     
+    # Optionally, include the kappa part of the integrand.
     else:
 
         I_ka = (model['ka']*K_ka/model['Q_ka']) 
         integrand = I_mu + I_ka
 
+    # Integrate using the trapezium rule.
     integral = np.trapz(integrand, x = r)
     inv_Q = 2.0*integral/f_rad_per_s
     Q = 1.0/inv_Q
-    
-    # Fudge -- need to check.
     Q = Q/(2.0*np.pi)
     
-    plotting = True
+    # If requested, visualise the integration.
+    plotting = False 
     if plotting:
 
         import matplotlib.pyplot as plt
@@ -200,6 +179,9 @@ def calculate_Q_wrapper(run_info, model, mode_type, n, l, f_rad_per_s, neglect_k
     return Q
 
 def apply_atten_correction_all_modes(run_info, mode_type):
+    '''
+    A wrapper for applying an attenuation correction to the mode frequencies.
+    '''
 
     # Load the planetary model.
     model_path = get_path_adjusted_model(run_info)
@@ -209,32 +191,29 @@ def apply_atten_correction_all_modes(run_info, mode_type):
     model_new = {key : model[key] for key in keys_to_keep}
     model = model_new
 
+    # Convert period to rad/s.
     omega_ref_Hz = 1.0/model['T_ref']
     omega_ref_rad_per_s = 2.0*np.pi*omega_ref_Hz
 
+    # Decide whether to neglect bulk attenuation.
     #neglect_ka = True
     neglect_ka = False
     
+    # Define out file format.
     out_fmt = '{:>5d} {:>5d} {:>19.12e} {:>12.6e} {:>19.12e} {:>19.12e}'
-
-    # Override attenuation flag.
-    #run_info['use_attenuation'] = False
-
-    # Get output directory.
-    #_, _, _, dir_output = \
-    #    get_Ouroboros_out_dirs(run_info, mode_type)
-    #path_out = os.path.join(dir_output, 'Q_values.txt')
 
     # Load mode database.
     mode_info = load_eigenfreq_Ouroboros(run_info, mode_type)
     n = mode_info['n']
     l = mode_info['l']
     omega_uncorrected_mHz = mode_info['f_0']
-
     omega_rad_per_s = omega_uncorrected_mHz*1.0E-3*2.0*np.pi
+
+    # Prepare output array.
     num_modes = len(n)
     Q = np.zeros(num_modes)
     
+    # Testing a single mode.
     single_mode = False
     if single_mode:
 
@@ -248,15 +227,15 @@ def apply_atten_correction_all_modes(run_info, mode_type):
     # Loop over modes.
     for i in range(num_modes):
         
-        print('Calculating Q for mode {:>5d} {:} {:>5d}'.format(n[i], mode_type, l[i]))
-        Q[i] = calculate_Q_wrapper(run_info, model, mode_type, n[i], l[i], omega_rad_per_s[i], neglect_ka = neglect_ka)
+        print('Calculating Q for mode {:>5d} {:} {:>5d}'.format(
+                n[i], mode_type, l[i]))
+        Q[i] = calculate_Q_wrapper(run_info, model, mode_type, n[i], l[i],
+                omega_rad_per_s[i], neglect_ka = neglect_ka)
 
     # Calculate frequency shift.
     # Dahlen and Tromp (9.55).
     omega_ratio = omega_rad_per_s/omega_ref_rad_per_s
     delta_omega_rad_per_s = omega_rad_per_s*np.log(omega_ratio)/(np.pi*Q)
-    # Fudge -- need to work out.
-    #delta_omega = delta_omega*3.0
     omega_rad_per_s_new = omega_rad_per_s + delta_omega_rad_per_s
     omega_new_mHz = omega_rad_per_s_new*1.0E3/(2.0*np.pi)
 
@@ -271,7 +250,8 @@ def apply_atten_correction_all_modes(run_info, mode_type):
 
         for i in range(num_modes):
 
-            out_id.write(fmt.format(n[i], l[i], omega_uncorrected_mHz[i], omega_new_mHz[i], Q[i]))
+            out_id.write(fmt.format(n[i], l[i], omega_uncorrected_mHz[i],
+                        omega_new_mHz[i], Q[i]))
 
     return
 

@@ -1,14 +1,18 @@
-# Import modules from standard library.
+'''
+Python wrapper for Mineos mode summation codes.
+'''
+
 import argparse
 import os
 from shutil import copyfile
 import subprocess
 
-# Import third-party modules.
 from obspy import read
 
-# Import custom modules.
-from common import get_Mineos_out_dirs, get_Mineos_summation_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, read_Mineos_summation_input_file, read_channel_file
+from Ouroboros.common import (get_Mineos_out_dirs, 
+        get_Mineos_summation_out_dirs, jcom_to_mode_type_dict,
+        mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file,
+        read_Mineos_summation_input_file, read_channel_file)
 from misc.cmt_io import read_mineos_cmt
 
 # Set default names of files written by wrapper scripts.
@@ -22,6 +26,9 @@ executable_syndat = 'syndat'
 executable_simpledit = 'simpledit'
 executable_creat_origin = 'creat_origin' # Note missing 'e'.
 executable_cucss2sac = 'cucss2sac'
+
+# Convert output type to character.
+mineos_output_type_to_char = {0 : 's', 1 : 'v', 2 : 'a'}
 
 # Running green (calculation of Green's functions). --------------------------- 
 def run_simpledit(channel_ascii_path, channel_db_path):
@@ -40,7 +47,6 @@ def run_simpledit(channel_ascii_path, channel_db_path):
     return
 
 def write_green_parameter_file(run_info, summation_info):
-        #dir_project, path_eigen_db_list, path_channel_db, cmt_path, out_db_path, jcoms = [2, 3], f_lims = [10.0, 260.0], n_samples = 8000):
     '''
     Writes the input parameter file for the program green.
     '''
@@ -64,7 +70,6 @@ def write_green_parameter_file(run_info, summation_info):
     return
             
 def write_eigen_db_list_file(run_info, summation_info):
-        #dir_project, jcoms, eigen_db_list_file):
     '''
     Writes a text file listing the normal-mode database files to be
     used in calculating Green's functions during mode summation.
@@ -86,8 +91,6 @@ def run_green(run_info, summation_info, skip = False):
     functions) given a list of channels (station location and orientation)
     and an earthquake source.
     '''
-        #, path_channel_db, path_channel_ascii, path_cmt, path_green_out_db):
-        #dir_project, channel_db_path, channel_ascii_path, cmt_path, out_db_path, jcoms = [2, 3], eigen_db_list_name = 'eigen_db_list.txt', f_lims = [10.0, 260.0], n_samples = 8000, skip = False, ):
 
     # Check for output files and skip calculation if they already exist.
     if skip:
@@ -111,14 +114,6 @@ def run_green(run_info, summation_info, skip = False):
     # Write the input file for the green function. 
     summation_info['in_path_green'] = os.path.join(summation_info['dir_cmt'], summation_info['file_green_in'])
     write_green_parameter_file(run_info, summation_info)
-        #dir_project,
-        #path_eigen_db_list,
-        #channel_db_path,
-        #cmt_path,
-        #out_db_path,
-        #jcoms           = jcoms,
-        #f_lims          = f_lims,
-        #n_samples       = n_samples)
 
     # Write the file listing the normal-mode mode databases.
     write_eigen_db_list_file(run_info, summation_info)
@@ -149,7 +144,6 @@ def write_syndat_parameter_file(summation_info):
     '''
     Writes the input file for the syndat function.
     '''
-#cmt_path, green_db_path, syndat_param_path, syndat_out_path, plane = 0, datatype = 0):
     
     # Define the lines to be written to file.
     # (See Mineos manual, section 3.4.1.)
@@ -171,7 +165,6 @@ def write_syndat_parameter_file(summation_info):
     return
 
 def run_syndat(summation_info, plane = 0):
-    #cmt_path, green_db_path, syndat_out_path, syndat_param_path, plane = 0, datatype = 0, skip = False):
     '''
     Input
     
@@ -179,24 +172,9 @@ def run_syndat(summation_info, plane = 0):
     datatype    0, 1 or 2   Acceleration, velocity or displacement.
     '''
     
-    #if skip:
-    #    
-    #    if os.path.exists(out_db_path + '.wfdisc'):
-    #        
-    #        print('Skipping syndat: Output file already exists.')
-    #        return
-        
-
     # Write the syndat input file.
     write_syndat_parameter_file(summation_info)
 
-                #cmt_path,
-                #green_db_path,
-                #syndat_param_path,
-                #syndat_out_path,
-                #plane = plane,
-                #datatype = datatype)
-                
     # Run syndat.
     cmd = '{:} < {}'.format(executable_syndat, summation_info['path_syndat_in'])
     print(cmd)
@@ -244,6 +222,9 @@ def run_cucss2sac(dir_name, name_syndat_db, name_syndat_sac = 'sac', skip = Fals
     return
 
 def path_to_sac(dir_output, path_cmt, station, channel):
+    '''
+    Get path to SAC file.
+    '''
 
     dir_sac = os.path.join(dir_output, 'sac')
 
@@ -259,17 +240,23 @@ def path_to_sac(dir_output, path_cmt, station, channel):
 
     return path_sac
 
-def sac2mseed(dir_output, path_cmt, path_channel):
+def sac2mseed(dir_output, path_cmt, path_channel, data_type):
+    '''
+    Convert from Mineos SAC output to MSEED format.
+    '''
     
+    # Get list of stations.
     station_list = read_channel_file(path_channel)
 
+    # Loop over station list.
     first_iteration = True
-    
     for station in station_list:
 
+        # Loop over channels for this station.
         channel_list = station_list[station]['channels']
         for channel in channel_list:
             
+            # Read the SAC file and add to the stream.
             path_sac = path_to_sac(dir_output, path_cmt, station, channel)
             stream_new = read(path_sac)
 
@@ -281,8 +268,10 @@ def sac2mseed(dir_output, path_cmt, path_channel):
             else:
 
                 stream = stream + stream_new
-
-    path_out = os.path.join(dir_output, 'sac', 'stream.mseed')
+    
+    # Write the MSEED file.
+    name_stream = 'stream_{:}.mseed'.format(mineos_output_type_to_char[data_type])
+    path_out = os.path.join(dir_output, 'sac', name_stream)
     print('Writing {:}'.format(path_out))
     stream.write(path_out)
 
@@ -290,6 +279,9 @@ def sac2mseed(dir_output, path_cmt, path_channel):
 
 # Wrapper scripts. ------------------------------------------------------------
 def summation_wrapper(path_mode_input, path_summation_input, skip = False, green2sac = False):
+    '''
+    Wrapper for running Mineos summation.
+    '''
 
     # Read the mode input file.
     run_info = read_Mineos_input_file(path_mode_input)
@@ -322,44 +314,31 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False, green
                         file_syndat_in = default_file_syndat_in,
                         file_syndat_out = default_file_syndat_out)
 
+    # Create output directories if they do not already exist.
     for dir_key in ['dir_summation', 'dir_channels', 'dir_cmt']:
     
         mkdir_if_not_exist(summation_info[dir_key])
 
-    # pannel_channel_ascii  Text database file storing ???
-    # green_out_db_path     Bindary database file ???
-    #path_channel_db = os.path.join(dir_model_out, 'channel_db')
-    #path_channel_ascii = os.path.join(dir_mineos_in, 'station_lists', 'stations.txt')
-    # Define output path for database file created by green.
-    #green_out_db_path = os.path.join(run_info['dir_run'], 'green')
-
-    #run_green(dir_project, path_channel_db, path_channel_ascii, path_cmt, out_db_path, jcoms = jcoms, skip = skip)
-
     # Calculate Green's functions.
     run_green(run_info, summation_info, skip = skip)
-
-            #dir_project, path_channel_db, path_channel_ascii, path_cmt, green_out_db_path, jcoms = jcoms, skip = skip, f_lims = w_lims, n_samples = n_samples)
-
-    #path_green_db = os.path.join(dir_project, 'green')
-    #run_create_origin(path_cmt, path_green_db)
 
     # Run the creat_origin script, which fills out header information in the
     # Green's functions database.
     run_creat_origin(summation_info['path_cmt'], summation_info['path_green_out_db'])
 
+    # Optionally, also save the Green's functions as SAC files.
     if green2sac:
     
-        print('cp {:}.site {:}'.format(summation_info['path_channel_db'], os.path.join(summation_info['dir_cmt'], '{:}.site'.format('green'))))
-        copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(summation_info['dir_cmt'], '{:}.site'.format('green')))
+        print('cp {:}.site {:}'.format(summation_info['path_channel_db'],
+            os.path.join(summation_info['dir_cmt'], '{:}.site'.format('green'))))
+        copyfile('{:}.site'.format(summation_info['path_channel_db']),
+                os.path.join(summation_info['dir_cmt'], '{:}.site'.format('green')))
         run_cucss2sac(summation_info['dir_cmt'],
                 'green',
                 name_syndat_sac = 'green_sac')
 
     # Run syndat, which convolves Green's functions with moment tensor.
-    #path_syndat_in = os.path.join(dir_project, 'syndat_in.txt')
-    #path_syndat_out = os.path.join(dir_project, 'syndat_out')
     run_syndat(summation_info)
-            #path_cmt, green_out_db_path, path_syndat_out, path_syndat_in, datatype = 0, skip = skip)
 
     # Run creat_origin (again), to fill out header information in the
     # seismogram database.
@@ -371,8 +350,8 @@ def summation_wrapper(path_mode_input, path_summation_input, skip = False, green
     copyfile('{:}.site'.format(summation_info['path_channel_db']), os.path.join(summation_info['dir_cmt'], '{:}.site'.format(summation_info['file_syndat_out'])))
     run_cucss2sac(summation_info['dir_cmt'], summation_info['file_syndat_out'], skip = skip)
 
-    ## For convenience, store the SAC output in a miniSEED file.
-    sac2mseed(summation_info['dir_cmt'], summation_info['path_cmt'], summation_info['path_channels'])
+    # For convenience, store the SAC output in a miniSEED file.
+    sac2mseed(summation_info['dir_cmt'], summation_info['path_cmt'], summation_info['path_channels'], summation_info['data_type'])
 
     return
 

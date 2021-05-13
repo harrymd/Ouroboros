@@ -19,15 +19,7 @@ def radial_solid_GPmixed(model,invV,invV_P,order,order_P,Dr,Dr_P,rho,radius):
     For the radial modes in a solid region.
     Include gravity and Eulerian perturbation.
 
-    Input:
-
-    For definitions of input variables, see the following functions:
-
-    Output:
-
-    A
-    B
-    block_len
+    For definitions of variables, see modes/compute_modes.py
     '''
 
     # implement finite element method on solid speroidal modes with gravity field and Euler perturbation
@@ -111,6 +103,14 @@ def radial_solid_GPmixed(model,invV,invV_P,order,order_P,Dr,Dr_P,rho,radius):
     return A,B,block_len
 
 def radial_solid_G(model,invV,order,Dr,rho,radius):
+    '''
+    Create A and B matrices.
+    For the radial modes in a solid region.
+    Include gravity but no Eulerian perturbation.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on solid radial modes with gravity field
     Np = order+1
     
@@ -155,6 +155,14 @@ def radial_solid_G(model,invV,order,Dr,rho,radius):
     return A11,B11,block_len
 
 def radial_solid_noG(model,invV,order,Dr):
+    '''
+    Create A and B matrices.
+    For the radial modes in a solid region.
+    Does not include gravity. 
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on solid radial modes
     Np = order+1
 
@@ -197,6 +205,14 @@ def radial_solid_noG(model,invV,order,Dr):
     return A11,B11,block_len
 
 def radial_fluid_GP_mixedPV(model,invV,invV_p,invV_P,order,order_p,order_P,Dr,Dr_p,Dr_P,rho,radius):
+    '''
+    Create A and B matrices.
+    For the radial modes in a fluid region.
+    Include gravity and Eulerian perturbation.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on fluid radial modes with Euler pertubation and gravitional field
     Np = order+1
     Np_p = order_p+1
@@ -308,6 +324,14 @@ def radial_fluid_GP_mixedPV(model,invV,invV_p,invV_P,order,order_p,order_P,Dr,Dr
     return A,B,block_len
 
 def radial_fluid_G_mixedV(model,invV,invV_p,order,order_p,Dr,Dr_p,rho,radius):
+    '''
+    Create A and B matrices.
+    For the radial modes in a fluid region.
+    Include gravity but no Eulerian perturbation.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on fluid radial modes with gravity field
     Np = order+1
     Np_p = order_p+1
@@ -386,6 +410,13 @@ def radial_fluid_G_mixedV(model,invV,invV_p,order,order_p,Dr,Dr_p,rho,radius):
     return A,B,block_len
 
 def radial_fluid_noG_mixedV(model,invV,invV_p,order,order_p,Dr,Dr_p):
+    '''
+    Create A and B matrices.
+    For the radial modes in a fluid region.
+    Does not include gravity.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
         # implement finite element method on fluid radial modes
     Np = order+1
     Np_p = order_p+1
@@ -460,6 +491,13 @@ def radial_fluid_noG_mixedV(model,invV,invV_p,order,order_p,Dr,Dr_p):
     return A,B,block_len
 
 def solid_GPmixed(model,invV,invV_P,order,order_P,Dr,Dr_P,rho,radius):
+    '''
+    Create A and B matrices.
+    For the spheroidal modes in a solid region.
+    Includes gravity and Eulerian perturbation.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
     # implement finite element method on solid speroidal modes with gravity field and Euler perturbation
     Np = order+1
     Np_P = order_P+1
@@ -580,6 +618,14 @@ def solid_GPmixed(model,invV,invV_P,order,order_P,Dr,Dr_P,rho,radius):
     return A,B,block_len
 
 def solid_G(model,invV,order,Dr,rho,radius):
+    '''
+    Create A and B matrices.
+    For the spheroidal modes in a solid region.
+    Includes gravity but no Eulerian perturbation.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on solid speroidal modes with gravity field
     Np = order+1
     #mu = model.mu
@@ -652,6 +698,14 @@ def solid_G(model,invV,order,Dr,rho,radius):
     return A,B,block_len
 
 def solid_noG(model,invV,order,Dr):
+    '''
+    Create A and B matrices.
+    For the spheroidal modes in a solid region.
+    Does not include gravity.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # replace np.matmul with @
     # implement finite element method on solid speroidal modes
     Np = order+1
@@ -723,79 +777,15 @@ def solid_noG(model,invV,order,Dr):
     
     return A,B,block_len
 
-def solid_noG2(model,invV,order,Dr):
-    # uses np.matmul
-    # implement finite element method on solid speroidal modes
-    Np = order+1
-    #mu = model.mu
-    #rho = model.rho
-    x = model.x
-    k = model.k
-    #ka = model.ka
-    Ki = len(x[0])
-    dimension = Ki*order+1
-    
-    A11=np.zeros((dimension,dimension))
-    A12=np.zeros((dimension,dimension))
-    A21=np.zeros((dimension,dimension))
-    A22=np.zeros((dimension,dimension))
-
-    B11=np.zeros((dimension,dimension))
-    B12=np.zeros((dimension,dimension)) #B12 = 0, just add terms
-    
-    M = np.matmul(invV.T,invV)
-    
-    for i in range(Ki):
-        Ji = model.J[0,i] #This is a number
-        rxi = model.rx[0,i] #This is a number
-        mu_i = model.mu[i] #This is a number
-        ka_i = model.ka[i]
-        rho_i = model.rho[i]
-        ri = np.diag(x[:,i]) #2*2 matrix
-        
-        Uprime_phi = np.matmul(ri,np.matmul(M,Dr))*rxi
-        U_phi_prime = rxi*np.matmul(np.matmul(Dr.T,M),ri)
-        Uprime_phi_prime = rxi**2*np.matmul(np.matmul(np.matmul(np.matmul(Dr.T,ri),M),ri),Dr)
-        
-        i_order = i*order
-        Aelmt11 = 2*(ka_i-2/3*mu_i)*Uprime_phi + (4*ka_i+4/3*mu_i+mu_i*k**2)*M +\
-                    (ka_i+4/3*mu_i)*Uprime_phi_prime + 2*(ka_i-2/3*mu_i)*U_phi_prime
-        # manage unit: *1e15/1e15
-        A11[i_order:i_order+Np,i_order:i_order+Np] = A11[i_order:i_order+Np,i_order:i_order+Np] +\
-                Ji*(Aelmt11+Aelmt11.T)/2
-        # A12 and A21 are symmetric about diagonal
-        Aelmt12 = (-2*ka_i-5/3*mu_i)*k*M + k*mu_i*Uprime_phi+ -(ka_i-2/3*mu_i)*k*U_phi_prime
-        # manage unit: *1e15/1e15
-        A12[i_order:i_order+Np,i_order:i_order+Np] = A12[i_order:i_order+Np,i_order:i_order+Np] +\
-                Ji*Aelmt12
-        
-        Aelmt21 = (-2*ka_i-5/3*mu_i)*k*M + k*mu_i*U_phi_prime - (ka_i-2/3*mu_i)*k*Uprime_phi
-        # manage unit: *1e15/1e15
-        A21[i_order:i_order+Np,i_order:i_order+Np] = A21[i_order:i_order+Np,i_order:i_order+Np] +\
-                Ji*Aelmt21
-        
-        Aelmt22=(k**2*(ka_i+4/3*mu_i)-mu_i)*M - mu_i*Uprime_phi - mu_i*U_phi_prime + mu_i*Uprime_phi_prime
-        # manage unit: *1e15/1e15
-        A22[i_order:i_order+Np,i_order:i_order+Np] = A22[i_order:i_order+Np,i_order:i_order+Np] +\
-                Ji*(Aelmt22+Aelmt22.T)/2
-                
-        Belmt11 = rho_i*np.matmul(np.matmul(ri,M),ri)
-        # manage unit: *1e21/1e15
-        B11[i_order:i_order+Np,i_order:i_order+Np] = B11[i_order:i_order+Np,i_order:i_order+Np] +\
-                Ji*(Belmt11+Belmt11.T)/2*1e6 #average to improve precision
-    
-    #calculate average of A12 to avoid small error caused by round off
-    A12_average = (A12+A21.T)/2
-    # Combine A11,A12,A21,A22 to get A. Combine B11 with 0(B12) to get B
-    A = np.vstack((np.hstack((A11,A12_average)),\
-                   np.hstack((A12_average.T,A22))))
-    B = np.vstack((np.hstack((B11,B12)),\
-                   np.hstack((B12,B11))))
-    block_len = [dimension,dimension]
-    
-    return A,B,block_len
-
 def fluid_GP_mixedPV(model,invV,invV_p,invV_P,invV_V,order,order_p,order_P,order_V,Dr,Dr_p,Dr_P,Dr_V,rho,radius):
+    '''
+    Create A and B matrices.
+    For the spheroidal modes in a fluid region.
+    Includes gravity and Eulerian perturbation.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on fluid speroidal modes with Euler pertubation and gravitional field
     Np = order+1
     Np_p = order_p+1
@@ -958,6 +948,14 @@ def fluid_GP_mixedPV(model,invV,invV_p,invV_P,invV_V,order,order_p,order_P,order
     return A,B,block_len
 
 def fluid_G_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,rho,radius):
+    '''
+    Create A and B matrices.
+    For the spheroidal modes in a fluid region.
+    Includes gravity but no Eulerian perturbation.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on fluid speroidal modes
     Np = order+1
     Np_p = order_p+1
@@ -1070,6 +1068,14 @@ def fluid_G_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,r
     return A,B,block_len
 
 def fluid_noG_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V):
+    '''
+    Create A and B matrices.
+    For the spheroidal modes in a fluid region.
+    Does not include gravity.
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
+
     # implement finite element method on fluid speroidal modes
     Np = order+1
     Np_p = order_p+1
@@ -1178,6 +1184,12 @@ def fluid_noG_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V
     return A,B,block_len
 
 def toroidal(model,invV,order,Dr):
+    '''
+    Create A and B matrices.
+    For the toroidal modes (necessarily in solid region).
+
+    For definitions of variables, see modes/compute_modes.py
+    '''
 
     # implement finite element method on toroidal modes
     Np = order+1

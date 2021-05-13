@@ -1,10 +1,14 @@
-# Import modules from standard library.
+'''
+Python wrapper for calculating modes using Mineos command-line functions.
+'''
+
 import argparse
 import os
 import subprocess
 
-# Import custom modules.
-from common import get_Mineos_out_dirs, jcom_to_mode_type_dict, mkdir_if_not_exist, mode_types_to_jcoms, read_Mineos_input_file, load_model
+from Ouroboros.common import (get_Mineos_out_dirs, jcom_to_mode_type_dict,
+                        mkdir_if_not_exist, mode_types_to_jcoms,
+                        read_Mineos_input_file, load_model)
 
 # Set default names of files written by wrapper scripts.
 default_in_file_minos_bran = 'minos_bran_in.txt'
@@ -34,7 +38,9 @@ def jcom_to_minos_bran_out_file(dir_project, jcom, file_out_name):
     return file_out_plain, file_out_bin
 
 def write_minos_bran_parameter_file(run_info, jcom):
-        #dir_project, path_model, file_out_name = 'minos_bran_out', eps = 1.0E-10, wgrav = 1.0, jcom = 3, l_lims = [2, 8000], w_lims = [0.0, 200.0], n_lims = [0, 0]):
+    '''
+    Write the input file for minos_bran.
+    '''
     
     # Get the paths of the minos_bran output files.
     file_out_plain, file_out_bin = jcom_to_minos_bran_out_file(
@@ -77,7 +83,6 @@ def write_minos_bran_parameter_file(run_info, jcom):
     return
     
 def run_minos_bran(run_info, skip = False):
-        #dir_project, path_model, file_out_name = out_file_minos_bran, eps = 1.0E-10, wgrav = 1.0, jcoms = [2, 3], n_lims = [0, 0], l_lims = [2, 8000],  w_lims = [0.0, 200.0], skip = False, plot = False):
     '''
     Wrapper for the minos_bran script from the Mineos package.
     
@@ -109,16 +114,6 @@ def run_minos_bran(run_info, skip = False):
         
         # Write the minos bran parameter file.
         write_minos_bran_parameter_file(run_info, jcom)
-
-                                        #dir_project,
-                                        #path_model,
-                                        #eps             = eps,
-                                        #wgrav           = wgrav,
-                                        #l_lims          = l_lims,
-                                        #w_lims          = w_lims,
-                                        #file_out_name   = file_out_name,
-                                        #jcom            = jcom,
-                                        #n_lims          = n_lims)
         
         # Call the minos_bran command.
         in_path_minos_bran = os.path.join(run_info['dir_run'], run_info['in_file_minos_bran'])
@@ -126,22 +121,6 @@ def run_minos_bran(run_info, skip = False):
         print(cmd)
         subprocess.call(cmd, shell = True)
         
-    #if plot:
-    #    
-    #    from stoneley.code.process_mineos   import read_minos_bran_output
-    #    from stoneley.code.plot.plot_mineos import plot_mode_freqs
-    #    
-    #    mode_data = dict()
-    #    for jcom in jcoms:
-    #        
-    #        file_out_plain, _ = jcom_to_minos_bran_out_file(
-    #                                            jcom,
-    #                                            file_out_name)
-    #                                            
-    #        mode_data[jcom] = read_minos_bran_output(file_out_plain)
-    #    
-    #    plot_mode_freqs(mode_data)
-
     return
 
 # Running eigcon (post-processing for minos_bran, produces binary database). --
@@ -160,7 +139,6 @@ def jcom_to_eigcon_db_path(dir_project, jcom, db_name):
     return db_path
 
 def write_eigcon_parameter_file(run_info, jcom, db_name):
-        #dir_project, path_model, jcom = 3, max_depth = 1000.0, file_in_name = 'minos_bran_out', db_name = ''):
     '''
     Writes the parameter files for the eigcon code.
     '''
@@ -201,7 +179,6 @@ def write_eigcon_parameter_file(run_info, jcom, db_name):
     return
 
 def run_eigcon(run_info, skip = False, db_name = ''):
-    #dir_project, path_model, skip = False, jcoms = [2, 3], db_name = '', max_depth = 1000.0):
     '''
     A wrapper for the Mineos script eigcon.
     '''
@@ -246,6 +223,10 @@ def jcom_to_eigen2asc_out_dir(dir_project, jcom):
     return eigen2asc_out_dir
 
 def run_eigen2asc(run_info, jcoms, db_name = '', skip = False):
+    '''
+    Runs the Mineos script eigen2asc which converts binary eigenfunction
+    files to text format.
+    '''
     
     # Loop over mode types (jcoms).
     for jcom in jcoms:
@@ -318,11 +299,6 @@ def calculate_modes_with_mineos_wrapper(path_input_file):
 
     # Set directory names.
     dir_model_out, run_info['dir_run'] = get_Mineos_out_dirs(run_info)
-    #dir_model_out = os.path.join(run_info['dir_output'], run_info['name_model'])
-    ##path_channel_db = os.path.join(dir_model_out, 'channel_db')
-    #name_run = '{:>05d}_{:>05d}_{:1d}'.format(run_info['n_lims'][1], run_info['l_lims'][1], run_info['grav_switch'])
-    #dir_run = os.path.join(dir_model_out, name_run)
-    #run_info['dir_run'] = dir_run
 
     # Create directories if needed.
     for dir_ in [run_info['dir_output'], dir_model_out, run_info['dir_run']]:
@@ -336,35 +312,16 @@ def calculate_modes_with_mineos_wrapper(path_input_file):
 
     # Calculate the modes.
     calculate_modes_with_mineos(run_info)
-    #    dir_roject,
-    #    path_model,
-    #    eps = run_info['eps'],
-    #    wgrav = run_info['f_grav_cutoff'],
-    #    jcoms = run_info['jcoms'],
-    #    l_lims = run_info['l_limits'],
-    #    w_lims = run_info['f_limits'],
-    #    n_lims = run_info['n_limits'],
-    #    max_depth = run_info['max_depth'])
 
     return
 
 def calculate_modes_with_mineos(run_info, skip = False):
-        #dir_project, path_model, out_file_minos_bran, eps, wgrav, jcoms, l_lims, w_lims, n_lims, max_depth, skip = False):
+    '''
+    Calculate modes with Mineos.
+    '''
         
     # Run minos_bran, which calculates the normal modes.
     run_minos_bran(run_info, skip = skip)
-    #    dir_project,
-    #    path_model,
-    #    file_out_name   = bran_file,
-    #    eps             = eps,
-    #    wgrav = wgrav,
-    #    jcoms = jcoms,
-    #    n_lims = n_lims,
-    #    l_lims = l_lims,
-    #    w_lims = w_lims,
-    #    skip = skip,
-    #    plot = False)
-
 
     # Run eigcon, which post-processes the minos_bran output, creating
     # a database file.

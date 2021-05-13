@@ -1,3 +1,7 @@
+'''
+Plot eigenfunction(s) for a single mode.
+'''
+
 import argparse
 import os
 import sys
@@ -10,9 +14,13 @@ from Ouroboros.common import (get_Ouroboros_out_dirs, get_r_fluid_solid_boundary
                             load_eigenfreq, load_eigenfunc,
                             load_model, mkdir_if_not_exist,
                             read_input_file)
-from Ouroboros.misc.compare_eigenfunctions import check_sign_R, check_sign_S, check_sign_P, check_sign_T
+from Ouroboros.misc.compare_eigenfunctions import (check_sign_R,
+        check_sign_S, check_sign_P, check_sign_T)
 
 def get_title_str(mode_type, n, l, code, i_toroidal = None):
+    '''
+    Format the mode's name for a title.
+    '''
 
     # Get title string information.
     if mode_type in ['R', 'S']:
@@ -44,6 +52,9 @@ def get_title_str(mode_type, n, l, code, i_toroidal = None):
     return title
 
 def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0, r_lims = None): 
+    '''
+    Wrapper script which gathers the necessary data to plot the eigenfunction.
+    '''
     
     # Get model information for axis limits, scaling and horizontal lines.
     model = load_model(run_info['path_model'])
@@ -70,6 +81,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     # Get title string.
     title = get_title_str(mode_type, n, l, run_info['code'], i_toroidal = i_toroidal)
 
+    # Check the sign of the plotting variable.
     if plot_potential:
         
         sign = check_sign_P(eigfunc_dict['r'], eigfunc_dict['P'])
@@ -88,8 +100,17 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         elif mode_type in ['I', 'T']:
 
             sign = check_sign_T(eigfunc_dict['r'], eigfunc_dict['W'])
+
+    # Change sign to always be positive.
+    if sign < 0: 
+
+        for val in eigfunc_dict:
+
+            if val != 'r':
+
+                eigfunc_dict[val] = eigfunc_dict[val]*-1.0
     
-    # Find axis limits.
+    # Find maximum value(s) of plotting variable.
     if plot_gradient:
 
         if plot_potential:
@@ -123,7 +144,6 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         else:
 
-            # Find axis limits.
             if mode_type == 'R':
                 
                 vals = eigfunc_dict['U']
@@ -140,16 +160,11 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
                 raise ValueError
 
-    if sign < 0: 
-
-        for val in eigfunc_dict:
-
-            if val != 'r':
-
-                eigfunc_dict[val] = eigfunc_dict[val]*-1.0
-
+    # Get maximum value.
     max_ = np.max(np.abs(vals))
 
+    # Mineos saves the toroidal eigenfunction in regions where it has a
+    # value of 0. This is clipped.
     if run_info['code'] == 'mineos':
         
         clip_zero = True
@@ -197,6 +212,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             'x_label' : x_label, 'alpha' : alpha,
             'r_lims' : r_lims}
 
+    # Plot.
     if plot_gradient:
 
         if plot_potential:
@@ -267,13 +283,16 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
                     label = 'W{:}'.format(label_suffix),
                     **common_args)
 
+    # Make the background transparent (if requested).
     if transparent:
         
         fig = plt.gcf()
         set_patch_facecolors(fig, ax) 
 
+    # Set tight layout.
     plt.tight_layout()
     
+    # Save (if requested).
     if save:
 
         method_str = run_info['code']
@@ -341,24 +360,32 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     return ax
 
 def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12, r_lims = None):
+    '''
+    Plot spheroidal eigenfunction.
+    '''
     
+    # Create axes if none provided.
     if ax is None:
 
         fig = plt.figure()
         ax  = plt.gca()
        
+    # Set labels of lines.
     U_label = 'U'
     V_label = 'V'
     U_label = U_label + label_suffix
     V_label = V_label + label_suffix
 
+    # Plot eigenfunctions.
     ax.plot(U, r, label = U_label, color = colors[0], linestyle = linestyles[0], alpha = alpha)
     ax.plot(V, r, label = V_label, color = colors[1], linestyle = linestyles[1], alpha = alpha)
 
+    # Set axis limits.
     max_abs_U_plot = np.max(np.abs(U))
     max_abs_V_plot = np.max(np.abs(V))
     E_max = np.max([max_abs_U_plot, max_abs_V_plot])
     
+    # Tidy axes.
     tidy_axes(ax, r, E_max, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label, r_lims = r_lims)
 
     if show:
@@ -368,21 +395,30 @@ def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunctio
     return ax, E_max
 
 def plot_P(r, P, ax = None, h_lines = None, x_label = 'Potential', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, color = 'r', linestyle = '-', label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12):
+    '''
+    Plot potential eigenfunction.
+    '''
     
+    # Create axes if none provided.
     if ax is None:
 
         fig = plt.figure()
         ax  = plt.gca()
     
+    # Set label for line.
     label = 'P'
     label = label + label_suffix
     
+    # Plot eigenfunction.
     ax.plot(P, r, label = label, color = color, linestyle = linestyle, alpha = alpha)
 
+    # Determine axis limits.
     P_max = np.max(np.abs(P))
 
+    # Tidy axes.
     tidy_axes(ax, r, P_max, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label)
 
+    # Show (if requested).
     if show:
 
         plt.show()
@@ -390,21 +426,29 @@ def plot_P(r, P, ax = None, h_lines = None, x_label = 'Potential', y_label = 'Ra
     return ax, P_max
 
 def tidy_axes(ax, r, E_max, h_lines = None, add_legend = True, legend_loc = 'best', title = None, x_label = 'Eigenfunction', y_label = 'Radius / km', r_lims = None):
+    '''
+    Make the axes look neater.
+    '''
     
+    # Set font sizes.
     font_size_label = 16
     font_size_title = 36 
 
+    # Draw horizontal lines.
     if h_lines is not None:
 
         for h_line in h_lines:
 
             ax.axhline(h_line, linestyle = ':', color = 'k')
 
+    # Draw vertical line at x = 0.
     ax.axvline(linestyle = ':', color = 'k')
     
+    # Set eigenfunction axis limits.
     buff = 1.05
     ax.set_xlim([-buff*E_max, buff*E_max])
 
+    # Set radius axis limits.
     if r_lims is None:
 
         ax.set_ylim([np.min(r), np.max(r)])
@@ -413,18 +457,22 @@ def tidy_axes(ax, r, E_max, h_lines = None, add_legend = True, legend_loc = 'bes
 
         ax.set_ylim(r_lims)
     
+    # Add legend.
     if add_legend:
 
         ax.legend(loc = legend_loc)
 
+    # Add title.
     if title is not None:
         
         ax.set_title(title, fontsize = font_size_title)
 
+    # Label x axis. 
     if x_label is not None:
 
         ax.set_xlabel(x_label, fontsize = font_size_label)
     
+    # Label y axis.
     if y_label is not None:
 
         ax.set_ylabel(y_label, fontsize = font_size_label)
@@ -432,6 +480,9 @@ def tidy_axes(ax, r, E_max, h_lines = None, add_legend = True, legend_loc = 'bes
     return
 
 def set_patch_facecolors(fig, ax):
+    '''
+    Make transparent plot background.
+    '''
 
     ax.patch.set_facecolor('white')
     ax.patch.set_alpha(1.0)
@@ -441,30 +492,29 @@ def set_patch_facecolors(fig, ax):
     return
 
 def plot_eigenfunc_R_or_T(r, U_or_W, ax = None, show = False, h_lines = None, add_legend = True, legend_loc = 'best', title = None, label = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', linestyle = '-', alpha = 1.0, r_lims = None):
+    '''
+    Plot eigenfunction for radial or toroidal mode.
+    '''
 
-    ax.plot(U_or_W, r, color = 'r', label = label, linestyle = linestyle, alpha = alpha)
+    # Plot the line.
+    ax.plot(U_or_W, r, color = 'r', label = label,
+            linestyle = linestyle, alpha = alpha)
 
-    #ax.axhline(3480.0, color = 'k', linestyle = ':')
-    ax.axvline(0.0, color = 'k', linestyle = ':')
-
+    # Get eigenfunction axis limits.
     max_abs_U_or_W_plot = np.max(np.abs(U_or_W))
     
-    tidy_axes(ax, r, max_abs_U_or_W_plot, h_lines = h_lines, add_legend = add_legend, legend_loc = legend_loc, title = title, x_label = x_label, y_label = y_label, r_lims = r_lims)
-
-    return
-
-def plot_eigenfunc_T(r, W, ax = None, show = False):
-
-    ax.plot(W, r, label = 'W')
-
-    #ax.axhline(3480.0, color = 'k', linestyle = ':')
-    ax.axvline(0.0, color = 'k', linestyle = ':')
-
-    tidy_axes(ax, r)
+    # Tidy up axis.
+    tidy_axes(ax, r, max_abs_U_or_W_plot, h_lines = h_lines,
+            add_legend = add_legend, legend_loc = legend_loc,
+            title = title, x_label = x_label, y_label = y_label,
+            r_lims = r_lims)
 
     return
 
 def get_label_suffixes(path_compare, code, code_compare, plot_gradient):
+    '''
+    Define suffixes for line labels.
+    '''
 
     if plot_gradient:
 
@@ -545,13 +595,12 @@ def main():
     # Read input arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument("path_to_input_file", help = "File path (relative or absolute) to Ouroboros input file.")
-    parser.add_argument("mode_type", choices = ['R', 'S', 'T', 'I'], help = 'Mode type (radial, spheroidal or toroidal). Option I is for use with --use_mineos flag to plot inner-core toroidal modes. See the --toroidal flag for plotting toroidal modes with Ouroboros.')
+    parser.add_argument("mode_type", choices = ['R', 'S', 'T', 'I'], help = 'Mode type (radial, spheroidal or toroidal). Option I is for use with Mineos to plot inner-core toroidal modes. See the --toroidal flag for plotting toroidal modes with Ouroboros.')
     parser.add_argument("n", type = int, help = "Plot mode with radial order n.")
     parser.add_argument("l", type = int, help = "Plot mode with angular order l (must be 0 for radial modes).")
     parser.add_argument("--toroidal", dest = "layer_number", help = "Plot toroidal eigenfunction for the solid shell given by LAYER_NUMBER (0 is outermost solid shell).", type = int)
     parser.add_argument("--gradient", action = "store_true", help = "Include this flag to plot eigenfunction gradients (default: plot eigenfunctions).")
     parser.add_argument("--potential", action = "store_true", help = "Include this flag to plot potential (default: plot eigenfunctions).")
-    parser.add_argument("--use_mineos", action = "store_true", help = "Plot Mineos eigenfunction (default: Ouroboros).")
     parser.add_argument("--path_compare", help = "Provide input path to plot a second eigenfunction for comparison.")
     parser.add_argument("--norm_func", choices = ['mineos', 'DT'], default = 'DT', help = "Specify normalisation function. \'mineos\' is the normalisation function used by Mineos and Ouroboros. \'DT\' is the normalisation function used in the Dahlen and Tromp textbook. It does not include the factor of k. See also the --units flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.")
     parser.add_argument("--units", choices = ['SI', 'ouroboros', 'mineos'], default = 'mineos', help = 'Specify units used when applying normalisation to eigenfunction. \'SI\' is SI units. \'mineos\' is Mineos units. \'ouroboros\' is Ouroboros units. See also the --norm_func flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.')
@@ -575,27 +624,6 @@ def main():
     if mode_type == 'R':
 
         assert l == 0, 'Must have l = 0 for radial modes.'
-
-    ## Check input arguments.
-    #if use_mineos:
-
-    #    assert i_toroidal is None, 'Do not use --toroidal flag with Mineos, instead specify mode type T (mantle) or I (inner core).'
-
-    #else:
-
-    #    assert mode_type in ['R', 'S', 'T'], 'Mode type must be R, S or T for Ouroboros modes.'
-
-    #    if mode_type in ['R', 'S']:
-
-    #        assert i_toroidal is None, 'The --toroidal flag should not be used for mode types R or S.'
-
-    #    elif mode_type == 'T':
-
-    #        assert i_toroidal is not None, 'Must use the --toroidal flag for mode type T.'
-
-    #    else:
-
-    #        raise ValueError
 
     # Read input file.
     run_info = read_input_file(path_input)
@@ -629,35 +657,30 @@ def main():
 
             x_label = 'Eigenfunction'
     
+    # Get label suffixes.
     label_suffix, label_suffix_compare = get_label_suffixes(path_compare,
             run_info['code'], code_compare, plot_gradient)
 
     # Plot.
     if path_compare is not None:
 
-        #if i_toroidal is not None:
+        # Plot two eigenfunctions overlaid on same plot.
+        ax = plot_eigenfunc_wrapper(run_info_compare, mode_type, n, l,
+                i_toroidal = None, ax = None, show = False,
+                transparent = False, save = False, linestyle = ':',
+                label_suffix = label_suffix_compare, x_label = None,
+                norm_func = norm_func, units = units,
+                plot_gradient = plot_gradient, plot_potential = plot_potential) 
 
-        #    if i_toroidal == 0:
-
-        #        mode_type_mineos = 'I'
-
-        #    elif i_toroidal == 1:
-
-        #        mode_type_mineos = 'T'
-
-        #    else:
-
-        #        raise ValueError('Models with more than two solid regions are not supported by Mineos.')
-
-        #else:
-
-        #    mode_type_mineos = mode_type
-
-        ax = plot_eigenfunc_wrapper(run_info_compare, mode_type, n, l, i_toroidal = None, ax = None, show = False, transparent = False, save = False, linestyle = ':', label_suffix = label_suffix_compare, x_label = None, norm_func = norm_func, units = units, plot_gradient = plot_gradient, plot_potential = plot_potential) 
-        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = ax, show = True, label_suffix = label_suffix, plot_gradient = plot_gradient, plot_potential = plot_potential, x_label = x_label, norm_func = norm_func, units = units, alpha = 0.5) 
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l,
+                i_toroidal = i_toroidal, ax = ax, show = True,
+                label_suffix = label_suffix, plot_gradient = plot_gradient,
+                plot_potential = plot_potential, x_label = x_label,
+                norm_func = norm_func, units = units, alpha = 0.5) 
 
     else:
 
+        # Plot a single eigenfunction.
         plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None, plot_gradient = plot_gradient, plot_potential = plot_potential, label_suffix = label_suffix, x_label = x_label, norm_func = norm_func, units = units, r_lims = r_lims) 
 
     return

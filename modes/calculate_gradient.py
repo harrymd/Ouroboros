@@ -1,3 +1,9 @@
+'''
+Calculates gradient of eigenfunctions.
+Uses the np.gradient function (second-order central differences at interior
+points, first-order differences at the boundaries).
+'''
+
 import argparse
 import os
 
@@ -9,11 +15,17 @@ from Ouroboros.common import (get_n_solid_layers, get_Ouroboros_out_dirs,
                         read_Ouroboros_input_file)
 
 def get_indices_of_discontinuities(r):
+    '''
+    Finds indices of discontinuities, where two consecutive values of the
+    radial coordinate are the same.
+    '''
     
+    # Loop over points.
     i_discon = []
     n_r = len(r)
     for i in range(n_r - 1):
 
+        # Check if radius is the same.
         if r[i] == r[i + 1]:
         
             i_discon.append(i)
@@ -23,15 +35,20 @@ def get_indices_of_discontinuities(r):
 def radial_derivative(r, x):
     '''
     Numerical differentiation of quantity with respect to radius.
+    Takes into account radial discontinuities.
     '''
     
+    # Find number of points and indices of discontinuities (including final
+    # point) and number of discontinuities.
     n_r = len(r)
     i_d = get_indices_of_discontinuities(r)
     i_d.append(n_r)
     n_d = len(i_d)
 
+    # Prepare output array.
     dxdr = np.zeros(n_r)
     
+    # Differentiate each section separately.
     i1 = 0
     for i2 in i_d:
         
@@ -42,6 +59,9 @@ def radial_derivative(r, x):
     return dxdr
 
 def gradient_wrapper_R(run_info, dir_output, n, l, **normalisation_args):
+    '''
+    Calculate gradients for a single radial mode.
+    '''
 
     mode_type = 'R'
 
@@ -66,6 +86,9 @@ def gradient_wrapper_R(run_info, dir_output, n, l, **normalisation_args):
     return
 
 def gradient_wrapper_S(run_info, dir_output, n, l, **normalisation_args):
+    '''
+    Calculate gradients for a single spheroidal mode.
+    '''
 
     mode_type = 'S'
 
@@ -92,6 +115,9 @@ def gradient_wrapper_S(run_info, dir_output, n, l, **normalisation_args):
     return
 
 def gradient_wrapper_T(run_info, dir_output, n, l, i_toroidal, **normalisation_args):
+    '''
+    Calculate gradients for a single toroidal mode.
+    '''
 
     mode_type = 'T'
 
@@ -115,9 +141,9 @@ def gradient_wrapper_T(run_info, dir_output, n, l, i_toroidal, **normalisation_a
     return
 
 def gradient_all_modes_R_or_S(run_info, mode_type, j_skip = None):
-
-    # Calculate eigenfunction gradients before attenuation re-labelling.
-    #run_info['use_attenuation'] = False
+    '''
+    Calculate gradient for all modes of a given type (spheroidal or radial).
+    '''
 
     # Set normalisation of eigenfunctions (and therefore potential).
     # Use Mineos normalisation and Ouroboros units so output is consistent
@@ -135,8 +161,8 @@ def gradient_all_modes_R_or_S(run_info, mode_type, j_skip = None):
     l = mode_info['l']
     f = mode_info['f']
 
+    # Loop over all modes.
     num_modes = len(n)
-
     for i in range(num_modes):
 
         if (j_skip is None) or (not (i in j_skip)):
@@ -160,6 +186,11 @@ def gradient_all_modes_R_or_S(run_info, mode_type, j_skip = None):
     return
 
 def gradient_all_modes_T(run_info, j_skip = None):
+    '''
+    Calculate gradient for all toroidal modes.
+    Note that an additional loop is required to include all of the solid
+    layers.
+    '''
 
     mode_type = 'T'
 

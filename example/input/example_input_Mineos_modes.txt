@@ -1,0 +1,10 @@
+code mineos
+path_to_model example/input/models/prem_noocean_at_03.000_mHz_noq.txt
+path_to_outdir example/output/Mineos
+gravity_switch 2 
+mode_types R S T I 
+n_limits 0 10 
+l_limits 0 5 
+f_limits 0.0 10.0 
+eps 1.0E-10
+max_depth 6371.0 

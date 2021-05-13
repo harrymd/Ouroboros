@@ -1,3 +1,7 @@
+'''
+Checks the orthogonality of eigenfunctions by evaluating the scalar product
+numerically.
+'''
 import argparse
 import itertools
 import os
@@ -9,10 +13,19 @@ from Ouroboros.common import (filter_mode_list, get_r_fluid_solid_boundary,
                         load_eigenfreq, load_eigenfunc, load_model, read_input_file)
 
 def get_eigfunc_product(mode_type, r, rho, eigfunc_dict_A, eigfunc_dict_B, i_fluid_solid_boundary = None):
+    '''
+    Wrapper for getting the scalar product for different mode types.
+    See Dahlen and Tromp, equations 8.107-8.
+    '''
 
+    # Spheroidal modes.
     if mode_type == 'S':
         
+        # We need to know where the solid-fluid boundaries are for 
+        # spheroidal modes.
         assert i_fluid_solid_boundary is not None
+        
+        # Calculate product.
         product = get_eigfunc_product_S(r, rho, eigfunc_dict_A, eigfunc_dict_B, i_fluid_solid_boundary)
 
     else:
@@ -22,6 +35,10 @@ def get_eigfunc_product(mode_type, r, rho, eigfunc_dict_A, eigfunc_dict_B, i_flu
     return product
 
 def get_eigfunc_product_S(r, rho, eigfunc_dict_A, eigfunc_dict_B, i_fluid_solid_boundary):
+    '''
+    Get the scalar product for spheroidal modes.
+    See Dahlen and Tromp, equation 8.107.
+    '''
 
     # Unpack variables.
     U_A = eigfunc_dict_A['U']
@@ -33,7 +50,7 @@ def get_eigfunc_product_S(r, rho, eigfunc_dict_A, eigfunc_dict_B, i_fluid_solid_
     # Define function to be integrated. 
     function = rho * (r**2.0) * ((U_A * U_B) + (V_A * V_B))
 
-    # Evaluate integral, treating each section separated.
+    # Evaluate integral, treating each section separately.
     i = np.array([0, *i_fluid_solid_boundary, len(r)], dtype = np.int)
     n_segment = len(i) - 1
     #
@@ -156,7 +173,7 @@ def main():
     # Writing output.
     out_fmt = '{:>5d} {:>5d} {:>5d} {:>5d} {:>+19.12e}\n'
     name_out = 'test_orthonormality.txt'
-    path_out = os.path.join(run_info['dir_run'], name_out)
+    path_out = os.path.join(run_info['dir_output'], name_out)
     print('Writing to {:}'.format(path_out))
     with open(path_out, 'w') as out_id:
         

@@ -5,7 +5,7 @@
 Call the main script from the command line:
 
 ```bash
-python3 modes/calculate_modes.py inputs/example_input_Ouroboros.txt
+python3 modes/calculate_modes.py example/input/example_input_Ouroboros_modes.txt
 ```
 
 The only argument is the path to the input file. The default input file (shown here) should run sucessfully without any other changes, and provide detailed output messages.
@@ -15,17 +15,21 @@ The only argument is the path to the input file. The default input file (shown h
 The example input file is
 
 ```
-path_to_model models/prem_noq_noocean.txt
-path_to_outdir ../../output/Ouroboros
-gravity_switch 0 
+code ouroboros
+path_to_model example/input/models/prem_noocean_at_03.000_mHz_noq.txt
+path_to_outdir example/output/Ouroboros
+gravity_switch 2 
 mode_types R S T 
-l_limits 0 5 
-n_limits 0 10 
+n_limits 0 5 
+l_limits 0 10 
 n_layers 700
+use_attenuation 0 
+f_target_mHz none
 ```
 
 Each line has a string descriptor followed by one or more arguments. The order of the lines must not be changed. The lines are
 
+* `code`: `ouroboros` or `mineos` (see `mineos/` for instructions on using Mineos to calculate modes).
 * `path_to_model`: The path to the model file (see note* below).
 * `path_to_outdir`: The path to the desired output directory (see note* below).
 * `gravity_switch`: Controls gravity. Ignored for toroidal modes. For radial and spheroidal modes, should be one of
@@ -36,9 +40,12 @@ Each line has a string descriptor followed by one or more arguments. The order o
  * `R` (radial modes);
  * `S` (spheroidal modes); or
  * `T` (toroidal modes).
+ *  Note that `I` is also used for Mineos modes to specify inner-core toroidal modes, but not for Ouroboros (Ouroboros will always calculate all groups of toroidal modes)
 * `l_limits`: Two integers separated by a space, setting the lower and upper value of *ℓ*. These are ignored for radial modes (which have *ℓ* = 0). The computation time is proportional to the number of *ℓ* values.
 * `n_limits`: Two integers separated by a space, setting the lower and upper value of *n*.
 * `n_layers`: The number of layers in the finite-element model. The user should look for an optimal number of layers that is neither too small (this leads to inaccurate calculations for higher-frequency modes) nor too large (this leads to a very large, time-consuming eigenvalue problem). The details of the computational grid are handled internally by `modes.lib.mantlePoint_equalEnd()`, taking into account discontinuities and using a graded mesh with finer spacing near interfaces.
+
+The last two inputs (`use_attenuation` and `f_target_mHz`) relate to applying a linear attenuation correction. This is discussed later; here we assume that `use_attenation` is set to 0 (no attenuation correction).
 
 Modes with certain combinations of *n* and *ℓ* cannot exist without external forcing and are skipped by *Ouroboros*. These are:
 
@@ -50,7 +57,11 @@ Modes with certain combinations of *n* and *ℓ* cannot exist without external f
 
 ### Format of the model file
 
-The model file can be specified in one of two formats. The first option is the tabular format used by the *Mineos* code (see the *Mineos* manual, Masters et al. 2011, section 3.1.2.1), although anisotropic wavespeeds are silently converted to the isotropic mean, and attenuation is currently ignored. The second option is a simple space-separated text file with four columns: radius (increasing from 0, in km), density (in g/cm3), P-wave speed and S-wave speed (both in km/s).
+The model file can be specified in one of two formats. The first option is the tabular format used by the *Mineos* code (see the *Mineos* manual, Masters et al. 2011, section 3.1.2.1), although anisotropic wavespeeds are silently converted to the isotropic mean, and attenuation is currently ignored. The second option is a simple space-separated text file with four columns: radius (increasing from 0, in km), density (in g/cm3), P-wave speed and S-wave speed (both in km/s). The second option contains no information about attenuation, and so cannot be used if an attenuation correction is being used.
+
+#### The default model file
+
+The default model file (`prem_noocean_at_03.000_mHz_noq.txt`) is based on the Preliminary Reference Earth Model (see references in master README file), which is included in the `DEMO/models/` directory of the Mineos package as `prem_noocean.txt`. We removed radial anisotropy is by taking the mean of the horizontally- and vertically-polarised wave speeds. We removed attenuation by setting the Q-values to zero (and `tref` to -1). A dispersion correction is used to make the model more appropriate for low-frequency normal-mode studies (see the function `create_adjusted_model.py` from `modes/attenuation_correction.py` for more detail). The original reference frequency of PREM (1 Hz) is changed to 3 mHz.
 
 ### The format of the output files
 
@@ -60,9 +71,11 @@ For a planet with multiple solid regions separate by fluid regions (for example,
 
 Within the output directory, the eigenvalues are saved in the file `eigenvalues.txt`. Each line has the value of *n*, *ℓ* and the frequency (in mHz) for a given mode. The modes are listed in order of increasing *n*, then increasing *ℓ*.
 
-The eigenvectors are stored in the subdirectory `eigenfunctions`. There is one file per mode. The files are stored in NumPy binary format to save space. They can be read with the `numpy.load` function. As an example, the mode with *n* = 3 and *ℓ* = 5 will be saved as `00003_00005.npy`. For spheroidal modes, the output is an array with three rows, corresponding to *r* (radial coordinate in metres), *U* (radial eigenfunction) and *V* (consoidal eigenfunction). For toroidal modes, there are just two rows, corresponding to *r* and *W* (toroidal eigenfunction). For radial modes, there are two rows, corresponding to *r* and *U*. For definitions of *U*, *V* and *W*, see Dahlen and Tromp (1998, section 8.6.1).
+The eigenvectors are stored in the subdirectory `eigenfunctions`. There is one file per mode. The files are stored in NumPy binary format to save space. They can be read with the `numpy.load` function. As an example, the mode with *n* = 3 and *ℓ* = 5 will be saved as `00003_00005.npy`. For spheroidal modes, the output is an array with seven rows, corresponding to *r* (radial coordinate in metres), *U* and *U'* (radial eigenfunction and its gradient), *V* and *V'* (consoidal eigenfunction and its gradient), and *P* and *P'* (gravitational potential perturbation and its gradient). For toroidal modes, there are just three rows, corresponding to *r* and *W* and *W'* (toroidal eigenfunction and its gradient). For radial modes, there are five rows, corresponding to *r*, *U*, *U'*, *P* and *P'*. For definitions of *U*, *V*, *W*, and *P*, see Dahlen and Tromp (1998, section 8.6.1).
 
-The normalisation of the eigenfunctions differs from the normalisation used in *Mineos*. Although we use the same normalisation formulae (specifically, the formulae given in section 3.2.3.2 of the *Mineos* manual), we use different units, so the results differ by a scalar factor. To match the eigenfunctions from the two codes, the eigenfunctions from *Ouroboros* must be multiplied by *R*<sup>2</sup>/1000, where *R* is the radius of the planet (in km). They might also have different signs (the sign of the eigenfunctions is arbitrary). Note that both of these normalisation conventions differ from that used in Dahlen and Tromp (1998, equation 8.107) by a factor of the angular frequency squared.
+The normalisation of the eigenfunctions used internally by *Ouroboros* differs from the normalisation used in *Mineos*. However, the scripts for loading eigenfunctions can convert between various normalisations; for more information, see `docs/Ouroboros_normalisation_notes.pdf` and the function `load_eigenfuncs()` from `common.py`.
+
+By default, the sensitivity kernels are also calculated and stored in the subdictory `kernels`. For more information, see `kernels/README.md`.
 
  <a href="#top">Back to top</a>
 
@@ -74,7 +87,7 @@ To plot a mode diagram, try
 
 ```
 # Plots spheroidal and radial modes.
-python3 plot/plot_dispersion.py inputs/example_input_Ouroboros.txt
+python3 plot/plot_dispersion.py example/input/example_input_Ouroboros_modes.txt
 ```
 
 The plot will appear on your screen, and will also be saved in `dir_output`, in a subdirectory called `plots/`. By default, the spheroidal modes are plotted, and the radial modes, with *ℓ* = 0, are added automatically if they are found in the output directory:
@@ -85,10 +98,11 @@ For toroidal modes, you must specify the solid region whose modes you wish to pl
 
 ```bash
 # Plot toroidal modes from second solid region.
-python3 plot/plot_dispersion.py inputs/example_input_Ouroboros.txt --toroidal 1
+python3 plot/plot_dispersion.py example/input/example_input_Ouroboros_modes.txt --toroidal 1
 ```
 
-To plot dispersion from *Mineos* output, use the same syntax with the `--mineos` flag.
+<!--- To plot dispersion from *Mineos* output, use the same syntax with the `--mineos` flag. --->
+Note that the `plot_dispersion()` function has other options which can be seen by running `python3 plot/plot_dispersion.py --help` or looking at `plot/README.md`.
 
 #### Viewing the mode displacement patterns
 
@@ -96,7 +110,7 @@ Similarly, eigenfunctions can be plotted from the command line, specifying the m
 
 ```bash
 # Plot spheroidal mode with n = 2, l = 4.
-python3 plot/plot_eigenfunctions.py inputs/example_input_Ouroboros.txt S 2 4
+python3 plot/plot_eigenfunctions.py example/input/example_input_Ouroboros_modes.txt S 2 4
 ```
 
 which yields the following figure:
@@ -107,13 +121,33 @@ Once again, for toroidal modes you must also specify the index of the solid regi
 
 ```bash
 # Plot toroidal mode with n = 2, l = 4, from the second solid region.
-python3 plot/plot_eigenfunctions.py inputs/example_input_Ouroboros.txt
+python3 plot/plot_eigenfunctions.py example/input/example_input_Ouroboros_modes.txt
 			T 2 4 --toroidal 1
 ```
 
-For radial modes, *ℓ* must be 0. To plot modes from *Mineos* output, use the same syntax with the `--mineos` flag.
+<!--- For radial modes, *ℓ* must be 0. To plot modes from *Mineos* output, use the same syntax with the `--mineos` flag. --->
+Note that the `plot_eigenfunctions()` function has other options which can be seen by running `python3 plot/plot_eigenfunctions.py --help` or looking at `plot/README.md`.
 
+#### Including attenuation
 
+In a realistic planet, energy is lost through attenuation. This causes normal mode oscillations to decay, and causes an apparent decrease in the elastic moduli for lower-frequency oscillations (anelastic dispersion). For more detail, see Dahlen and Tromp (1998), sections 6 and 9.
+
+In Mineos, anelastic dispersion is incorporated using the formulae 9.50 and 9.51, which assume that Q is indepedent of frequency. The frequency-dependent elastic modulus correction can be applied to the model for each mode separately (since the mode's frequency is approximately known in advance) before numerical integration. This ignores the complex (decaying) part of the eigenfunction.
+
+This approach is not possible in our matrix-based formulation. The stiffness matrix must is the same for all modes. Therefore, we use the following procedure:
+
+1. Apply a frequency correction to the model for a target frequency `f_target_mHz` somewhere in the middle of the frequency band of modes we are interested in.
+2. Calculate the modes.
+3. Using the sensitivity kernels (which depend on the eigenfunctions), correct the mode frequencies.
+4. Rescale the eigenfunctions (whose normalisation includes the mode frequencies) and related quantities (including sensitivity kernels).
+5. Repeat steps 3 and 4 until changes are sufficiently small.
+
+To include attenuation, the last two lines of the input file must be something like
+
+```
+use_attenuation 1
+f_target_mHz 3.0
+```
 
 <a style="color: #000000" name="method"/>
 
@@ -139,40 +173,35 @@ The structure of the code is described by the following flowchart:
 
 ### Testing against *Mineos*
 
-The *Mineos* code (Masters et al., 2011) is the *de facto* standard for calculation of Earth's normal modes. Here we present a comparison between *Ouroboros* (version 3.s) and *Mineos* (version 1.0.2). We calculated all of the spheroidal modes with *n* < 50, *ℓ* < 60 and *f* < 15 mHz. We used the `demos/prem_noocean.txt` model from *Mineos*, modified by setting attenuation to 0. For *Ouroboros*, we used `n_layers = 700`. We made comparisons with only gravity (`g_switch = 1`, *Mineos* gravity cut off of 0 mHz) and gravity with perturbation (`g_switch = 2`, *Mineos* gravity cut off at arbitrarily high frequency, e.g. 50 mHz). In *Mineos*, gravity cannot be neglected altogether (`g_switch = 0` in *Ouroboros*), so we did not test this case (although all three cases converge for higher-frequency modes). Comparison of the frequencies (shown for the case `g_switch = 1` below) shows that frequency differences are small: less than 0.5 % for all modes except for <sub>2</sub>S<sub>1</sub>. We are not sure the cause of the discrepancy for this mode, which vanishes in the case `g_switch = 2`. The figure shows that the frequencies calculated with *Ouroboros* are systematically higher than the frequencies from *Mineos*, and the discrepancies are largest for modes with low *n* and high *ℓ*. We do not know what causes these systematic differences.
+The *Mineos* code (Masters et al., 2011) is the *de facto* standard for calculation of Earth's normal modes. Here we present a comparison between *Ouroboros* (version 6) and *Mineos* (version 1.0.2). We used the `example/input/models/prem_noocean_at_03.000_mHz_noq.txt` model discussed above. For *Ouroboros*, we used `n_layers = 700`. We made comparisons with only gravity (`g_switch = 1`, *Mineos* gravity cut off of 0 mHz) and gravity with perturbation (`g_switch = 2`, *Mineos* gravity cut off at arbitrarily high frequency, e.g. 50 mHz). In *Mineos*, gravity cannot be neglected altogether (`g_switch = 0` in *Ouroboros*), so we did not test this case (although all three cases converge for higher-frequency modes). Comparison of the frequencies (shown for the case `g_switch = 1` below) shows that frequency differences are small: less than 0.04 % for all modes.
 
 ![](../docs/figs//frac_freq_diff_Ouroboros_Mineos_1.png "Comparison of frequencies calculated with Ouroboros and Mineos")
 
-We can also compare the eigenfunctions, as shown in the figure below. The agreement is within 0.5 % in most cases, but significant differences are observed for the mode <sub>2</sub>S<sub>1</sub> (discussed above) and modes near occurring near the intersections of branches. We discuss this latter case in detail in Ye (2018) and Matchette-Downes et al. (in prep.). In short, we believe that the discrepancy is due to the failure of the numerical integration approach of *Mineos* to guarantee the orthogonality of the eigenfunctions, especially for the Stoneley-type modes (solid-fluid interface modes) for which it is difficult to enforce the boundary conditions. Apart from near-intersection modes, discrepancies are also found for modes with higher *ℓ*. We do not think these differences are intrinsic, but probably just due to the coarse grid in the default *Mineos* model (*Mineos* models have a hard-coded limit of 350 nodes, although this could easily be changed and re-compiled). For most practical applications, the differences between *Mineos* and *Ouroboros* will probably not be significant.
+We can also compare the eigenfunctions, as shown in the figure below. The agreement is good. Disagreement is largest for ICB Stoneley modes, but we believe this is due only to insufficient radial sampling in the input model.
 
 ![](../docs/figs//eigfunc_diff_Ouroboros_Mineos_1.png "Comparison of eigenfunctions calculated with Ouroboros and Mineos")
 
+Note that if the model is not corrected to an appropriate reference frequency before calculating the modes, we observe larger differences. This is discussed in `docs/comparison_Ouroboros_Mineos.pdf`.
+
 ### Computational cost
 
-The code is not optimised for speed, and tends to be slower than *Mineos* for calculating a similar number of modes. This is probably due to use of double-precision variables, initialisation of many variables including complicated objects (*Mineos* is written in Fortran, which promotes very lean code) and intrinsic differences between our method (FEM) and the integration method used in *Mineos*. Nonetheless, the modes required for most Earth-science and planetary-science applications can be calculated on a laptop in a reasonable amount of time. 
+The code is not optimised for speed, and it is signficantly slower than *Mineos* for calculating a similar number of modes. This is probably due to intrinsic differences between our method and the integration method used in *Mineos*. Other contributing factors are the used of double-precision variables, and the initialisation of many variables including complicated objects (*Mineos* is written in Fortran, which promotes very lean code). Nonetheless, the modes required for most Earth-science and planetary-science applications can be calculated on a laptop in a reasonable amount of time. 
 
-```
-spheroidal_modes (switch = S_G): l =    50 (from     0 to    50)
-Total time used: 2970.022 s
-```
-
-For example, the spheroidal modes of an Earth model with 700 layers can be calculated for *ℓ* up to 50 and *n* up to 60 in about X seconds without gravity, Y seconds with gravity, and Z seconds with gravity and perturbation using a single core of an [SKX compute node on the Stampede2 cluster](https://portal.tacc.utexas.edu/user-guides/stampede2#overview-skxcomputenodes). The eigenvalue problem at each value of *ℓ* is independent of the other *ℓ*-values, so it is trivial to parallelise the loop over *ℓ* ('embarrassingly parallel') if faster calculation is necessary.
+For example, the spheroidal modes of an Earth model with 700 layers can be calculated for a given *ℓ*-value in about one minute on a laptop. The eigenvalue problem at each value of *ℓ* is independent of the other *ℓ*-values, so it would be trivial to parallelise the loop over *ℓ* ('embarrassingly parallel') if faster calculation were necessary.
 
 ### Computational limitations
 
-We have not explored the limits of the code for high frequencies, large values of *ℓ*, or very complicated models. Calculations are performed at double precision, so numerical errors are probably small compared to typical model or data uncertainties in geophysics.
+We have not explored the limits of the code for high frequencies, large values of *ℓ*, or very complicated models.
 
 ### Known issues
 
-#### Frequency shift relative to *Mineos*
+#### Disagreement with *Mineos* for certain models
 
-Discussed above.
+See `docs/comparison_Ouroboros_Mineos.pdf`.
 
 #### Instabilities in eigenfunctions
 
-At least one mode (2S1) shows numerical instability in the eigenfunction in the fluid outer core of an Earth model when using the full gravity setting and 700 elements.
-
-![](../docs/figs/error_mode_2S1_G2.png "An error in Ouroboros eigenfunctions.")
+See `docs/comparison_Ouroboros_Mineos.pdf`.
 
 #### Discrepancy in sensitivity kernels
 

@@ -1,11 +1,10 @@
+'''
+Convert a Mineos eigenvalue file to Ouroboros format.
+'''
 import argparse
 import os
 
 from Ouroboros.common import load_eigenfreq, read_input_file
-
-def write_in_ouroboros_format():
-
-    return
 
 def main():
 
@@ -31,6 +30,7 @@ def main():
 
         mode_type_list = [mode_type]
 
+    # Write in Ouroboros format for each mode type.
     for mode_type in mode_type_list:
 
         # Get mode information.

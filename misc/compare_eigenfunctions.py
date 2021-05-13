@@ -1,11 +1,20 @@
+'''
+Compares eigenfunctions from two different calculations.
+'''
+
 import argparse
 import os
 
 import numpy as np
 
-from Ouroboros.common import align_mode_lists, get_Mineos_out_dirs, get_Ouroboros_out_dirs, interp_n_parts, load_eigenfreq, load_eigenfunc, read_input_file
+from Ouroboros.common import (align_mode_lists, get_Mineos_out_dirs,
+        get_Ouroboros_out_dirs, interp_n_parts, load_eigenfreq,
+        load_eigenfunc, read_input_file)
 
 def get_eigfunc_comparison_out_path(run_info_A, run_info_B, mode_type):
+    '''
+    Find the path to the output file of the comparison.
+    '''
 
     if run_info_A['code'] == 'ouroboros':
 
@@ -27,14 +36,19 @@ def get_eigfunc_comparison_out_path(run_info_A, run_info_B, mode_type):
     return path_out
 
 def comparison_wrapper(run_info_A, run_info_B, mode_type, n, l, om_A, om_B, norm_args):
+    '''
+    Handle the comparison for different mode types.
+    '''
     
     if mode_type == 'S':
 
-        rms = comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args)
+        rms = comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B,
+                                    norm_args)
 
     elif mode_type == 'R':
 
-        rms = comparison_wrapper_R(run_info_A, run_info_B, n, om_A, om_B, norm_args)
+        rms = comparison_wrapper_R(run_info_A, run_info_B, n, om_A, om_B,
+                                    norm_args)
 
     else:
 
@@ -43,25 +57,22 @@ def comparison_wrapper(run_info_A, run_info_B, mode_type, n, l, om_A, om_B, norm
     return rms
 
 def check_sign_S(r, U, V):
+    '''
+    Use a sign convention to determine the sign of a spheroidal mode.
+    '''
 
     # Calculate sign.
     iU = np.trapz(r*U, x = r)
-    iV = np.trapz(r*V, x = r)
-
-    #aU = np.abs(iU)
-    #aV = np.abs(iV)
-
-    #ratio = aU/aV
-
-    #UV_angle = np.arctan2(iV, iU)
-
-    #iS = (iU + iV)
+    #iV = np.trapz(r*V, x = r)
 
     sign = np.sign(iU)
 
     return sign
 
 def check_sign_P(r, P):
+    '''
+    Use a sign convention to determine the sign of a potential eigenfunction.
+    '''
 
     # Calculate sign.
     iP = np.trapz(P, x = r)
@@ -71,6 +82,9 @@ def check_sign_P(r, P):
     return sign
 
 def check_sign_R(r, U):
+    '''
+    Use a sign convention to determine the sign of a radial eigenfunction.
+    '''
 
     # Calculate sign.
     iU = np.trapz(r*U, x = r)
@@ -80,6 +94,9 @@ def check_sign_R(r, U):
     return sign
 
 def check_sign_T(r, W):
+    '''
+    Use a sign convention to determine the sign of a toroidal mode.
+    '''
 
     # Calculate sign.
     iW = np.trapz(r*W, x = r)
@@ -89,6 +106,9 @@ def check_sign_T(r, W):
     return sign
 
 def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
+    '''
+    Compare a spheroidal mode from two different calculations.
+    '''
 
     # Load eigenfunctions.
     norm_args['omega'] = om_A
@@ -96,10 +116,6 @@ def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
     #
     norm_args['omega'] = om_B
     eigfunc_dict_B = load_eigenfunc(run_info_B, 'S', n, l, norm_args = norm_args)
-
-    #for key in ['r', 'U', 'V']:
-
-    #    print(key, np.all(eigfunc_dict_B[key] == eigfunc_dict_A[key]))
 
     # Check sign and equalise.
     sign_A = check_sign_S(eigfunc_dict_A['r'], eigfunc_dict_A['U'], eigfunc_dict_A['V'])
@@ -110,10 +126,8 @@ def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
 
             eigfunc_dict_B[var] = eigfunc_dict_B[var]*-1.0
 
-    #for key in ['r', 'U', 'V']:
-
-    #    print(key, np.all(eigfunc_dict_B[key] == eigfunc_dict_A[key]))
-
+    # Assume there are only two major discontinuities and they are the first
+    # ones.
     i_discon_A = np.where(np.diff(eigfunc_dict_A['r']) == 0.0)[0] + 1
     i_discon_B = np.where(np.diff(eigfunc_dict_B['r']) == 0.0)[0] + 1
 
@@ -132,9 +146,6 @@ def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
         
         for var in ['U', 'V']:
 
-            #eigfunc_dict_B[var] = np.interp(eigfunc_dict_A['r'],
-            #                        eigfunc_dict_B['r'], eigfunc_dict_B[var])
-
             eigfunc_dict_B[var] = interp_n_parts(eigfunc_dict_A['r'],
                                     eigfunc_dict_B['r'], eigfunc_dict_B[var],
                                     i_discon_A, i_discon_B)
@@ -145,19 +156,13 @@ def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
 
         for var in ['U', 'V']:
 
-            #eigfunc_dict_A[var] = np.interp(eigfunc_dict_B['r'], 
-            #                        eigfunc_dict_A['r'], eigfunc_dict_A[var])
-
             eigfunc_dict_A[var] = interp_n_parts(eigfunc_dict_B['r'],
                                     eigfunc_dict_A['r'], eigfunc_dict_A[var],
                                     i_discon_B, i_discon_A)
 
         eigfunc_dict_A['r'] = eigfunc_dict_B['r']
 
-    #for key in ['r', 'U', 'V']:
-
-    #    print(key, np.all(eigfunc_dict_B[key] == eigfunc_dict_A[key]))
-
+    # Calculate the RMS difference.
     r_range = eigfunc_dict_A['r'][-1] - eigfunc_dict_A['r'][0]
     
     U_diff = eigfunc_dict_A['U'] - eigfunc_dict_B['U']
@@ -168,72 +173,36 @@ def comparison_wrapper_S(run_info_A, run_info_B, n, l, om_A, om_B, norm_args):
 
     rms_diff = rms_diff_U + rms_diff_V
 
-    rms_U_A = np.sqrt(np.trapz(eigfunc_dict_A['U']**2.0, x = eigfunc_dict_A['r'])/r_range)
-    rms_V_A = np.sqrt(np.trapz(eigfunc_dict_A['V']**2.0, x = eigfunc_dict_A['r'])/r_range)
+    rms_U_A = np.sqrt(np.trapz( eigfunc_dict_A['U']**2.0,
+                                x = eigfunc_dict_A['r'])/r_range)
+    rms_V_A = np.sqrt(np.trapz( eigfunc_dict_A['V']**2.0,
+                                x = eigfunc_dict_A['r'])/r_range)
     rms_A = rms_U_A + rms_V_A
 
-    rms_U_B = np.sqrt(np.trapz(eigfunc_dict_B['U']**2.0, x = eigfunc_dict_B['r'])/r_range)
-    rms_V_B = np.sqrt(np.trapz(eigfunc_dict_B['V']**2.0, x = eigfunc_dict_B['r'])/r_range)
+    rms_U_B = np.sqrt(np.trapz( eigfunc_dict_B['U']**2.0,
+                                x = eigfunc_dict_B['r'])/r_range)
+    rms_V_B = np.sqrt(np.trapz( eigfunc_dict_B['V']**2.0,
+                                x = eigfunc_dict_B['r'])/r_range)
     rms_B = rms_U_B + rms_V_B
     
-    #print(n, l, np.max(np.abs(U_diff)), np.max(np.abs(V_diff)))
-    
-    if n == 0 and l == 22:
-        plot = True 
-        plot = False
-
-    else:
-        plot = False
-    if plot:
-
-        import matplotlib.pyplot as plt
-        fig = plt.figure()
-        ax = plt.gca()
-        
-        c_U = 'b'
-        c_V = 'r'
-        ls_A = '-'
-        ls_B = ':'
-        #ax.plot(eigfunc_dict_A['r'], eigfunc_dict_A['U'], label = 'U (A)', color = c_U, linestyle = ls_A)
-        #ax.plot(eigfunc_dict_A['r'], eigfunc_dict_A['V'], label = 'V (A)', color = c_V, linestyle = ls_A)
-
-        #ax.plot(eigfunc_dict_B['r'], eigfunc_dict_B['U'], label = 'U (B)', color = c_U, linestyle = ls_B)
-        #ax.plot(eigfunc_dict_B['r'], eigfunc_dict_B['V'], label = 'V (B)', color = c_V, linestyle = ls_B)
-
-        #ax.plot(eigfunc_dict_A['U'] - eigfunc_dict_B['U'], eigfunc_dict_B['r'], label = 'U (A - B)', color = c_U)
-        #ax.plot(eigfunc_dict_A['V'] - eigfunc_dict_B['V'], eigfunc_dict_B['r'], label = 'V (A - B)', color = c_V)
-        
-        ratio_U = eigfunc_dict_A['U']/eigfunc_dict_B['U']
-        ratio_V = eigfunc_dict_A['V']/eigfunc_dict_B['V']
-        ax.plot(ratio_U, eigfunc_dict_B['r'], label = 'U (A/B)', color = c_U)
-        ax.plot(ratio_V, eigfunc_dict_B['r'], label = 'V (A/B)', color = c_V)
-        ax.set_xlim([0.95, 1.05])
-
-        ax.legend()
-
-
-        plt.show()
-
-        import sys
-        sys.exit()
-
     return rms_diff, rms_A, rms_B
 
 def comparison_wrapper_R(run_info_A, run_info_B, n, om_A, om_B, norm_args):
+    '''
+    Compare a radial mode from two different calculations.
+    '''
     
     mode_type = 'R'
     l = 0
 
     # Load eigenfunctions.
     norm_args['omega'] = om_A
-    eigfunc_dict_A = load_eigenfunc(run_info_A, mode_type, n, l, norm_args = norm_args)
+    eigfunc_dict_A = load_eigenfunc(run_info_A, mode_type, n, l,
+                                    norm_args = norm_args)
     #
     norm_args['omega'] = om_B
-    eigfunc_dict_B = load_eigenfunc(run_info_B, mode_type, n, l, norm_args = norm_args)
-
-    #for key in ['r', 'U', 'V']:
-
-    #    print(key, np.all(eigfunc_dict_B[key] == eigfunc_dict_A[key]))
+    eigfunc_dict_B = load_eigenfunc(run_info_B, mode_type, n, l,
+                                    norm_args = norm_args)
 
     # Check sign and equalise.
     sign_A = check_sign_R(eigfunc_dict_A['r'], eigfunc_dict_A['U'])
@@ -244,10 +213,8 @@ def comparison_wrapper_R(run_info_A, run_info_B, n, om_A, om_B, norm_args):
 
             eigfunc_dict_B[var] = eigfunc_dict_B[var]*-1.0
 
-    #for key in ['r', 'U', 'V']:
-
-    #    print(key, np.all(eigfunc_dict_B[key] == eigfunc_dict_A[key]))
-
+    # Assume there are only two major discontinuities and they are the first
+    # ones.
     i_discon_A = np.where(np.diff(eigfunc_dict_A['r']) == 0.0)[0] + 1
     i_discon_B = np.where(np.diff(eigfunc_dict_B['r']) == 0.0)[0] + 1
 
@@ -266,9 +233,6 @@ def comparison_wrapper_R(run_info_A, run_info_B, n, om_A, om_B, norm_args):
         
         for var in ['U']:
 
-            #eigfunc_dict_B[var] = np.interp(eigfunc_dict_A['r'],
-            #                        eigfunc_dict_B['r'], eigfunc_dict_B[var])
-
             eigfunc_dict_B[var] = interp_n_parts(eigfunc_dict_A['r'],
                                     eigfunc_dict_B['r'], eigfunc_dict_B[var],
                                     i_discon_A, i_discon_B)
@@ -279,19 +243,13 @@ def comparison_wrapper_R(run_info_A, run_info_B, n, om_A, om_B, norm_args):
 
         for var in ['U']:
 
-            #eigfunc_dict_A[var] = np.interp(eigfunc_dict_B['r'],
-            #                        eigfunc_dict_A['r'], eigfunc_dict_A[var])
-
             eigfunc_dict_A[var] = interp_n_parts(eigfunc_dict_B['r'],
                                     eigfunc_dict_A['r'], eigfunc_dict_A[var],
                                     i_discon_B, i_discon_A)
 
         eigfunc_dict_A['r'] = eigfunc_dict_B['r']
 
-    #for key in ['r', 'U', 'V']:
-
-    #    print(key, np.all(eigfunc_dict_B[key] == eigfunc_dict_A[key]))
-
+    # Calculate the RMS difference.
     r_range = eigfunc_dict_A['r'][-1] - eigfunc_dict_A['r'][0]
     
     U_diff = eigfunc_dict_A['U'] - eigfunc_dict_B['U']
@@ -299,14 +257,14 @@ def comparison_wrapper_R(run_info_A, run_info_B, n, om_A, om_B, norm_args):
 
     rms_diff = rms_diff_U
 
-    rms_U_A = np.sqrt(np.trapz(eigfunc_dict_A['U']**2.0, x = eigfunc_dict_A['r'])/r_range)
+    rms_U_A = np.sqrt(np.trapz( eigfunc_dict_A['U']**2.0,
+                                x = eigfunc_dict_A['r'])/r_range)
     rms_A = rms_U_A
 
-    rms_U_B = np.sqrt(np.trapz(eigfunc_dict_B['U']**2.0, x = eigfunc_dict_B['r'])/r_range)
+    rms_U_B = np.sqrt(np.trapz( eigfunc_dict_B['U']**2.0,
+                                x = eigfunc_dict_B['r'])/r_range)
     rms_B = rms_U_B
 
-
-    
     return rms_diff, rms_A, rms_B
 
 def main():
@@ -337,6 +295,9 @@ def main():
     out_fmt = '{:>5d} {:>5d} {:>19.12f} {:>19.12f} {:>18.12e} {:>18.12e} {:>18.12e}\n'
 
     # Loop over mode types.
+    for mode_type in ['T', 'I']:
+        if mode_type in mode_types:
+            mode_types.remove(mode_type)
     for mode_type in mode_types:
 
         # Found output path.
@@ -363,7 +324,6 @@ def main():
         rms_A = np.zeros(num_modes)
         rms_B = np.zeros(num_modes)
         for i in range(num_modes):
-        #for i in [0]:
 
             rms_diff[i], rms_A[i], rms_B[i] = comparison_wrapper(run_info_A, run_info_B, mode_type, n[i], l[i],
                                 om_A[i], om_B[i], norm_args)

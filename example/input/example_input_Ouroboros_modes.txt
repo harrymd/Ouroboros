@@ -1,0 +1,10 @@
+code ouroboros
+path_to_model example/input/models/prem_noocean_at_03.000_mHz_noq.txt
+path_to_outdir example/output/Ouroboros
+gravity_switch 2 
+mode_types R S T 
+n_limits 0 10 
+l_limits 0 5 
+n_layers 700
+use_attenuation 0 
+f_target_mHz none

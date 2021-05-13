@@ -1,3 +1,7 @@
+'''
+This is a previous version of kernels.py. We keep it because we have not
+finished updating kernels.py.
+'''
 import warnings
 
 import numpy as np

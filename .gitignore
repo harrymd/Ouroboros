@@ -1,9 +1,3 @@
 __pycache__/
 __init__.py
-inputs/input*
-inputs/CMTs
-old/
-very_old/
-*.sbatch
-kernels_brute*.txt
-kernels_brute*.err
+example/output/*

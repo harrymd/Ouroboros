@@ -1,3 +1,7 @@
+'''
+Plot group and phase speeds calculated by Mineos.
+'''
+
 import argparse
 import os
 
@@ -8,6 +12,9 @@ import numpy as np
 from Ouroboros.common import load_eigenfreq, read_input_file
 
 def plot_speed(mode_info, speed_type, n_max = 4, dir_out = None):
+    '''
+    Plot phase or group speed. Note twin x axes.
+    '''
 
     # Check inputs.
     assert speed_type in ['group', 'phase']
@@ -93,16 +100,16 @@ def plot_speed(mode_info, speed_type, n_max = 4, dir_out = None):
     if speed_type == 'group':
 
         #y_lims = [0.0, 21.0]
-        y_lims = [2.5, 17.5]
+        #y_lims = [2.5, 17.5]
         y_label = 'Group speed (km s$^{-1}$)'
 
     elif speed_type == 'phase':
 
         y_label = 'Phase speed (km s$^{-1}$)'
         #y_lims = [2.5, 26.0]
-        y_lims = [7.5, 10.0]
+        #y_lims = [7.5, 10.0]
 
-    ax.set_ylim(y_lims)
+    #ax.set_ylim(y_lims)
     ax.set_ylabel(y_label, fontsize = font_size_label)
     
     # Add legend.
@@ -110,12 +117,12 @@ def plot_speed(mode_info, speed_type, n_max = 4, dir_out = None):
 
     #x_lims = [0.0, 400.0]
     #x_lims = [100.0, 3500.0]
-    x_lims = [100.0, 500.0]
+    #x_lims = [100.0, 500.0]
     x_label = 'Period (s)'
     x_label_alt = 'Frequency (mHz)'
     #ax.set_xscale('log')
 
-    ax.set_xlim(x_lims)
+    #ax.set_xlim(x_lims)
     ax.set_xlabel(x_label, fontsize = font_size_label)
     ax_1.set_xlabel(x_label_alt, fontsize = font_size_label)
 
@@ -142,10 +149,12 @@ def main():
     # Read input arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument("path_input", help = "File path (relative or absolute) to input file.")
+    parser.add_argument("type", choices = ['phase', 'group'], help = 'Choose whether to plot phase or group speed.')
     args = parser.parse_args()
 
     # Rename input arguments.
     path_input = args.path_input    
+    speed_type = args.type
 
     # Read input file.
     run_info = read_input_file(path_input)
@@ -155,8 +164,6 @@ def main():
     mode_info = load_eigenfreq(run_info, mode_type)
 
     # Plot.
-    #speed_type = 'group'
-    speed_type = 'phase'
     dir_out = os.path.join(run_info['dir_output'], 'plots')
     plot_speed(mode_info, speed_type, dir_out = dir_out)
 

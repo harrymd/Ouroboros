@@ -1,14 +1,10 @@
 # Sensitivity kernels
 
-Sensitivity kernels are calculated using the formulae from Dahlen and Tromp (1998, section 9.3) derived using Rayleigh's principle.
+Sensitivity kernels are calculated using the formulae from Dahlen and Tromp (1998, section 9.3) derived using Rayleigh's principle. Note that currently only the kernels *K<sub>κ</sub>* and *K<sub>μ</sub>* are implemented for radial and spheroidal modes, and toroidal mode kernels are not implemented.
 
 ## Running the code
 
-First, you must calculate the normal modes (see `modes/README.md`) based on an input file such as `inputs/example_input_Ourorobos.txt`. Next, to calculate the sensitivity kernels for all of the modes specified in the input file, run a command such as
-
-```
-python3 kernels/run_kernels.py inputs/example_input_Ouroboros.txt
-```
+When you calculate the normal modes (see `modes/README.md`), the kernels are also calculated and stored in the `kernels` subdirectory.
 
 ### The format of the output files
 
@@ -32,6 +28,7 @@ The second group is
  * *K<sub>β</sub>*, sensitivity to *β* with fixed *α* and *ρ*; and
  * *K<sub>ρ'</sub>*, sensitivity to *ρ* with fixed *α* and *β*.
 
+Eventually, we plan to store the kernels as an array of shape (7, *n*) where *n* is the number of radial points, where the columns are *r*, *K<sub>κ</sub>*, *K<sub>μ</sub>*, *K<sub>ρ</sub>*, *K<sub>α</sub>*, *K<sub>β</sub>* and *K<sub>ρ'</sub>*. However, so far, only two of the kernels have been implemented, so the output has shape (3, *n*), where the columns are *r*, *K<sub>κ</sub>* and *K<sub>μ</sub>*. For each mode, this array is stored as a NumPy binary file (e.g. `kernels_00000_00002.npy` for a mode with *n* = 0 and *ℓ* = 2) which can be read with the `np.load` function.m 
 
 ### Plotting kernels
 
@@ -47,16 +44,13 @@ will produce a plot like
 
 ## Other functions
 
-The `kernels/` directory contains a few other functions which are used for development and not written for public use:
-
- * `kernels_brute.py` Calculating kernels by brute force (i.e., varying one layer at a time) for benchmarking. This is extremely computationally slow.
- * `test_kernels.py` Plotting kernels against brute-force kernels.
+The `kernels/` directory also contains `kernels_brute.py` for calculating kernels by brute force (i.e., varying one layer at a time) for benchmarking. This is extremely computationally slow. This function is not intended for public use.
 
 ## Issues
 
-### Density kernels including gravity effect
+### Some kernels not implemented
 
-Currently, the full form of the sensitivity to density has not been implemented in the cases involving background gravity or self-gravity. The extra terms are ignored (with a warning), although the eigenvalues and eigenfunctions include the effect of gravity, which reduces the error in this approximation. Ignoring the extra terms is a reasonable approximation at higher frequencies.
+As discussed above, more kernels need to be implemented.
 
 ### Some kernels not benchmarked
 

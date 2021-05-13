@@ -8,73 +8,86 @@
 
 ## Calculating mode eigenfrequencies and eigenfunctions
 
-```
-python3 mineos/calculate_modes.py inputs/example_input_Mineos.txt
-```
-
-with input file
+The syntax is very similar to calculating modes with Ouroboros:
 
 ```
-path_model models/prem_noocean.txt
-path_out_dir ../../output/mineos
-grav_switch 2
-mode_types S
-n_limits 0 15 
-l_limits 0 30 
-f_limits 0.0 5.5
+python3 mineos/calculate_modes.py example/input/example_input_Mineos_modes.txt
+```
+
+although the input file is slightly different:
+
+```
+code mineos
+path_to_model example/input/models/prem_noocean_at_03.000_mHz_noq.txt
+path_to_outdir example/output/Mineos
+gravity_switch 2 
+mode_types R S T I 
+n_limits 0 10 
+l_limits 0 5 
+f_limits 0.0 10.0 
 eps 1.0E-10
-max_depth all
+max_depth 6371.0 
 ```
 
-Warning: *Mineos* has a bug when doing mode summation including radial modes if the eigenfunctions are saved with a large value of `max_depth` (including `max_depth = 'all'`).
+The differences in the input file (compared to Ouroboros) are:
 
-### Plotting mode eigenfrequencies
+* `mode_types` include `I` for inner-core toroidal modes (Ouroboros calculates all toroidal modes automatically).
+* `f_limits` specifies a frequency cut-off for modes (in mHz).
+* `eps` specifies the numerical accuracy of the integration.
+* `max_depth` specifies the depth (in km) at which the eigenfunctions will be truncated. This can be `all` to include the whole planet. Note that *Mineos* has a bug when doing mode summation including radial modes if the eigenfunctions are saved with a large value of `max_depth` (including `max_depth = 'all'`). To avoid this bug, use a smaller value, e.g. 700.
+
+### Plotting mode eigenfrequencies and eigenfunctions
+
+The `plot_dispersion` and `plot_eigenfunction` commands ([`modes/README.md`](modes/README.md)) can be used for Mineos too:
 
 ```
-python3 plot/plot_dispersion.py inputs/example_input_Mineos.txt --use_mineos
+python3 plot/plot_dispersion.py example/input/example_input_Mineos_modes.txt
 ```
 
-### Plotting mode eigenfunctions
+```
+python3 plot/plot_eigenfunctions.py example/input/example_input_Mineos_modes.txt S 3 5
+```
+
+In addition, Mineos calculates the phase and group speeds. These can be plotted with:
+
+```
+python3 plot/plot_group_and_phase_speeds.py example/input/example_input_Mineos_modes.txt phase
+```
+
+yielding
+
+<img src="../docs/figs//example_phase_speed.png" width="90%" title = "Phase speed of modes calculated in Mineos .">
+
+for phase speed, and similarly for group speed.
 
 ## Mode summation
 
+Mineos includes a mode summation code (`green.f` and `syndat.f`). Ouroboros includes a wrapper for this code. The syntax is very similar to running Ouroboros mode summation:
+
 ```
-python3 mineos/summation.py inputs/example_input_Mineos.txt
-inputs/example_input_Mineos_summation.txt
+python3 mineos/summation.py example/input/example_input_Mineos_modes.txt
+example/input/example_input_Mineos_summation.txt
 ```
 
 with input file
 
 ```
-path_channels inputs/example_station_list.txt 
-path_cmt inputs/example_cmt_china.txt
-f_lims same
-n_samples 1000
-data_type 0
+path_channels example/input/example_station_list_ANMO_3c.txt
+path_cmt example/input/example_CMT_tohoku.txt
+f_lims 0.0 5.0 
+n_samples 8000
+data_type 1 
 plane 0
 ```
 
-### The channels file
+The first four inputs are The same as described in `summation/README.md`. `data_type` is 0, 1, or 2 for displacement, velocity or acceleration, as described in the Mineos manual, section 3.4.1. The `plane` is one of 0, 1, or 2, also described in this section of the Mineos manual.
 
-The channels file (`path_channels`) describes the observer properties, i.e. the seismometer location and the orientation of the sensors. The channels file can list multiple stations and each station can have multiple sensors. The format of the channels file is described in the *Mineos* manual (section 4.4). It is passed to the *Mineos* utility `simpledit` for conversion into a CSS database before summation.
+### Plotting mode summation
 
-### The CMT file
-
-The centroid moment tensor (CMT) file (`path_cmt`) describes the earthquake source. It must be in the format used by *Mineos*. If you have downloaded a moment-tensor solution from the [Global CMT](https://www.globalcmt.org/) project, it will be written in [NDK](https://www.ldeo.columbia.edu/~gcmt/projects/CMT/catalog/allorder.ndk_explained) format. To convert from *Mineos* to NDK, use a command such as
+The Ouroboros `plot_summation` command ([`summation/README.md`](summation/README.md)) can be used for Mineos output too by including the `--use_mineos` flag.
 
 ```
-python3 misc/cmt_io.py --path_ndk inputs/CMTs/tohoku.ndk
-	--path_mineos inputs/CMTs/tohoku.txt --mineos_dt 10.0
-```
+python3 plot/plot_summation.py example/input/example_input_Mineos_modes.txt example/input/example_input_Mineos_summation.txt ANMO LHZ --use_mineos
+``` 
 
-The time interval between samples in the synthetic seismograms is also controlled by the *Mineos* CMT file (it is the 10th argument), but of course it is not part of the NDK format. Use the `--mineos_dt` flag to specify the time interval (in seconds).
-
-## Things to add
-
-* Plotting eigenfunctions.
-* Plotting synthetic seismograms and Green's functions.
-* Maybe re-grid comparison trace to assure phase alignment
-
-```
-python3 plot/plot_summation.py --use_mineos ../../input/mineos/input_Mineos_stoneley.txt ../../input/mineos/input_Mineos_summation_stoneley.txt PAYG VHZ
-```
+Note the Mineos bug mentioned above that affects summation involving radial modes.

@@ -1,0 +1,12 @@
+mode_types R S 
+f_lims 0.0 5.0
+path_channels example/input/example_station_list_ANMO_3c.txt 
+path_cmt example/input/example_CMT_tohoku.txt
+time_step 10.0
+n_samples 8000
+pulse triangle
+output_type velocity
+attenuation none 
+correct_response 1 
+epi_dist_azi_method mineos
+path_mode_list none

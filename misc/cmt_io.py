@@ -1,3 +1,7 @@
+'''
+Tools for working with CMT (centroid moment tensor) input and output.
+'''
+
 import argparse
 import datetime
 import os
@@ -259,29 +263,34 @@ def read_ndk(path_ndk):
 
 def write_mineos_cmt(path_mineos_cmt, cmt_info, dt = 1.0):
     '''
+    Writes a Mineos CMT file from a dictionary containing the relevant
+    variables.
     For specification of Mineos CMT file, see section 3.3.2 of the Mineos
     manual.
 
-    dt Time step (seconds).
+    dt Time step (seconds), used by Mineos for synthetic seismograms.
     '''
 
+    # Convert date to string.
     year = cmt_info['datetime_ref'].year
-    #julday = int(cmt_info['datetime_ref'].strftime('%j'))
 
     date_str_no_secs = cmt_info['datetime_ref'].strftime('%Y %j %H %M')
     secs = cmt_info['datetime_ref'].second + 1.0E-6*cmt_info['datetime_ref'].microsecond
     sec_str = '{:>5.2f}'.format(secs)
     date_str = '{:} {:}'.format(date_str_no_secs, sec_str)
 
+    # Get the scalar moment with correct exponent as a float.
     scale_factor = 10.0**(cmt_info['exponent'])
     scalar_moment = cmt_info['scalar_moment']*scale_factor
 
+    # Get the event ID string.
     ev_id = os.path.basename(path_mineos_cmt).split('.')[0]
     if len(ev_id) > 8:
         ev_id = ev_id[0:8]
     elif len(ev_id) < 8:
         ev_id = ev_id.rjust(8, '_')
     
+    # Write the file (it is just one line).
     line = '{:} {:} {:>6.2f} {:>7.2f} {:>6.2f} {:>9.5e} {:>6.2f} {:>7.2e} {:>7.2f} {:>7.2f} {:>7.2f} {:>7.2f} {:>7.2f} {:>7.2f} {:>7.2e} {:>3.0f} {:>3.0f} {:>3.0f} {:>3.0f} {:>3.0f} {:>3.0f}'.format(ev_id, date_str, cmt_info['lat_centroid'], cmt_info['lon_centroid'], cmt_info['depth_centroid'], dt, cmt_info['half_duration'], scalar_moment, cmt_info['Mrr'], cmt_info['Mtt'], cmt_info['Mpp'], cmt_info['Mrt'], cmt_info['Mrp'], cmt_info['Mtp'], scale_factor, cmt_info['strike_0'], cmt_info['dip_0'], cmt_info['azimuth_0'], cmt_info['strike_1'], cmt_info['dip_1'], cmt_info['azimuth_1'])
     
     with open(path_mineos_cmt, 'w') as out_id:

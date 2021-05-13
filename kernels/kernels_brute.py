@@ -1,3 +1,8 @@
+'''
+Calculate sensitivity kernels by brute force (vary one parameter at one depth
+and measure change in frequency).
+'''
+
 import argparse
 from functools import partial
 import itertools

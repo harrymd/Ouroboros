@@ -1,3 +1,7 @@
+'''
+Read planetary model, set Q to 0, and re-write.
+'''
+
 import argparse
 import os
 

@@ -1,16 +1,22 @@
+'''
+Plot brute-force sensitivity kernels.
+'''
+
 import argparse
 import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from common import read_Ouroboros_input_file, get_Ouroboros_out_dirs
+from Ouroboros.common import read_Ouroboros_input_file, get_Ouroboros_out_dirs
 
 def get_kernel_brute(path_input, mode_type, n, l, param, units = 'standard'):
+    '''
+    Find brute-force kernel file and load it.
+    '''
 
     # Found output files.
     run_info = read_Ouroboros_input_file(path_input)
-    #run_info['dir_output'] = os.path.join(run_info['dir_output'], 'cluster')
     _, _, _, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
     dir_kernels_brute = os.path.join(dir_type, 'kernels_brute')
     #
@@ -42,11 +48,6 @@ def get_kernel_brute(path_input, mode_type, n, l, param, units = 'standard'):
     d_omega = omega_ptb - omega_ref
     d_r = np.diff(vertices)
 
-    #fig = plt.figure()
-    #ax = plt.gca()
-    #ax.plot(d_r)
-
-    #plt.show()
 
     # Calculate kernel.
     # Units of mHz per GPa per km for kappa and mu, mHz per 

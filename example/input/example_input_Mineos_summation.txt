@@ -1,0 +1,6 @@
+path_channels example/input/example_station_list_ANMO_3c.txt
+path_cmt example/input/example_CMT_tohoku.txt
+f_lims 0.0 5.0 
+n_samples 8000
+data_type 1 
+plane 0

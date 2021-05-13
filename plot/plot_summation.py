@@ -1,3 +1,7 @@
+'''
+Plot synthetic seismograms created by normal-mode summation.
+'''
+
 import argparse
 import os
 
@@ -20,6 +24,9 @@ from Ouroboros.summation.run_summation import load_time_info
 font_size_label = 12
 
 def unpack_trace(trace, trace_comparison = None):
+    '''
+    Convert a trace to t- and x-arrays.
+    '''
 
     t = trace.times()
     x = trace.data
@@ -40,6 +47,7 @@ def unpack_trace(trace, trace_comparison = None):
 
 def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None, show = True, label = 'auto', show_legend = True, y_label = None, legend_keys = ['Synthetic', 'Observed']):
     '''
+    Plot seismograph from trace.
     Trace input units assumed to be nm/s.
     '''
 
@@ -47,13 +55,15 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
 
         label = auto_label(trace)
 
+    # Get NumPy arrays.
     t, x, t_c, x_c = unpack_trace(trace, trace_comparison = trace_comparison)
 
+    # Set t-axis units and scale t-values accordingly.
     t_units = 'hours'
-
     t_scale_dict = {'hours' : 1.0/3600.0}
     t_scale = t_scale_dict[t_units]
 
+    # Set line colours.
     if trace_comparison is None:
 
         line_kwargs = {'color' : 'black'}
@@ -64,13 +74,16 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
         line_kwargs = {'color' : 'blue', 'alpha' : line_alpha}
         line_kwargs_comparison = {'color' : 'red', 'alpha' : line_alpha}
     
+    # Create axes if needed.
     if ax is None:
 
         fig = plt.figure(figsize = (8.5, 5.0), constrained_layout = True)
         ax  = plt.gca()
 
+    # Plot the time series.
     ax.plot(t*t_scale, x, **line_kwargs, label = legend_keys[0])
 
+    # Plot the comparison time series.
     if trace_comparison is not None:
 
         t_offset = t_c
@@ -81,6 +94,7 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
 
             ax.legend(loc = 'lower right')
 
+    # Label axes and plot.
     ax.set_xlabel('Time ({:})'.format(t_units), fontsize = font_size_label)
     if y_label is not None:
 
@@ -90,6 +104,7 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
 
         ax.text(0.9, 0.9, label, transform = ax.transAxes, ha = 'right', va = 'top')
 
+    # Draw line for zero displacement.
     ax.axhline(linestyle = '-', alpha = 0.5, c = 'k')
     
     if trace_comparison is not None:
@@ -102,14 +117,17 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
         t_min = np.min(t)
         t_max = np.max(t)
 
+    # Set axis limits.
     t_lims = np.array([t_min, t_max])
     ax.set_xlim(t_lims*t_scale)
 
+    # Save.
     if path_out is not None:
         
         print('Saving figure to {:}'.format(path_out))
         plt.savefig(path_out, dpi = 300, bbox_inches = 'tight')
 
+    # Show.
     if show:
 
         plt.show()
@@ -117,12 +135,18 @@ def plot_seismograph(trace, trace_comparison = None, path_out = None, ax = None,
     return
 
 def auto_label(trace):
+    '''
+    Make label based on trace start time and ID.
+    '''
 
     label = '{:}\n$t_{{0}}$ = {:}'.format(trace.id, trace.stats.starttime)
 
     return label
 
 def do_fft(t, x):
+    '''
+    Calculate Fourier transform and convert to spectral amplitude.
+    '''
 
     # Get number of samples and time spacing.
     n_t = len(x)
@@ -138,9 +162,11 @@ def do_fft(t, x):
 
 def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None, show = True, label = 'auto', label_coeff_info = None, y_label = None, legend_keys = ['Synthetic', 'Observed']):
     '''
+    Plot a spectrum. The spectrum has two parts: amplitude and phase.
     Trace input units assumed to be nm/s.
     '''
 
+    # Add label.
     if label == 'auto':
 
         label = auto_label(trace)
@@ -171,12 +197,6 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
 
         abs_X_c_max = 0.0
     
-    #print(i_peak, i_peak_c)
-    #for i in i_peak:
-
-        #print(f[i]*1.0E3, abs_X[i], abs_X_c[i], abs_X[i]/abs_X_c[i])
-        #print(f[i]*1.0E3, abs_X[i]/abs_X_c[i])
-
     # Get overall maximum amplitude.
     abs_X_all_max = np.max([abs_X_max, abs_X_c_max])
 
@@ -278,29 +298,40 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
         ax.set_ylim(y_lims)
         #ax.set_ylim([0.0, 2.0E3])
 
+    # Label prominent peaks in the spectrum.
     if label_coeff_info is not None:
         
+        # Get values of coefficients.
         coeffs = label_coeff_info['coeffs']
         mode_info = label_coeff_info['modes']
 
+        # Find modes with coefficients greater than a certain threshold.
         amp_thresh_frac = 0.1
         key = 'A_r'
         abs_coeff = np.abs(coeffs[key])
         max_coeff = np.max(abs_coeff)
         cond_amp = np.array((abs_coeff > amp_thresh_frac*max_coeff), dtype = np.bool)
 
+        # Find modes within frequency range.
         cond_freq = np.array(((mode_info['f'] > f_lims[0]) & (mode_info['f'] < f_lims[1])), dtype = np.bool)
 
+        # Find modes satisfying both conditions.
         i_label =  np.where(cond_amp & cond_freq)[0]
+
+        # Label each mode satisfying the conditions.
         for i in i_label:
             
             mode_str = '$_{{{:>d}}}{:}_{{{:>d}}}$'.format(mode_info['n'][i], mode_info['type'][i], mode_info['l'][i])
             ax.text(mode_info['f'][i], y_lims[1]*0.9, mode_str, rotation = 90.0, va = 'bottom', ha = 'center')
             ax.plot([mode_info['f'][i], mode_info['f'][i]], [0.0, y_lims[1]*0.9], color = 'k', lw = 1)
 
+    # Set x-limits.
     ax.set_xlim(f_lims)
+
+    # Label.
     if label is not None:
-        ax.text(0.1, 0.9, label, transform = ax.transAxes, ha = 'left')
+
+        ax.text(0.1, 0.8, label, transform = ax.transAxes, ha = 'left')
 
     ax.set_xlabel('Frequency (mHz)', fontsize = font_size_label)
 
@@ -318,23 +349,36 @@ def plot_spectrum(trace, trace_comparison = None, path_out = None, ax_arr = None
     return
 
 def plot_seismograph_and_spectrum(trace, path_out = None, show = True, labels = ['auto', None], trace_comparison = None, label_coeff_info = None, y_labels = [None, None], legend_keys = ['Synthetic', 'Observed']):
+    '''
+    Make a combined plot showing a time series and a spectrum.
+    '''
 
+    # Create axes.
     fig, ax_arr = plt.subplots(3, 1,
                     figsize = (10.0, 8.0),
                     gridspec_kw = {'height_ratios': [2, 1, 2]},
                     constrained_layout = True)
 
+    # Plot time series in first axes.
     ax = ax_arr[0]
-    plot_seismograph(trace, ax = ax, show = False, label = labels[0], trace_comparison = trace_comparison, show_legend = False, y_label = y_labels[0])
+    plot_seismograph(trace, ax = ax, show = False, label = labels[0],
+            trace_comparison = trace_comparison, show_legend = False,
+            y_label = y_labels[0])
 
+    # Plot spectrum in lower two axes.
     sub_ax_arr = ax_arr[1:]
-    plot_spectrum(trace, ax_arr = sub_ax_arr, show = False, label = labels[1], trace_comparison = trace_comparison, label_coeff_info = label_coeff_info, y_label = y_labels[1], legend_keys = legend_keys)
+    plot_spectrum(trace, ax_arr = sub_ax_arr, show = False, label = labels[1],
+            trace_comparison = trace_comparison,
+            label_coeff_info = label_coeff_info, y_label = y_labels[1],
+            legend_keys = legend_keys)
 
+    # Save.
     if path_out is not None:
         
         print('Saving figure to {:}'.format(path_out))
         plt.savefig(path_out, dpi = 300, bbox_inches = 'tight')
 
+    # Show.
     if show:
 
         plt.show()
@@ -342,7 +386,13 @@ def plot_seismograph_and_spectrum(trace, path_out = None, show = True, labels = 
     return fig, ax_arr
 
 def align_traces(tr_1, tr_2, d_t):
+    '''
+    Align two traces, given their start times.
+    Exact alignment of time sample points is important for comparison of
+    spectral peaks and phase values.
+    '''
 
+    # Find start and end times.
     t_0 = min(tr_1.stats.starttime, tr_2.stats.starttime)
     t_1_actual = min(tr_1.stats.endtime, tr_2.stats.endtime)
 
@@ -352,8 +402,10 @@ def align_traces(tr_1, tr_2, d_t):
     buff = 1.0*d_t
     t_1 = t_0 + t_span + buff
 
+    # Get time array.
     t_span = np.linspace(0.0, t_span, num = n_t)
 
+    # Interpolate the traces at the chosen time values.
     tr_1_data_interpolated = np.interp(t_span, tr_1.times(), tr_1.data)
     tr_2_data_interpolated = np.interp(t_span, tr_2.times(), tr_2.data)
 
@@ -362,6 +414,7 @@ def align_traces(tr_1, tr_2, d_t):
     #tr_1_data_interpolated[0:6] = 0.0
     #tr_2_data_interpolated[0:6] = 0.0
     
+    # Create new traces containing the interpolated values.
     tr_1_copy = tr_1.copy()
     tr_1_copy.data = tr_1_data_interpolated
     tr_1_copy.stats.starttime = t_0
@@ -372,28 +425,7 @@ def align_traces(tr_1, tr_2, d_t):
     tr_2_copy.stats.starttime = t_0
     tr_2 = tr_2_copy
 
-    #tr_1.trim(t_0, t_1, pad = True, fill_value = 0.0) 
-    #tr_2.trim(t_0, t_1, pad = True, fill_value = 0.0) 
-
-    #sampling_rate = 1.0/d_t
-
-    #tr_1.interpolate(sampling_rate, method = 'linear')
-    #tr_2.interpolate(sampling_rate, method = 'linear')
-
-    #n_pts_1 = tr_1.stats.npts
-    #n_pts_2 = tr_2.stats.npts
-    #
-    #print(t_0)
-    #print('\n')
-    #print(tr_1.stats)
-    #print('\n')
-    #print(tr_2.stats)
-
-    #if n_pts_1 > n_pts_2:
-
-    #    tr_1.data = tr_1.data[0:-1]
-
-
+    # Check the traces are the same length and have the same time bounds.
     assert tr_1.stats.npts == tr_2.stats.npts
     assert tr_1.stats.starttime == tr_2.stats.starttime
     assert tr_1.stats.endtime == tr_2.stats.endtime
@@ -401,6 +433,13 @@ def align_traces(tr_1, tr_2, d_t):
     return tr_1, tr_2
 
 def main():
+
+    # Mappings between different variable names.
+    output_type_to_char = {'displacement' : 's', 'velocity' : 'v',
+                'acceleration' : 'a'}
+    mineos_output_type_to_char = {0 : 's', 1 : 'v', 2 : 'a'}
+    mineos_output_type_to_data_type = { 0 : 'displacement', 1 : 'velocity',
+                                        2 : 'acceleration'}
 
     # Parse input arguments.
     parser = argparse.ArgumentParser()
@@ -415,8 +454,9 @@ def main():
     parser.add_argument("--label", action = 'store_true', help = 'Add labels to modes with excitation coefficients above a certain threshold.')
     parser.add_argument("--path_comparison", help = 'Path to a real data trace to be plotted for comparison. Should have units of nm/s, or provide the --comparison_scale flag with a number to multiply the comparison trace so that the units are nm/s.')
     parser.add_argument("--comparison_scale", type = float, default = 1.0)
-
+    #
     input_args = parser.parse_args()
+    #
     path_mode_input = input_args.path_mode_input
     path_summation_input = input_args.path_summation_input
     station = input_args.station
@@ -447,16 +487,14 @@ def main():
         run_info['dir_model'], run_info['dir_run'] = get_Mineos_out_dirs(run_info) 
         summation_info = get_Mineos_summation_out_dirs(run_info, summation_info)
 
-        #dir_plot = os.path.join(run_info['dir_run'], 'plots')
-        #mkdir_if_not_exist(dir_plot)
-
-        dir_sac = os.path.join(summation_info['dir_cmt'], 'sac')
-
         # Read moment tensor file.
         cmt_info = read_mineos_cmt(summation_info['path_cmt'])
 
         # Read miniSEED file.
-        path_mseed = os.path.join(dir_sac, 'stream.mseed')
+        name_stream = 'stream_{:}.mseed'.format(mineos_output_type_to_char[
+                            summation_info['data_type']])
+        dir_sac = os.path.join(summation_info['dir_cmt'], 'sac')
+        path_mseed = os.path.join(dir_sac, name_stream)
         stream = read(path_mseed)
         stream = stream.select(station = station, channel = channel)
 
@@ -498,27 +536,15 @@ def main():
 
         summation_info['dir_output'] = summation_info['dir_cmt']
         
-        ## Load trace.
-        #name = '{:}_{:}'.format(station, channel)
-        #name_trace = '{:}.npy'.format(name)
-        #path_trace = os.path.join(summation_info['dir_output'], name_trace)
-        #trace_data = np.load(path_trace)
-
-        ## Load timing information.
-        #name_timing = 'timing.txt'
-        #path_timing = os.path.join(summation_info['dir_output'], name_timing)
-        #num_t, d_t = load_time_info(path_timing)
-        #
-        #trace_header = {'delta' : d_t, 'station' : station, 'channel' : channel}
-        #trace = Trace(data = trace_data, header = trace_header)
-        #
-        #stream = Stream([trace])
-        name_stream = 'stream.mseed'
+        # Load stream.
+        name_stream = 'stream_{:}.mseed'.format(output_type_to_char[
+                            summation_info['output_type']])
         path_stream = os.path.join(summation_info['dir_output'], name_stream) 
         print('Reading {:}'.format(path_stream))
         stream = read(path_stream)
         stream = stream.select(station = station, channel = channel)
 
+        # Load coefficient information.
         if add_labels:
 
             path_coeffs = os.path.join(summation_info['dir_output'], 'coeffs.pkl')
@@ -534,7 +560,14 @@ def main():
 
             label_coeff_info = None
     
-    data_type = summation_info['output_type']
+    # Determine data type and from this get axis labels.
+    if use_mineos:
+
+        data_type = mineos_output_type_to_data_type[summation_info['data_type']]
+
+    else:
+
+        data_type = summation_info['output_type']
 
     if data_type == 'acceleration':
 
@@ -555,6 +588,7 @@ def main():
 
         raise ValueError
     
+    # Define legend keys (hard-coded for now).
     legend_keys = ['Synthetic', 'Observed']
     legend_keys = ['New code', 'Mineos']
     #legend_keys = ['New code', 'Data']
@@ -564,8 +598,10 @@ def main():
     dir_plot = os.path.join(run_info['dir_run'], 'plots')
     mkdir_if_not_exist(dir_plot)
 
+    # Align traces, if there are two.
     if path_comparison is not None:
         
+        # Load comparison trace.
         stream_comparison = read(path_comparison)
         if len(stream_comparison) > 1:
 
@@ -583,6 +619,7 @@ def main():
 
         trace_comparison = None
 
+    # Plot spectrum.
     if spectrum:
         
         path_out = os.path.join(dir_plot, 'spectrum_{:}.png'.format(trace.id))
@@ -593,6 +630,7 @@ def main():
                 y_label = spectrum_y_label,
                 legend_keys = legend_keys)
 
+    # Plot spectrum and time series.
     elif spectrum_and_seismograph:
 
         path_out = os.path.join(dir_plot, 'seismograph_and_spectrum_{:}.png'
@@ -602,6 +640,7 @@ def main():
                 y_labels = [displacement_y_label, spectrum_y_label],
                 legend_keys = legend_keys)
 
+    # Plot time series.
     else:
         
         path_out = os.path.join(dir_plot, 'seismograph_{:}.png'.format(trace.id))
