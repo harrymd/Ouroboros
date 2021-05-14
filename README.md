@@ -1,6 +1,8 @@
+![Ouroboros logo.](docs/figs/logo/ouroboros_logo_with_text.svg)
+
 # Ouroboros
 
-A Python library for calculating the seismic normal modes of spherically-symmetric planets.
+A free, open-source Python library for calculating the seismic normal modes of spherically-symmetric planets.
 
 ##### Mode calculations
  
@@ -35,6 +37,7 @@ A Python library for calculating the seismic normal modes of spherically-symmetr
   * [Related repositories](#related)
   * [References](#references)
   * [Research using this code](#applications)
+  * [About the logo](#about_logo)
 
 <a style="color: #000000" name="usage"/>
 
@@ -125,10 +128,22 @@ If you use this repository for published research, please cite this work, for ex
 
 <a href="#top">Back to top</a>
 
-<a style="color: #000000" name="applications"/>
+<a style="color: #000000" name="applications"/>ß
 
 ## Works using this code
 
 * Matchette-Downes, Shi, Ye, Han, de Hoop and van der Hilst (in prep.) *Mixed Rayleigh-Stoneley modes: Analysis of seismic waveguide coupling and sensitivity to lower-mantle structures*.
+
+<a href="#top">Back to top</a>
+
+<a style="color: #000000" name="about_logo"/>
+
+## About the logo
+
+<img src="docs/figs/logo/ouroboros_logo.svg" width="40%" title ="Ouroboros logo."/>
+
+The [ouroboros](https://en.wikipedia.org/wiki/Ouroboros) is an ancient symbol of a snake biting its own tail. This represents the essence of normal modes: closed orbits or ray paths, which allow constructive interference. The oscillating pattern of blue and yellow represents a normal-mode oscillation around the Earth. The snake also represents the Python programming language (and the colours are taken from the Python logo). Additionally, the ouroboros has a long relation with science and philosophy (for example, Kekulé reported a vision of an ouroboros when he discovered the structure of benzene).
+
+The SVG logo was made in the free Inkscape software starting from a [public-domain image](https://en.wikipedia.org/wiki/File:Ouroboros-simple.svg) created by Wikipedia user [AnonMoos](https://commons.wikimedia.org/wiki/User:AnonMoos).
 
 <a href="#top">Back to top</a>
