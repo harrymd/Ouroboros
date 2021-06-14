@@ -77,6 +77,8 @@ python3 modes/calculate_modes.py --help
 <a href="#top">Back to top</a> --->
 
 <a style="color: #000000" name="history"/>
+
+
 ## History and contributors
 
 This code has been developed mostly by members of the [GMIG group](http://gmig.blogs.rice.edu/) at Rice University. The core of the code was written in Matlab by Jingchen Ye and [Jia Shi](https://sites.google.com/view/jiashi/) around 2017. In 2019 it was translated to Python by [Jiayuan Han](https://github.com/hanjiayuan236), who made some improvements (versions 1, 2 and 3). Currently the code is maintained by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html) (versions 4, 5, 6)

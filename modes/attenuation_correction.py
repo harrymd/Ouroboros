@@ -173,9 +173,6 @@ def calculate_Q_wrapper(run_info, model, mode_type, n, l, f_rad_per_s, neglect_k
         
         plt.show()
 
-        import sys
-        sys.exit()
-
     return Q
 
 def apply_atten_correction_all_modes(run_info, mode_type):

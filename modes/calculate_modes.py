@@ -314,7 +314,7 @@ def main():
     Ouroboros_info = read_Ouroboros_input_file(Ouroboros_input_file)
 
     # Create frequency-adjusted model if applying attenuation.
-    if Ouroboros_info['use_attenuation']:
+    if Ouroboros_info['attenuation'] == 'linear':
 
         create_adjusted_model(Ouroboros_info)
 
@@ -378,8 +378,12 @@ def main():
 
             out_id.write('{:>.3f} seconds'.format(elapsed_time))
 
+        if Ouroboros_info['attenuation'] == 'full':
+
+            raise NotImplementedError
+
         # If using attenuation, apply attenuation correction to frequencies.
-        if Ouroboros_info['use_attenuation']:
+        if Ouroboros_info['attenuation'] == 'linear':
 
             iterative_attenuation_correction(Ouroboros_info, mode_type)
             relabel_modes(Ouroboros_info, mode_type)

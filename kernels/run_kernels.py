@@ -19,7 +19,7 @@ def kernels_wrapper(run_info, mode_type, j_skip = None):
     '''
 
     # Get path of model file.
-    if run_info['use_attenuation']:
+    if run_info['attenuation'] == 'linear':
 
         model_path = get_path_adjusted_model(run_info)
 

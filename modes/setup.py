@@ -141,17 +141,17 @@ def JacobiGQ(alpha,beta,N):
     #w = np.power((V[0,:].T),2)*(2**(alpha+beta+1))/(alpha+beta+1)*gamma(alpha+1)*gamma(beta+1)/gamma(alpha+beta+1)
     return np.flip(x,0)#,w # x and w are in different oder as in matlab
 
-def StartUp(order,va,vb):
+def StartUp(order, va, vb):
+    '''
+    Construct grid, operators and metric required for 1-D finite-element 
+    problem.
+    '''
     
-    # Purpose : Setup script, building operators, grid, metric and connectivity for 1D solver.
-    
-    # Set up finite element parameters for U 
-    #Np = order + 1
-    
-    # Compute basic Legendre Gauss Lobatto grid of r
-    r_elmt = JacobiGL(0,0,order)
-    #print (r_elmt)
-    # Build reference element matrices
+    # Compute basic Legendre-Gauss-Lobatto grid of r (normalised coordinate)
+    # within a single element.
+    r_elmt = JacobiGL(0, 0, order)
+
+    # Build matrix operators based on reference element.
     V  = Vandermonde1D(order, r_elmt)
     invV = inv(V)
     Dr = Dmatrix1D(order, r_elmt, V)

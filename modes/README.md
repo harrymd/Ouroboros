@@ -23,8 +23,7 @@ mode_types R S T
 n_limits 0 5 
 l_limits 0 10 
 n_layers 700
-use_attenuation 0 
-f_target_mHz none
+attenuation none
 ```
 
 Each line has a string descriptor followed by one or more arguments. The order of the lines must not be changed. The lines are
@@ -45,7 +44,7 @@ Each line has a string descriptor followed by one or more arguments. The order o
 * `n_limits`: Two integers separated by a space, setting the lower and upper value of *n*.
 * `n_layers`: The number of layers in the finite-element model. The user should look for an optimal number of layers that is neither too small (this leads to inaccurate calculations for higher-frequency modes) nor too large (this leads to a very large, time-consuming eigenvalue problem). The details of the computational grid are handled internally by `modes.lib.mantlePoint_equalEnd()`, taking into account discontinuities and using a graded mesh with finer spacing near interfaces.
 
-The last two inputs (`use_attenuation` and `f_target_mHz`) relate to applying a linear attenuation correction. This is discussed later; here we assume that `use_attenation` is set to 0 (no attenuation correction).
+The last input (`attenuation`) relates to calculating the modes in the presence of dissipation. This is discussed later; here we assume that `attenation` is set to `none` (elastic calculation).
 
 Modes with certain combinations of *n* and *ℓ* cannot exist without external forcing and are skipped by *Ouroboros*. These are:
 
@@ -65,7 +64,7 @@ The default model file (`prem_noocean_at_03.000_mHz_noq.txt`) is based on the Pr
 
 ### The format of the output files
 
-The path to the output is determined by the input parameters. For example, if `path_to_outdir = ../output`, `path_to_model = model/my_model.txt`, `n_layers = 700`, `n_max = 5`, `l_max = 10`, `grav_switch = 0`, and `mode_type = S`, then the output will be saved in `../output/my_model_00700/00005_00010_0/grav_0/S`. The output consists of the two parts: eigenvalues and eigenvectors (also called eigenfunctions).
+The path to the output is determined by the input parameters. For example, if `path_to_outdir = ../output`, `path_to_model = model/my_model.txt`, `anelastic` is `none`, `n_layers = 700`, `n_max = 5`, `l_max = 10`, `grav_switch = 0`, and `mode_type = S`, then the output will be saved in `../output/my_model_00700_elastic/00005_00010_0/grav_0/S`. The output consists of the two parts: eigenvalues and eigenvectors (also called eigenfunctions).
 
 For a planet with multiple solid regions separate by fluid regions (for example, the Earth), the toroidal modes in each solid region are completely decoupled from the toroidal modes of other solid regions. Therefore, the eigenvalues for each solid region are saved in separate files `eigenvalues_000.txt`, `eigevalues_001.txt`, ..., labelling from the centre of the planet outwards, and similarly for the eigenfunctions. As an example, for Earth, `000` corresponds to inner-core toroidal modes and `001` corresponds to mantle toroidal modes. Fluid regions do not have toroidal modes (therefore entirely fluid planets do not have any toroidal modes).
 
@@ -128,7 +127,7 @@ python3 plot/plot_eigenfunctions.py example/input/example_input_Ouroboros_modes.
 <!--- For radial modes, *ℓ* must be 0. To plot modes from *Mineos* output, use the same syntax with the `--mineos` flag. --->
 Note that the `plot_eigenfunctions()` function has other options which can be seen by running `python3 plot/plot_eigenfunctions.py --help` or looking at `plot/README.md`.
 
-#### Including attenuation
+#### Including linearised attenuation correction
 
 In a realistic planet, energy is lost through attenuation. This causes normal mode oscillations to decay, and causes an apparent decrease in the elastic moduli for lower-frequency oscillations (anelastic dispersion). For more detail, see Dahlen and Tromp (1998), sections 6 and 9.
 
@@ -136,18 +135,51 @@ In Mineos, anelastic dispersion is incorporated using the formulae 9.50 and 9.51
 
 This approach is not possible in our matrix-based formulation. The stiffness matrix must is the same for all modes. Therefore, we use the following procedure:
 
-1. Apply a frequency correction to the model for a target frequency `f_target_mHz` somewhere in the middle of the frequency band of modes we are interested in.
+1. Apply a frequency correction to the model for a target frequency somewhere in the middle of the frequency band of modes we are interested in.
 2. Calculate the modes.
 3. Using the sensitivity kernels (which depend on the eigenfunctions), correct the mode frequencies.
 4. Rescale the eigenfunctions (whose normalisation includes the mode frequencies) and related quantities (including sensitivity kernels).
 5. Repeat steps 3 and 4 until changes are sufficiently small.
 
-To include attenuation, the last two lines of the input file must be something like
+To include a linear attenuation correction, the last line of the input file must have the `linear` keyword an the target frequency in mHz:
+```
+attenuation linear 3.0
+```
+
+#### Exact attenuation
+
+The last line of the input file must have the `full` keyword and the path of a second input file specifying the anelastic model.
 
 ```
-use_attenuation 1
-f_target_mHz 3.0
+attenuation full path/to/input_atten.txt
 ```
+
+The format of the anelastic input file depends on the type of anelastic model which is specified in the first line, for example
+
+```
+model maxwell_uniform
+```
+
+specifies a Maxwell rheology which is the same for each element. Anelastic models which are currently supported are: `maxwell_uniform`. The input file is described for each model below:
+
+##### Common parameters
+
+The parameter `n_eigs` controls the number of eigenvalues which are saved for each value of *ℓ*.
+
+The parameter `eig_start_mHz` is the starting point (frequency) for the eigenvalue search in mHz.
+
+##### Uniform Maxwell rheology
+
+```
+model maxwell_uniform
+n_eigs 5
+eig_start_mHz 3.0
+eta 1.0E15
+```
+
+
+
+The parameter `eta` (η) is the viscosity of the Maxwell rheology in SI units (N m^-2 s^-1 ). The unrelaxed shear modulus (μ) is that of the input planetary model. Therefore μ can be a function of radius, but η is uniform throughout the planet.
 
 <a style="color: #000000" name="method"/>
 

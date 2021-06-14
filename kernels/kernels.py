@@ -2,7 +2,7 @@ import numpy as np
 
 from Ouroboros.constants import G
 
-def gravitational_acceleration(r, rho):
+def gravitational_acceleration(r, rho, Gc = G):
     '''
     Calculates accceleration due to gravity as a function of radius within a
     planet with a radial density distribution.
@@ -31,7 +31,7 @@ def gravitational_acceleration(r, rho):
     g[0] = 0.0
 
     # Scale with appropriate constants.
-    g = (4.0*np.pi*G)*g
+    g = (4.0*np.pi*Gc)*g
 
     return g
 

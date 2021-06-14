@@ -9,28 +9,43 @@ from scipy.sparse.linalg import spsolve
 from scipy.sparse.linalg import LinearOperator
 import scipy.sparse as sps
 
-# Define constants.
-# G     Gravitational constant, units of cm^3 g^(-1) s^(-2) * e-6
-# Wikipedia.
-#G = 6.67408e-2 
-# Mineos. 
-G = 6.6723e-2 
+## Define constants.
+## G     Gravitational constant, units of cm^3 g^(-1) s^(-2) * e-6
+## Wikipedia.
+##G = 6.67408e-2 
+## Mineos. 
+#G = 6.6723e-2 
+
+# Define numerical tolerance.
 tol = 1e-12
 
-def equalEndMesh(ub,lb,n): #ub:upper bound, lb lower bound, N:number of points
-    N_end = np.floor(n/3)
-    intv = (ub-lb)/5 #interval
+def equalEndMesh(ub, lb, n):
+    '''
+    Create a mesh between lb (lower bound) and ub (upper bound) with n points.
+    The mesh is finer near the boundaries: the first and last fifths of the
+    mesh each have the same number of points as the inner three-fifths.
+    (See Ye (2017), section 4.2.)
+    '''
+
+    # Find how many points in each of the two end regions.
+    N_end = np.floor(n / 3.0)
+
+    # Find the length of one-fifth of the interval.
+    intv = (ub - lb)/5.0
     
-    #print (lb,lb+intv,intv/(N_end-1))
-    interval1 = intv/(N_end-1)
-    interval2 = (ub-2*intv-lb)/(n-2*N_end+1)
-    VX1 = np.arange(lb,lb+intv-interval1/2,interval1)
-    VX2 = np.arange(lb+intv,ub-intv-interval2/2,interval2)
-    VX3 = np.arange(ub-intv,ub+interval1/2,interval1)
+    # Find the mesh spacing in the end regions (interval1) and the middle
+    # region (interval2).
+    interval1 = intv / (N_end - 1.0)
+    interval2 = (ub - (2.0 * intv) - lb) / (n - (2.0 * N_end) + 1.0)
+
+    # Generate points in each region.
+    VX1 = np.arange(lb, lb + intv - (interval1 / 2.0), interval1)
+    VX2 = np.arange(lb + intv, ub - intv - (interval2 / 2.0), interval2)
+    VX3 = np.arange(ub - intv, ub + (interval1 / 2.0), interval1)
     
-    #print (VX1,VX2,VX3)
-    #print (np.shape(VX1),np.shape(VX2),np.shape(VX3))
-    VX=np.concatenate((VX1,VX2,VX3), axis=None)
+    # Join together the arrays for each region.
+    VX = np.concatenate((VX1, VX2, VX3), axis = None)
+
     return VX
 
 def equivForm(A_input,pos,cut_off_pos,isA):
@@ -38,7 +53,7 @@ def equivForm(A_input,pos,cut_off_pos,isA):
     #Return a full matrix
     #See equation 3.19 in the master thesis
     #pos must be a list, not a number
-    
+
     Af_inv = None
     E = None
     
@@ -137,12 +152,18 @@ def sparse_equivForm(A_input,pos,cut_off_pos,isA):
     
     return A_output,Af_inv,E
 
-def findDiscon(r):
-    # Find the index of discontinuity(where r(i) and r(i+1) are closer than 10^(-8))
-    # Return a vector of indexes
+def findDiscon(r, dtol = 1.0E-8):
+    '''
+    Find the index of discontinuity (where r(i) and r(i+1) are closer than dtol) 
+    and return a vector of indexes
+    '''
+
+    # Loop over points and look for discontinuities.
     discon = []
     for i in range(len(r)-1):
-        if abs(r[i] - r[i+1]) < 1e-8:
+
+        if abs(r[i] - r[i+1]) < dtol:
+
             discon.append(i+1)
     
     return discon
@@ -183,86 +204,215 @@ def gravfield_lst(rlist,rho,radius):
             g[idx] = 4*np.pi*G*q/(r**2)
     return g
 
-def mantlePoint_equalEnd(x,N,Rin,Rout): 
-    # Return location of nodal point
-    # Rin: inner bound, Rout: outer bound, N:number of points
+def mantlePoint_equalEnd(x, N, Rin, Rout): 
+    '''
+    Create a mesh of nodal points.
+    Rin     Inner radius.
+    Rout    Outer radius.
+    N       Number of points.
+    x       Grid points of input model (used to find discontinuities).
+    '''
+
+    # Find discontinuities.
     discon = findDiscon(x)
-    VX_no_discon = equalEndMesh(Rin,Rout,N-len(discon))
-    VX = np.concatenate([VX_no_discon,x[discon],x[discon]])
+
+    # Create mesh without discontinuities.
+    # Note the number of points is reduced so that the requested number
+    # of points is preserved after the discontinuities are added back in.
+    VX_no_discon = equalEndMesh(Rin, Rout, N - len(discon))
+
+    # Add the discontinuity points to the mesh, and sort.
+    VX = np.concatenate([VX_no_discon, x[discon], x[discon]])
     VX.sort()
     
     return VX
 
-def model_para_inv(r,para,x):
-    # This function returns the new model parameters based on the interval
-    # Return a vector of points between the nodal points
-    nodalPara = model_para_nodal(r,para,x)
-    discon = findDiscon(x) #place of discontinuity has '1' difference
+def model_para_inv(r, para, x):
+    '''
+    Get the parameter values for each element.
+    First, the parameter values are interpolated at the vertices.
+    Then, each element is assigned the mean value of its two vertices.
+
+    Input:
+
+    r       Radial coordinate of input model values.
+    para    Input model values.
+    x       Vertex coordinates.
+
+    Output:
+
+    f       Values within each element (between each consecutive vertex pair). 
+    '''
+
+    # Interpolate at the nodal points.
+    nodalPara = model_para_nodal(r, para, x)
+
+    # Prepare output array.
+    # Duplicated values at the discontinuities will be ignored, so the number
+    # of elements is the number of nodal points, minus the number of 
+    # discontinuities, minus 1.
+    discon = findDiscon(x) 
+
+    # Prepare for loop.
     index = 0
-    f = np.zeros(len(x)-len(discon)-1); #number of elements is nodal points minus discontinuity nimus 1
+    f = np.zeros(len(x) - len(discon) - 1)
+
+    # Loop over nodal points.
     for i in range(len(nodalPara)-1):
-        if i+1 in discon:   # no points between discontinuity
+
+        # No element exists between two repeated points.
+        if (i + 1) in discon:
+
             continue
-        f[index]=(nodalPara[i]+nodalPara[i+1])/2 #mean value of two nodal points
-        index=index+1
+
+        # Assign the mean value at the two vertices to the element.
+        f[index] = (nodalPara[i] + nodalPara[i+1]) / 2.0
+
+        # Counter (ignoring discontinuities).
+        index = index + 1
+
     return f
     
-def model_para_nodal(r,para,x):
-    # calculate parameters of nodal points
-    disR = findDiscon(r) # find discontinuity
+def model_para_nodal(r, para, x):
+    '''
+    Interpolate parameters at nodal points.
+
+    Input:
+
+    r       Radial coordinate of input model values.
+    para    Input model values.
+    x       Radial coordinates of element vertices.
+
+    Note: x and r must have the same number of discontinuities.
+
+    Output:
+
+    f_para  Values interpolated at each nodal point.
+    '''
+
+    # Find indices of discontinuitiies in input and output point lists.
+    disR = findDiscon(r)
     disX = findDiscon(x)
     
-    disX.insert(0,0) # add 0(km?) to discontinuity
+    # Add discontinuities representing the start and end of the point lists.
+    disX.insert(0,0)
     disX.append(len(x))
     disR.insert(0,0)
     disR.append(len(r))
+
+    # Check the number of discontinuities is the same for both lists.
     if len(disX) != len(disR):
-        raise ValueError('Length of r and x not equal!')
+
+        raise ValueError('Number of discontinuities in r and x not equal!')
     
+    # Do interpolation separately within each discontinuity-bounded region.
     f_para = []
-    for i in range(len(disX)-1):
-        f_temp = model_para_pcw(r[disR[i]:disR[i+1]],para[disR[i]:disR[i+1]],x[disX[i]:disX[i+1]])
-        # feed in peices between discontinuity
-        f_para = np.append(f_para,f_temp)
+    for i in range(len(disX) - 1):
+
+        # Interpolation for one region.
+        f_temp = model_para_pcw(r[disR[i] : disR[i + 1]],
+                    para[disR[i] : disR[i + 1]],
+                    x[disX[i] : disX[i + 1]])
+
+        # Append the values from this region to the master list.
+        f_para = np.append(f_para, f_temp)
         
     return f_para
 
-def model_para_pcw(r,para,x):
-    # feed in peices between discontinuity. 
-    # r: Location from input; para: corrosponding parameter; x: location of nodal points for interpolation
-    # Interpolate parameters from r to a set of points x
-    # Return value of interpolated parameters f
-    
-    #print (r,para,x)
+def model_para_pcw(r, para, x):
+    '''
+    Interpolate parameter from input model to mesh node points.
+    It is assumed that the input is a discontinuity-free section.
+
+    Input:
+
+    r       Radial coordinate of input model values.
+    para    Input model values.
+    x       Radial coordinate of elements.
+
+    Output:
+
+    f       Values interpolated at each nodal point.
+    '''
+
+    # Prepare for loop.
     f = np.zeros(len(x))
     starting = 0
-    for j in range(len(x)-1):
-        for i in np.arange(starting,len(r)-1):
-            if x[j]-r[i]>tol and r[i+1]-x[j]>tol:
-                f[j] = (para[i+1]-para[i])*(x[j]-r[i])/(r[i+1]-r[i])+para[i] #figure out what this is 
+
+    # Loop over all nodal points except the last one.
+    for j in range(len(x) - 1):
+
+        # Loop over remaining points.
+        for i in np.arange(starting, len(r) - 1):
+
+            # If the node point is not close to an input point, the value
+            # is found by linear interpolation.
+            if (x[j] - r[i] > tol) and (r[i + 1] - x[j] > tol):
+
+                # Linear interpolation.
+                f[j] = (para[i + 1] - para[i]) * (x[j] - r[i]) / (r[i + 1] - r[i]) \
+                        + para[i]
+
+                # Move on to next nodal point.
                 starting = i
                 break         
-            elif abs(x[j]-r[i])<tol:
+
+            # If the node point is effectively the same as the input point,
+            # no need for interpolation.
+            elif abs(x[j] - r[i]) < tol:
+
                 f[j] = para[i]
+
+                # Move on to next nodal point.
                 starting = i
                 break
+
+    # The final value is the same for input and output because they
+    # cover the same interval.
     f[-1] = para[-1]
     
     return f
             
-def model_para_prime_inv(r,para,x):
-    # This function returns the new model parameters' first derivative based on the interval
-    nodalPara = model_para_nodal(r,para,x)
-    #print(nodalPara)
-    #print(np.shape(nodalPara))
+def model_para_prime_inv(r, para, x):
+    '''
+    Calculate first derivative of parameter within elements.
+
+    Input:
+
+    r       Radial coordinate of input model values.
+    para    Input model values.
+    x       Radial coordinates of element vertices.
+
+    Output:
+
+    f       Numerical estimate of first derivative of parameter within each
+            element.
+    '''
+
+    # Interpolate the parameter at the vertex points.
+    nodalPara = model_para_nodal(r, para, x)
+
+    # Find discontinuities in the vertex points.
     discon = findDiscon(x)
+
+    # Prepare for loop.
     index = 0
-    f = np.zeros(len(x)-len(discon)-1)
+    f = np.zeros(len(x) - len(discon) - 1)
+
+    # Loop over vertices.
     for i in range(len(nodalPara)-1):
-        if i+1 in discon:
+
+        # There are no elements in between repeated points.
+        if i + 1 in discon:
+
             continue
-        f[index] = (nodalPara[i+1]-nodalPara[i])/(x[i+1]-x[i]);
-        index = index+1
+
+        # Estimate the first derivative within the element based on a simple
+        # ratio d param / d r.
+        f[index] = (nodalPara[i + 1] - nodalPara[i]) / (x[i + 1] - x[i])
+
+        # Move to next vertex (counter ignores repeated points).
+        index = index + 1
     
     return f
     

@@ -1228,3 +1228,44 @@ def toroidal(model,invV,order,Dr):
                     (Belmt+Belmt.T)/2*1e6 #Symmetric operation to eliminate little error
     
     return A,B
+
+# Anelastic versions. ---------------------------------------------------------
+def toroidal_an(model,invV,order,Dr):
+    # implement finite element method on toroidal modes
+    Np = order+1
+    mu = model.mu
+    rho = model.rho
+    x = model.x
+    k = model.k
+    Ki = len(x[0]) #number of elements
+    dimension = Ki*order+1
+    
+    #A = np.zeros((dimension,dimension)) #integraral of test function matrix
+    B = np.zeros((dimension,dimension)) #Xi matrix
+    Mmu = np.zeros((Ki,dimension,dimension)) #Matrix for each layer
+    M = np.matmul(invV.T,invV)
+    
+    for i in range(Ki):
+        Ji = model.J[0,i] #This is a number
+        rxi = model.rx[0,i] #This is a number
+        ri = np.diag(x[:,i]) #2*2 matrix
+        # Dr: 2*2 matrix, mu[i]: number
+        # Aelmt: 4 terms of the RHS of the weak form equation
+        # Belmt: 1 term of the LHS of the weak form equation
+        # must check if A and B are symmetric
+        #ri is still different
+        i_order = i*order
+        Aelmt = Ji*mu[i]*(-(rxi*np.matmul(np.matmul(Dr.T,M),ri)+\
+                     np.matmul(ri,np.matmul(M,Dr))*rxi)+\
+                    (k**2-1)*M+rxi**2*np.matmul(np.matmul(np.matmul(np.matmul(Dr.T,ri),M),ri),Dr))
+        # manage unit: *1e15/1e15, change + to -
+        Mmu[i,i_order:i_order+Np,i_order:i_order+Np]  = -(Aelmt+Aelmt.T)/2
+#        A[i_order:i_order+Np,i_order:i_order+Np] = A[i_order:i_order+Np,i_order:i_order+Np] -\
+#                    (Aelmt+Aelmt.T)/2 #Symmetric operation to eliminate little error
+        
+        Belmt = Ji*rho[i]*np.matmul(np.matmul(ri,M),ri)
+        # manage unit: *1e21/1e15
+        B[i_order:i_order+Np,i_order:i_order+Np] = B[i_order:i_order+Np,i_order:i_order+Np] +\
+                    (Belmt+Belmt.T)/2*1e6 #Symmetric operation to eliminate little error
+    
+    return Mmu,B,Ki,dimension

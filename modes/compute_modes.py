@@ -14,6 +14,7 @@ Some parameters:
 """
 
 import os
+import subprocess
 
 import numpy as np
 from scipy.linalg import eigh
@@ -41,7 +42,7 @@ def toroidal_modes(run_info):
     '''
 
     # Unpack input.
-    if run_info['use_attenuation']:
+    if run_info['attenuation'] == 'linear':
 
         model_path = get_path_adjusted_model(run_info)
 
@@ -71,7 +72,8 @@ def toroidal_modes(run_info):
 
     # Loop over l-value.
     for l in range(lmin,lmax+1):
-        
+    #for l in [2]:    
+
         print('toroidal_modes: l = {:>5d} (from {:>5d} to {:>5d})'.format(l, lmin, lmax))
 
         # No modes with l = 0.
@@ -80,14 +82,23 @@ def toroidal_modes(run_info):
             print('Toroidal modes with l = 0 do not exist without external torques; skipping.')
             continue
         
-        # Build the matrices, solve and save.
-        solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num,
-                count_thick, thickness, invV, order, Dr,
-                dir_eigenfunc_list, path_eigenvalues_list)
+        if run_info['attenuation'] == 'full':
+
+            solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num,
+                    count_thick, thickness, invV, order, Dr,
+                    dir_type,
+                    run_info['path_atten'])
+
+        else:
+        
+            # Build the matrices, solve and save.
+            solve_toroidal_elastic(l, nmin, nmax, model, x, vs, layers, brk_num,
+                    count_thick, thickness, invV, order, Dr,
+                    dir_eigenfunc_list, path_eigenvalues_list)
 
     return 
 
-def solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_eigenfunc_list, path_eigenvalues_list):
+def solve_toroidal_elastic(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_eigenfunc_list, path_eigenvalues_list):
     '''
     For each solid region, construct mass and stiffness matrices and solve,
     saving the eigenfunctions and eigenvalues.
@@ -116,6 +127,49 @@ def solve_toroidal(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, th
                     save = True)
 
             j = j + 1
+
+    return
+
+def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_output, path_input_anelastic):
+
+    # Calculate asymptotic wavenumber.
+    k = np.sqrt(l*(l + 1.0))
+    model.set_k(k)
+    
+    # hrmd: Jiayuan's code skips first layer, maybe because of Helmholtz?
+    #for i in range(layers-1,layers):
+
+    #    if i == 0:
+
+    #        continue
+    for i in range(layers):
+
+        if vs[brk_num[i]] != 0:
+
+            cur_model = lib.modelDiv(model,np.arange(count_thick[i],count_thick[i+1]))
+
+            # generate matrices A and B such that Ax  =  omega^2*Bx
+            [Mmu,A2,Ki,dimension] = FEM.toroidal_an(cur_model,invV,order,Dr)
+            [A,B] = FEM.toroidal(cur_model,invV,order,Dr)
+
+            dir_numpy = os.path.join(dir_output, 'numpy_{:>03d}'.format(i))
+            mkdir_if_not_exist(dir_numpy)
+            
+            xx = lib.sqzx(x[:,count_thick[i]:count_thick[i+1]],thickness[i],order)
+            np.save(os.path.join(dir_numpy, 'xx.npy'),xx)
+            np.save(os.path.join(dir_numpy, 'A.npy'),A)
+            np.save(os.path.join(dir_numpy, 'B.npy'),B)
+            np.save(os.path.join(dir_numpy, 'Mmu.npy'),Mmu)
+            np.save(os.path.join(dir_numpy, 'A2.npy'),A2)
+            np.save(os.path.join(dir_numpy, 'mu.npy'),cur_model.mu)
+            f_p = open(os.path.join(dir_numpy, 'parameter_T.txt'),'w')
+            f_p.write(str(l)+'\n')
+            f_p.write(str(Ki)+'\n')
+            f_p.write(str(dimension)+'\n')
+            f_p.close()
+
+            cmd = "julia modes/toroidal_an.jl {:} {:} {:d}".format(path_input_anelastic, dir_output, i)
+            subprocess.run(cmd, shell = True)
 
     return
 

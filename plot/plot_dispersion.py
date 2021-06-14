@@ -24,6 +24,17 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
     n = mode_info['n']
     l = mode_info['l']
     f = mode_info['f']
+    #if run_info['attenuation'] in ['none', 'linear']:
+
+    #    f = mode_info['f']
+
+    #elif run_info['attenuation'] == 'full':
+    #    
+    #    f = (mode_info['omega']*1.0E3) / (2.0 * np.pi)
+    #    
+    #    n = n.flatten()
+    #    l = l.flatten()
+    #    f = f.flatten()
 
     # If 'var' is specified, the points will be scaled by a variable.
     if var is not None:
@@ -148,7 +159,7 @@ def plot_dispersion(n, l, f, ax = None, l_lims = 'auto', f_lims = 'auto', x_labe
     for ni in n_list:
         
         i = (n == ni)
-        
+
         ax.plot(l[i], f[i], ls = '-', color = color, lw = 1, alpha = alpha)
 
     # Match the line and scatter colours.
@@ -313,27 +324,30 @@ def assign_colors_by_sign(var, color_pos = 'b', color_neg = 'r'):
 
     return colors, color_pos, color_neg
 
-def get_var_aligned(mode_type, run_info_0, run_info_1, var, f_lims):
+def get_var_aligned(mode_type, run_info_0, run_info_1, var, f_lims, i_toroidal = None):
     '''
     Align two mode lists and associated variables.
     '''
 
     # Load first set of mode information.
-    mode_info_0 = load_eigenfreq(run_info_0, mode_type, i_toroidal = None)
+    mode_info_0 = load_eigenfreq(run_info_0, mode_type, i_toroidal = i_toroidal)
     n_0 = mode_info_0['n']
     l_0 = mode_info_0['l']
     f_0 = mode_info_0['f']
     var_0 = mode_info_0[var]
 
     # Remove the 2S1 mode.
-    i = np.where((n_0 == 2) & (l_0 == 1))[0]
-    n_0 = np.delete(n_0, i)
-    l_0 = np.delete(l_0, i)
-    f_0 = np.delete(f_0, i)
-    var_0 = np.delete(var_0, i)
+    remove_2S1 = False
+    if remove_2S1:
+
+        i = np.where((n_0 == 2) & (l_0 == 1))[0]
+        n_0 = np.delete(n_0, i)
+        l_0 = np.delete(l_0, i)
+        f_0 = np.delete(f_0, i)
+        var_0 = np.delete(var_0, i)
 
     # Load second set of mode information.
-    mode_info_1 = load_eigenfreq(run_info_1, mode_type, i_toroidal = None)
+    mode_info_1 = load_eigenfreq(run_info_1, mode_type, i_toroidal = i_toroidal)
     n_1 = mode_info_1['n']
     l_1 = mode_info_1['l']
     f_1 = mode_info_1['f']
@@ -353,6 +367,8 @@ def get_var_aligned(mode_type, run_info_0, run_info_1, var, f_lims):
 
     # Find deviations of variable from mean.
     var_diff = (var_0 - var_1)
+    print(var_0)
+    print(var_diff)
     abs_var_diff = np.abs(var_diff)
     frac_abs_var_diff = abs_var_diff/var_mean
     min_frac_abs_var_diff = np.min(frac_abs_var_diff[i_f])
@@ -378,7 +394,8 @@ def plot_differences(run_info_0, run_info_1, mode_type, diff_type = 'eigenvalues
 
         # Align the mode lists and find differences in frequency.
         n, l, f_mean, var_diff, var, var_min, var_max  = \
-            get_var_aligned(mode_type, run_info_0, run_info_1, 'f', f_lims)
+            get_var_aligned(mode_type, run_info_0, run_info_1, 'f', f_lims,
+                    i_toroidal = i_toroidal)
 
         # Assign colour values for positive and negative frequency differences.
         colors, color_pos, color_neg = assign_colors_by_sign(var_diff)
@@ -399,15 +416,18 @@ def plot_differences(run_info_0, run_info_1, mode_type, diff_type = 'eigenvalues
         n = n.astype(np.int)
         l = l.astype(np.int)
         
-        # Remove mode 2S1.
-        i = np.where((n == 2) & (l == 1))[0]
-        n = np.delete(n, i)
-        l = np.delete(l, i)
-        f_0 = np.delete(f_0, i)
-        f_1 = np.delete(f_1, i)
-        rms_diff = np.delete(rms_diff, i)
-        rms_A = np.delete(rms_A, i)
-        rms_B = np.delete(rms_B, i)
+        remove_2S1 = False
+        if remove_2S1:
+
+            # Remove mode 2S1.
+            i = np.where((n == 2) & (l == 1))[0]
+            n = np.delete(n, i)
+            l = np.delete(l, i)
+            f_0 = np.delete(f_0, i)
+            f_1 = np.delete(f_1, i)
+            rms_diff = np.delete(rms_diff, i)
+            rms_A = np.delete(rms_A, i)
+            rms_B = np.delete(rms_B, i)
         
         # Get mean frequencies.
         f_mean = (f_0 + f_1)/2.0
@@ -572,10 +592,10 @@ def main():
         run_info_comparison = read_input_file(path_input_comparison)
 
     # Check input arguments.
-    if plot_var == 'Q':
-
-        assert run_info['use_attenuation'], 'Cannot plot Q for runs with no attenuation.'
-        assert diff_type is None, 'Cannot combine --plot_var Q and --plot_diff Q. Try using only --plot_diff Q.'
+    #if plot_var == 'Q':
+    #    
+    #    assert run_info['use_attenuation'], 'Cannot plot Q for runs with no attenuation.'
+    #    assert diff_type is None, 'Cannot combine --plot_var Q and --plot_diff Q. Try using only --plot_diff Q.'
 
     if plot_var is not None:
 
@@ -598,7 +618,12 @@ def main():
     if diff_type is not None:
         
         assert path_input_comparison is not None
-        plot_differences(run_info, run_info_comparison, mode_type, diff_type = diff_type, f_lims = f_lims, l_lims = l_lims, var_lims = var_lims)
+        plot_differences(run_info, run_info_comparison, mode_type,
+                diff_type = diff_type,
+                f_lims = f_lims,
+                l_lims = l_lims,
+                var_lims = var_lims,
+                i_toroidal = i_toroidal)
 
     # Plot simple dispersion diagram.
     else:

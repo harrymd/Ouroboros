@@ -68,7 +68,7 @@ def plot_speed(mode_info, speed_type, n_max = 4, dir_out = None):
         ax_1.figure.canvas.draw()
 
     ax_1 = ax.twiny()
-    ax_1.set_xscale('function', functions=(forward, reverse))
+    ax_1.set_xscale('function', functions = (forward, reverse))
 
     # automatically update ylim of ax2 when ylim of ax1 changes.
     ax.callbacks.connect("xlim_changed", convert_ax_T_to_f)

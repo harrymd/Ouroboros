@@ -177,6 +177,10 @@ Simply set Q to zero in a planetary model:
 python3 misc/rewrite_model_with_Q.py example/input/models/prem_noocean.txt
 ```
 
+## Plot a planetary model
 
+```
+python3 plot/plot_planetary_model.py example/input/models/prem_noocean.txt --vars rho v_p v_s
+```
 
 
