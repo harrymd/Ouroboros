@@ -51,7 +51,7 @@ def get_title_str(mode_type, n, l, code, i_toroidal = None):
 
     return title
 
-def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'Eigenfunction', norm_func = 'mineos', units = 'SI', alpha = 1.0, r_lims = None): 
+def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, ax_imag = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'default', norm_func = 'mineos', units = 'SI', alpha = 1.0, r_lims = None, no_title = False): 
     '''
     Wrapper script which gathers the necessary data to plot the eigenfunction.
     '''
@@ -75,7 +75,9 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     normalisation_args['omega'] = f_rad_per_s
 
     # Get eigenfunction information.
-    eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, i_toroidal = i_toroidal, norm_args = normalisation_args)
+    eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l,
+                        i_toroidal = i_toroidal,
+                        norm_args = normalisation_args)
     eigfunc_dict['r'] = eigfunc_dict['r']*1.0E-3 # Convert to km.
 
     # Get title string.
@@ -187,18 +189,35 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         r_range = np.max(eigfunc_dict['r']) - np.min(eigfunc_dict['r'])
         r_frac = r_range/r_srf
-        imag_x = 5.5
         imag_y = 11.0*r_frac
 
     else:
 
-        imag_x = 5.5
         imag_y = 7.0
 
-    if ax is None:
+    if run_info['attenuation'] == 'full':
 
-        fig = plt.figure(figsize = (imag_x, imag_y))
-        ax  = plt.gca()
+        imag_x = 11.0
+
+    else:
+
+        imag_x = 5.5
+
+    if ax is None:
+        
+        if run_info['attenuation'] == 'full':
+
+            fig, ax_arr = plt.subplots(1, 2, figsize = (imag_x, imag_y),
+                            sharey = True)
+            ax = ax_arr[0]
+            ax_imag = ax_arr[1]
+
+        else:
+
+            fig = plt.figure(figsize = (imag_x, imag_y))
+            ax  = plt.gca()
+
+            ax_imag = None
 
     else:
     
@@ -208,14 +227,34 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             ax.figure.set_size_inches((imag_x, imag_y))
 
     # Arguments for all possibilities.
-    common_args = {'ax' : ax, 'show' : False, 'title' : title,
-            'x_label' : x_label, 'alpha' : alpha,
+    if run_info['attenuation'] == 'full':
+    
+        if x_label == 'default':
+
+            x_label = None
+
+    else:
+
+        if x_label == 'default':
+
+            x_label = 'Eigenfunction'
+
+    common_args = {'ax' : ax, 'show' : False,
+            'title' : title, 'x_label' : x_label, 'alpha' : alpha,
             'r_lims' : r_lims}
+
+    if no_title:
+
+        common_args['title'] = None
 
     # Plot.
     if plot_gradient:
 
         if plot_potential:
+
+            if run_info['attenuation'] == 'full':
+
+                raise NotImplementedError
 
             plot_P(eigfunc_dict['r'], eigfunc_dict['Pp'],
                     h_lines = r_solid_fluid_boundary,
@@ -227,6 +266,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
             if mode_type == 'R':
 
+                if run_info['attenuation'] == 'full':
+
+                    raise NotImplementedError
+
                 plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['Up'],
                         h_lines = r_solid_fluid_boundary,
                         linestyle = linestyle,
@@ -235,6 +278,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             
             elif mode_type == 'S':
 
+                if run_info['attenuation'] == 'full':
+
+                    raise NotImplementedError
+
                 plot_eigenfunc_S(eigfunc_dict['r'], eigfunc_dict['Up'], eigfunc_dict['Vp'],
                         h_lines = r_solid_fluid_boundary,
                         linestyles = [linestyle, linestyle],
@@ -242,6 +289,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
                         **common_args)
 
             elif mode_type in ['T', 'I']:
+
+                if run_info['attenuation'] == 'full':
+
+                    raise NotImplementedError
                 
                 plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['Wp'],
                         h_lines = None,
@@ -250,6 +301,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
                         **common_args)
 
     elif plot_potential:
+
+        if run_info['attenuation'] == 'full':
+
+            raise NotImplementedError
 
         plot_P(eigfunc_dict['r'], eigfunc_dict['P'],
                 h_lines = r_solid_fluid_boundary,
@@ -261,6 +316,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         if mode_type == 'R':
 
+            if run_info['attenuation'] == 'full':
+
+                raise NotImplementedError
+
             plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['U'],
                     h_lines = r_solid_fluid_boundary,
                     linestyle = linestyle,
@@ -269,6 +328,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         
         elif mode_type == 'S':
 
+            if run_info['attenuation'] == 'full':
+
+                raise NotImplementedError
+
             plot_eigenfunc_S(eigfunc_dict['r'], eigfunc_dict['U'], eigfunc_dict['V'],
                     h_lines = r_solid_fluid_boundary,
                     linestyles = [linestyle, linestyle],
@@ -276,12 +339,33 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
                     **common_args)
 
         elif mode_type in ['T', 'I']:
-            
+
+            if run_info['attenuation'] == 'full':
+
+                common_args['ax'] = ax_imag
+                common_args['x_label'] = 'Imaginary'
+                #common_args['title'] = None
+
+                plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['W_im'],
+                        h_lines = None,
+                        linestyle = linestyle,
+                        label = 'W{:}'.format(label_suffix),
+                        y_label = None,
+                        **common_args)
+
+                common_args['ax'] = ax
+                common_args['x_label'] = 'Real'
+
             plot_eigenfunc_R_or_T(eigfunc_dict['r'], eigfunc_dict['W'],
                     h_lines = None,
                     linestyle = linestyle,
                     label = 'W{:}'.format(label_suffix),
                     **common_args)
+
+    if run_info['attenuation'] == 'full':
+        
+        font_size_title = 36
+        plt.suptitle(title, fontsize = font_size_title)
 
     # Make the background transparent (if requested).
     if transparent:
@@ -357,7 +441,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
         plt.show()
 
-    return ax
+    return ax, ax_imag
 
 def plot_eigenfunc_S(r, U, V, ax = None, h_lines = None, x_label = 'Eigenfunction', y_label = 'Radial coordinate / km', title = None, show = True, add_legend = True, colors = ['r', 'b'], linestyles = ['-', '-'], label_suffix = '', alpha = 1.0, legend_loc = 'best', font_size_label = 12, r_lims = None):
     '''
@@ -662,26 +746,63 @@ def main():
             run_info['code'], code_compare, plot_gradient)
 
     # Plot.
+    if run_info['attenuation'] == 'full' or run_info_compare['attenuation'] == 'full':
+
+        no_title = True
+
+    else:
+
+        no_title = False
+
     if path_compare is not None:
 
-        # Plot two eigenfunctions overlaid on same plot.
-        ax = plot_eigenfunc_wrapper(run_info_compare, mode_type, n, l,
-                i_toroidal = None, ax = None, show = False,
-                transparent = False, save = False, linestyle = ':',
-                label_suffix = label_suffix_compare, x_label = None,
-                norm_func = norm_func, units = units,
-                plot_gradient = plot_gradient, plot_potential = plot_potential) 
+        if ((run_info['attenuation'] == 'full') and 
+            (run_info_compare['attenuation'] != 'full')):
 
-        plot_eigenfunc_wrapper(run_info, mode_type, n, l,
-                i_toroidal = i_toroidal, ax = ax, show = True,
-                label_suffix = label_suffix, plot_gradient = plot_gradient,
-                plot_potential = plot_potential, x_label = x_label,
-                norm_func = norm_func, units = units, alpha = 0.5) 
+            # Plot two eigenfunctions overlaid on same plot.
+            ax, ax_imag = plot_eigenfunc_wrapper(run_info, mode_type, n, l,
+                    i_toroidal = i_toroidal, ax = None, show = False,
+                    transparent = False, save = False, linestyle = '-',
+                    label_suffix = label_suffix_compare, x_label = None,
+                    norm_func = norm_func, units = units,
+                    plot_gradient = plot_gradient, plot_potential = plot_potential,
+                    alpha = 0.5, no_title = no_title) 
+
+            plot_eigenfunc_wrapper(run_info_compare, mode_type, n, l,
+                    i_toroidal = i_toroidal, ax = ax, ax_imag = ax_imag, show = True,
+                    label_suffix = label_suffix, plot_gradient = plot_gradient,
+                    plot_potential = plot_potential, x_label = x_label,
+                    norm_func = norm_func, units = units, linestyle = ':',
+                    no_title = no_title)
+
+        else:
+
+            # Plot two eigenfunctions overlaid on same plot.
+            ax, ax_imag = plot_eigenfunc_wrapper(run_info_compare, mode_type, n, l,
+                    i_toroidal = i_toroidal, ax = None, ax_imag = ax_imag, show = False,
+                    transparent = False, save = False, linestyle = ':',
+                    label_suffix = label_suffix_compare, x_label = None,
+                    norm_func = norm_func, units = units,
+                    plot_gradient = plot_gradient, plot_potential = plot_potential,
+                    no_title = no_title)
+
+            plot_eigenfunc_wrapper(run_info, mode_type, n, l,
+                    i_toroidal = i_toroidal, ax = ax, ax_imag = ax_imag, show = True,
+                    label_suffix = label_suffix, plot_gradient = plot_gradient,
+                    plot_potential = plot_potential, x_label = x_label,
+                    norm_func = norm_func, units = units, alpha = 0.5,
+                    no_title = no_title) 
 
     else:
 
         # Plot a single eigenfunction.
-        plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = i_toroidal, ax = None, plot_gradient = plot_gradient, plot_potential = plot_potential, label_suffix = label_suffix, x_label = x_label, norm_func = norm_func, units = units, r_lims = r_lims) 
+        plot_eigenfunc_wrapper(run_info, mode_type, n, l,
+                i_toroidal = i_toroidal, ax = None,
+                plot_gradient = plot_gradient,
+                plot_potential = plot_potential,
+                label_suffix = label_suffix, x_label = x_label,
+                norm_func = norm_func, units = units, r_lims = r_lims,
+                no_title = no_title) 
 
     return
 

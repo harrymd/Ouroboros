@@ -184,10 +184,11 @@ function toroidal_rep(args)
 
     end
 
-    # Sort the eigenvalues by their real part, in decreasing order.
-    p = sortperm(real(eigvals), rev = true)
+    # Sort the eigenvalues by their real part#, in decreasing order.
+    #p = sortperm(real(eigvals), rev = true)
+    p = sortperm(real(eigvals))
     eigvals = eigvals[p]
-    eigvecs = eigvecs[1:end, p]
+    eigvecs = eigvecs[1 : end, p]
 
     # Convert from rad/s to mHz.
     fre = (eigvals / (2.0 * pi)) * 1000.0
@@ -221,7 +222,16 @@ function toroidal_rep(args)
         W_eigen = W_eigen/scaleW
 
         # Get output path.
-        name_eigvec = @sprintf("eigvec_%05d_%05d.txt", i, l)
+        if l == 1
+
+            n = i
+
+        else
+
+            n = i - 1
+
+        end
+        name_eigvec = @sprintf("eigvec_%05d_%05d.txt", n, l)
         path_eigvec = joinpath(dir_eigvecs, name_eigvec)
         #
         open(path_eigvec, "w") do f_eigvec

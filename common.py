@@ -737,7 +737,14 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # within the eigenvalue directory) based on the Ouroboros parameters.
     _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
     dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
-    file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
+    if Ouroboros_info['attenuation'] == 'full':
+
+        file_eigenfunc  = 'eigvec_{:>05d}_{:>05d}.txt'.format(n, l)
+
+    else:
+
+        file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
+
     path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
     
     # Define normalisation constants.
@@ -745,9 +752,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     if units == 'ouroboros':
 
         eigfunc_norm = 1.0
-
         grad_norm = 1.0
-
         pot_norm = 1.0
 
     elif units == 'mineos':
@@ -755,19 +760,15 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         r_n = 6371.0E3 # m
         rho_n = 5515.0 # kg/m3
         G = 6.674E-11 # SI units.
-
+        #
         eigfunc_norm = rho_n*np.sqrt((1.0E-9)*np.pi*G*((r_n)**3.0))
-
         grad_norm = r_n*1.0E-3
-
         pot_norm = np.sqrt(r_n/(1.0E3*np.pi*G)) 
 
     elif units == 'SI':
 
         eigfunc_norm = np.sqrt(1.0E-9)
-
         grad_norm = 1.0E-3
-
         pot_norm = 1.0E3*np.sqrt(1.0E-9)
 
     else:
@@ -776,8 +777,8 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
     if norm_func == 'DT':
 
-        eigfunc_norm = eigfunc_norm*omega
-        pot_norm = pot_norm*omega
+        eigfunc_norm = (eigfunc_norm * omega)
+        pot_norm = (pot_norm * omega)
         k = np.sqrt(l*(l + 1.0))
 
     else:
@@ -787,56 +788,53 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # Radial case.
     if mode_type == 'R':
 
-        # Load eigenfunction.
-        r, U, Up, P, Pp = np.load(path_eigenfunc)
-        U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
+        if Ouroboros_info['attenuation'] == 'full':
 
-        # Apply normalisation.
-        U   = U*eigfunc_norm
-        Up  = Up*eigfunc_norm*grad_norm
-        P   = P*pot_norm
-        Pp  = Pp*pot_norm*grad_norm
+            raise NotImplementedError
 
-        # Store in dictionary.
-        eigenfunc_dict = {'r' : r, 'U' : U, 'Up' : Up, 'P' : P, 'Pp' : Pp}
+        else:
+
+            # Load eigenfunction.
+            r, U, Up, P, Pp = np.load(path_eigenfunc)
+            U[0] = 0.0 # Bug in Ouroboros causes U[0] to be large.
+
+            # Store in dictionary.
+            eigenfunc_dict = {'r' : r, 'U' : U, 'Up' : Up, 'P' : P, 'Pp' : Pp}
 
     # Spheroidal case.
     elif mode_type == 'S':
 
-        # Load eigenfunction.
-        r, U, Up, V, Vp, P, Pp = np.load(path_eigenfunc)
+        if Ouroboros_info['attenuation'] == 'full':
 
-        # Apply normalisation.
-        U   = U*eigfunc_norm
-        V   = V*eigfunc_norm
-        Up  = Up*eigfunc_norm*grad_norm
-        Vp  = Vp*eigfunc_norm*grad_norm
-        P   = P*pot_norm
-        Pp  = Pp*pot_norm*grad_norm
-        if norm_func == 'DT':
+            raise NotImplementedError
 
-            V   = V*k
-            Vp  = Vp*k
+        else:
 
-        # Store in dictionary.
-        eigenfunc_dict = {'r' : r, 'U' : U, 'V' : V, 'Up' : Up, 'Vp' : Vp,
-                            'P' : P, 'Pp' : Pp}
+            # Load eigenfunction.
+            r, U, Up, V, Vp, P, Pp = np.load(path_eigenfunc)
+
+            # Store in dictionary.
+            eigenfunc_dict = {'r' : r, 'U' : U, 'V' : V, 'Up' : Up, 'Vp' : Vp,
+                                'P' : P, 'Pp' : Pp}
         
     # Toroidal case.
     elif mode_type == 'T':
 
-        # Load eigenfunction.
-        r, W, Wp = np.load(path_eigenfunc)
+        if Ouroboros_info['attenuation'] == 'full':
 
-        # Apply normalisation.
-        W = W*eigfunc_norm
-        Wp = Wp*eigfunc_norm*grad_norm
-        if norm_func == 'DT':
+            # Load eigenfunction.
+            r, W, W_im = np.loadtxt(path_eigenfunc).T
 
-            W = W*k
+            # Store in dictionary.
+            eigenfunc_dict = {'r' : r, 'W' : W, 'W_im' : W_im}
+        
+        else:
 
-        # Store in dictionary.
-        eigenfunc_dict = {'r' : r, 'W' : W, 'Wp' : Wp}
+            # Load eigenfunction.
+            r, W, Wp = np.load(path_eigenfunc)
+
+            # Store in dictionary.
+            eigenfunc_dict = {'r' : r, 'W' : W, 'Wp' : Wp}
     
     # Error catching on mode type.
     else:
@@ -845,6 +843,42 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
     # Convert to m (for consistency with Mineos).
     eigenfunc_dict['r'] = eigenfunc_dict['r']*1.0E3
+
+    # Apply normalisation to displacement eigenfunctions.
+    eigfunc_norm_list = ['U', 'V', 'W',
+                         'Up', 'Vp', 'Wp',
+                         'U_im', 'V_im', 'W_im']
+    for var in eigfunc_norm_list:
+        
+        if var in eigenfunc_dict.keys():
+            
+            eigenfunc_dict[var] = (eigenfunc_dict[var] * eigfunc_norm)
+
+    # Apply normalisation to gradients.
+    grad_norm_list = ['Up', 'Vp', 'Wp', 'Pp']
+    for var in grad_norm_list:
+
+        if var in eigenfunc_dict.keys():
+
+            eigenfunc_dict[var] = (eigenfunc_dict[var] * grad_norm)
+
+    # Apply normalisation to potential.
+    pot_norm_list = ['P', 'Pp']
+    for var in pot_norm_list:
+
+        if var in eigenfunc_dict.keys():
+
+            eigenfunc_dict[var] = (eigenfunc_dict[var] * pot_norm)
+
+    # Apply normalisation to terms requiring factor of k.
+    k_norm_list = ['V', 'Vp', 'V_im', 'W', 'Wp', 'W_im']
+    if norm_func == 'DT':
+
+        for var in k_norm_list:
+
+            if var in eigenfunc_dict.keys():
+
+                eigenfunc_dict[var] = (eigenfunc_dict[var] * k)
 
     return eigenfunc_dict
 
@@ -976,7 +1010,7 @@ def load_kernel(run_info, mode_type, n, l, units = 'standard', i_toroidal = None
     return r, K_ka, K_mu, K_rho
 
 # Loading data from Ouroboros (anelastic version). ----------------------------
-def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, i_toroidal = None, flatten = True):
+def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, n_q = None, l_q = None, i_toroidal = None, flatten = True):
 
     if mode_type == 'T':
 
@@ -1028,8 +1062,10 @@ def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, i_toroidal = N
         try:
 
             eigval_data_i = np.loadtxt(path_eigval)
-            omega[i, :] = eigval_data_i[:, 3][::-1]
-            gamma[i, :] = eigval_data_i[:, 4][::-1]
+            #omega[i, :] = eigval_data_i[:, 3][::-1]
+            #gamma[i, :] = eigval_data_i[:, 4][::-1]
+            omega[i, :] = eigval_data_i[:, 3]
+            gamma[i, :] = eigval_data_i[:, 4]
 
         except IOError: 
 
@@ -1053,49 +1089,63 @@ def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, i_toroidal = N
 
             mode_info[key] = mode_info[key].flatten()
 
+    if (n_q is not None) and (l_q is not None):
+
+        assert flatten
+        i = np.where((mode_info['n'] == n_q) & (mode_info['l'] == l_q))[0][0]
+        mode_info_new = dict()
+        for key in ['omega', 'gamma', 'f']:
+            
+            mode_info_new[key] = mode_info[key][i]
+        
+        mode_info = mode_info_new
+
     return mode_info
 
 def load_eigenfunc_Ouroboros_anelastic(Ouroboros_info, mode_type, n, l, i_toroidal = None):
 
-    # For toroidal modes, must specify the solid layer number.
-    # This is due to the automatic separation of uncoupled toroidal modes
-    if mode_type == 'T':
+    ## For toroidal modes, must specify the solid layer number.
+    ## This is due to the automatic separation of uncoupled toroidal modes
+    #if mode_type == 'T':
 
-        assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
+    #    assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
 
-    # Get the eigenfunction directory.
-    dir_name = 'eigenfunctions'
-    if i_toroidal is None:
+    ## Get the eigenfunction directory.
+    #dir_name = 'eigenfunctions'
+    #if i_toroidal is None:
 
-        dir_eigenfuncs = '{:}'.format(dir_name)
+    #    dir_eigenfuncs = '{:}'.format(dir_name)
 
-    else:
+    #else:
 
-        dir_eigenfuncs = '{:}_{:>03d}'.format(dir_name, i_toroidal)
+    #    dir_eigenfuncs = '{:}_{:>03d}'.format(dir_name, i_toroidal)
 
-    # Find the directory containing the eigenfunctions (which is contained
-    # within the eigenvalue directory) based on the Ouroboros parameters.
-    _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-    dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
-    file_eigenfunc  = 'eigvec_{:>05d}_{:>05d}.txt'.format(n, l)
-    path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
+    ## Find the directory containing the eigenfunctions (which is contained
+    ## within the eigenvalue directory) based on the Ouroboros parameters.
+    #_, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
+    #dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
+    #file_eigenfunc  = 'eigvec_{:>05d}_{:>05d}.txt'.format(n, l)
+    #path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
 
-    # Load.
-    if mode_type == 'T':
+    ## Load.
+    #if mode_type == 'T':
 
-        data_eigenfunc = np.loadtxt(path_eigenfunc)
+    #    data_eigenfunc = np.loadtxt(path_eigenfunc)
 
-        r = data_eigenfunc[:, 0]
-        W_real = data_eigenfunc[:, 1]
-        W_imag = data_eigenfunc[:, 2]
+    #    r = data_eigenfunc[:, 0]
+    #    W_real = data_eigenfunc[:, 1]
+    #    W_imag = data_eigenfunc[:, 2]
 
-        eigfunc_info = {'r' : r, 'W_real' : W_real, 'W_imag' : W_imag}
+    #    eigfunc_info = {'r' : r, 'W_real' : W_real, 'W_imag' : W_imag}
 
-    else:
+    #else:
 
-        raise NotImplementedError
+    #    raise NotImplementedError
 
-    return eigfunc_info
+    #return eigfunc_info
+    pass
+
+    return
     
 # Loading data from Mineos. ---------------------------------------------------
 def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None):
@@ -1349,7 +1399,7 @@ def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = Non
         elif run_info['attenuation'] == 'full':
 
             mode_info = load_eigenfreq_Ouroboros_anelastic(run_info, mode_type,
-                            i_toroidal = i_toroidal)
+                            n_q = n_q, l_q = l_q, i_toroidal = i_toroidal)
 
     elif run_info['code'] == 'mineos':
 
@@ -1366,14 +1416,8 @@ def load_eigenfunc(run_info, mode_type, n, l, i_toroidal = None, norm_args = {'n
 
     if run_info['code'] == 'ouroboros':
         
-        if run_info['attenuation'] in ['none', 'linear']:
-
-            eigenfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n, l, i_toroidal = i_toroidal, **norm_args)
-
-        else:
-
-            eigenfunc_dict = load_eigenfunc_Ouroboros_anelastic(run_info,
-                                mode_type, n, l, i_toroidal = i_toroidal)
+        eigenfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
+                            i_toroidal = i_toroidal, **norm_args)
 
     elif run_info['code'] == 'mineos':
 

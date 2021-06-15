@@ -26,7 +26,7 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
     ax.scatter(omega, gamma)
     
     # Label axes.
-    font_size_label = 13
+    font_size_label = 16
     ax.set_xlabel('Angular frequency, $\omega$ (rad s$^{-1}$)',
                     fontsize = font_size_label)
     ax.set_ylabel('Decay rate, $\gamma$ (s$^{-1}$)',
@@ -74,7 +74,7 @@ def plot_modes_dispersion(run_info, mode_type, i_toroidal = None, path_compare =
     ax.scatter(l, f_mHz)
     
     # Label axes.
-    font_size_label = 13
+    font_size_label = 16
     ax.set_xlabel('Angular order, $\ell$',
                     fontsize = font_size_label)
     ax.set_ylabel('Frequency (mHz)',
