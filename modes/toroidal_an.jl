@@ -63,7 +63,7 @@ function toroidal_rep(args)
     Ki = parse.(Int64,(lines[2]))
     dimension = parse.(Int64,(lines[3]))
     #
-    A   = npzread(joinpath(dir_numpy, "A.npy"))
+    #A   = npzread(joinpath(dir_numpy, "A.npy"))
     Mmu = npzread(joinpath(dir_numpy, "Mmu.npy"))
     mu  = npzread(joinpath(dir_numpy, "mu.npy"))
     A2  = npzread(joinpath(dir_numpy, "A2.npy"))
@@ -77,11 +77,8 @@ function toroidal_rep(args)
     # eig_start is converted from mHz to rad/s.
     # nu is converted from SI units to Ouroboros units.
     eig_start_rad_per_s = (anelastic_params["eig_start_mHz"] * 1.0E-3) * (2.0 * pi)
-    @printf("eig_start_rad_per_s %.6f", eig_start_rad_per_s)
-    #eig_start_rad_per_s = 0.01
-    #eig_start_rad_per_s = 0.009
-    #eig_start_rad_per_s = 0.0075 # Gets all modes for l = 1
-    #eig_start_rad_per_s = 0.01
+    @printf("eig_start_rad_per_s %.6f (%.3f mHz) \n", eig_start_rad_per_s,
+            anelastic_params["eig_start_mHz"])
     nu1 = anelastic_params["nu"] * 1.0E-9
     num_eigen = anelastic_params["n_eigs"] 
 
@@ -125,6 +122,7 @@ function toroidal_rep(args)
 
             #maxwell solid
             temp_rep = REP([temp_A0, temp_A1], [0], [(im * mu[k]) / nu1])
+
 
         elseif anelastic_params["model_type"] == -2
 
@@ -215,6 +213,7 @@ function toroidal_rep(args)
         W_eigen = eigvecs[1 : size_r, i]
 
         # Normalise eigenvector.
+        # GMIG report, eq. 3.4.
         scale = sqrt(transpose(W_eigen)*A2*W_eigen-0.5/eigvals[i]*transpose(W_eigen)*compute_Mder(nep_h,eigvals[i],1)*W_eigen)
         W_eigen = W_eigen/scale
         # 

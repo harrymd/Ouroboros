@@ -1255,9 +1255,10 @@ def toroidal_an(model,invV,order,Dr):
         # must check if A and B are symmetric
         #ri is still different
         i_order = i*order
-        Aelmt = Ji*mu[i]*(-(rxi*np.matmul(np.matmul(Dr.T,M),ri)+\
-                     np.matmul(ri,np.matmul(M,Dr))*rxi)+\
-                    (k**2-1)*M+rxi**2*np.matmul(np.matmul(np.matmul(np.matmul(Dr.T,ri),M),ri),Dr))
+        Aelmt = Ji*mu[i]*(-(rxi*((Dr.T @ M) @ ri)+\
+                     (ri @ (M @ Dr))*rxi)+\
+                    (k**2-1)*M + \
+                    rxi**2*((((Dr.T @ ri) @ M) @ ri) @ Dr))
         # manage unit: *1e15/1e15, change + to -
         Mmu[i,i_order:i_order+Np,i_order:i_order+Np]  = -(Aelmt+Aelmt.T)/2
 #        A[i_order:i_order+Np,i_order:i_order+Np] = A[i_order:i_order+Np,i_order:i_order+Np] -\
@@ -1267,5 +1268,5 @@ def toroidal_an(model,invV,order,Dr):
         # manage unit: *1e21/1e15
         B[i_order:i_order+Np,i_order:i_order+Np] = B[i_order:i_order+Np,i_order:i_order+Np] +\
                     (Belmt+Belmt.T)/2*1e6 #Symmetric operation to eliminate little error
-    
+
     return Mmu,B,Ki,dimension
