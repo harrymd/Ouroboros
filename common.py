@@ -45,6 +45,18 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
     Ouroboros uses a standard directory structure to organise the output.
     This code finds the paths of each directory in the normal modes output.
     '''
+
+    if Ouroboros_info['code'] == 'ouroboros_homogeneous':
+        
+        if mode_type == 'T':
+
+            dir_type = os.path.join(Ouroboros_info['dir_output'], mode_type)
+
+        else:
+
+            raise NotImplementedError
+        
+        return Ouroboros_info['dir_output'], None, None, dir_type
     
     # Unpack the Ouroboros parameters.
     dir_output  = Ouroboros_info['dir_output']
@@ -302,6 +314,60 @@ def read_Ouroboros_summation_input_file(path_input):
 
     return summation_info
 
+def read_Ouroboros_homogeneous_input_file(path_input):
+    
+    # Read file.
+    with open(path_input, 'r') as in_id:
+        
+        code            = in_id.readline().split()[1]
+        assert code     == 'ouroboros_homogeneous'
+        dir_output      = in_id.readline().split()[1]
+        r               = float(in_id.readline().split()[1])
+        mu              = float(in_id.readline().split()[1])
+        kappa           = float(in_id.readline().split()[1])
+        rho             = float(in_id.readline().split()[1])
+        n_max           = int(  in_id.readline().split()[1])
+        l_max           = int(  in_id.readline().split()[1])
+        f_max_mHz       = float(in_id.readline().split()[1])
+        root_tol_mHz    = float(in_id.readline().split()[1])
+        num_samples     = int(  in_id.readline().split()[1])
+
+    # Print information.
+    print('Homogeneous model: {:}'            .format(path_input))
+    print('Radius:            {:>9.3e} m'     .format(r))
+    print('Shear modulus:     {:>9.3e} Pa'    .format(mu))
+    print('Bulk modulus:      {:>9.3e} Pa'    .format(kappa))
+    print('Density:           {:>9.3e} kg/m3' .format(rho))
+    print('Search parameters:')
+    print('n max:             {:>9d}'       .format(n_max))
+    print('l max:             {:>9d}'       .format(l_max))
+    print('f max:             {:>9.3e} mHz' .format(f_max_mHz))
+    print('Root tolerance:    {:>9.3e} mHz' .format(root_tol_mHz))
+    print('Output parameters:')
+    print('Output directory:  {:>9}'        .format(dir_output))
+    print('Number of samples: {:>9d}'       .format(num_samples))
+
+    # Store in dictionary.
+    run_info = {
+        'code'          : code,
+        'dir_output'    : dir_output,
+        'r'             : r,
+        'mu'            : mu,
+        'kappa'         : kappa,
+        'rho'           : rho,
+        'n_max'         : n_max,
+        'l_max'         : l_max,
+        'f_max_mHz'     : f_max_mHz,
+        'root_tol_mHz'  : root_tol_mHz,
+        'num_samples'   : num_samples }
+
+    # Add other variables required in post-processing codes.
+    run_info['mode_types'] = ['T']
+    run_info['attenuation'] = 'none'
+    run_info['grav_switch'] = 0
+
+    return run_info
+
 def read_Mineos_input_file(path_input_file):
     '''
     Reads the Mineos input file.
@@ -510,7 +576,7 @@ def load_model_full(model_path):
     v_s = (v_sv + v_sh)/2.0
     mu = rho*(v_s**2.0)
     ka = rho*((v_p**2.0) - (4.0/3.0)*(v_s**2.0))
-    
+
     # Store in a dictionary.
     model = dict()
     model['header'] = header
@@ -806,7 +872,12 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
         if Ouroboros_info['attenuation'] == 'full':
 
-            raise NotImplementedError
+            # Load eigenfunction.
+            r, U, U_im, V, V_im = np.loadtxt(path_eigenfunc).T
+
+            # Store in dictionary.
+            eigenfunc_dict = {'r' : r,  'U' : U, 'U_im' : U_im,
+                                        'V' : V, 'V_im' : V_im }
 
         else:
 
@@ -1046,11 +1117,12 @@ def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, n_q = None, l_
 
             file_eigval = '{:}_{:>03d}_{:>05d}.txt'.format(file_name,
                             i_toroidal, l)
-            path_eigval = os.path.join(dir_eigval, file_eigval)
 
         else:
 
-            raise NotImplementedError
+            file_eigval = '{:}_{:>05d}.txt'.format(file_name, l)
+
+        path_eigval = os.path.join(dir_eigval, file_eigval)
 
         # Here we assume that no modes are missing.
         n[i, :] = range(num_eigen)
@@ -1059,18 +1131,25 @@ def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, n_q = None, l_
             n[i, :] = n[i, :] + 1
 
         # Load data for this l-value.
+        no_files = True
         try:
-
+        
             eigval_data_i = np.loadtxt(path_eigval)
             #omega[i, :] = eigval_data_i[:, 3][::-1]
             #gamma[i, :] = eigval_data_i[:, 4][::-1]
             omega[i, :] = eigval_data_i[:, 3]
             gamma[i, :] = eigval_data_i[:, 4]
 
+            no_files = False
+
         except IOError: 
 
             omega[i, :] = np.nan 
             gamma[i, :] = np.nan 
+
+        if no_files:
+
+            raise IOError('Input files such as {:} not found'.format(path_eigval))
 
     f_mHz = (omega * 1.0E3) / (2.0 * np.pi)
 
@@ -1354,6 +1433,10 @@ def read_input_file(path_input):
 
         run_info = read_Ouroboros_input_file(path_input)
 
+    elif code == 'ouroboros_homogeneous':
+
+        run_info = read_Ouroboros_homogeneous_input_file(path_input) 
+
     elif code == 'mineos':
 
         run_info = read_Mineos_input_file(path_input)
@@ -1389,7 +1472,7 @@ def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = Non
     Specify a single mode with the 'n_q' and 'l_q' variables.
     '''
 
-    if run_info['code'] == 'ouroboros':
+    if run_info['code'] in ['ouroboros', 'ouroboros_homogeneous']:
 
         if run_info['attenuation'] in ['none', 'linear']:
 
@@ -1405,6 +1488,10 @@ def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = Non
 
         mode_info = load_eigenfreq_Mineos(run_info, mode_type, n_q = n_q, l_q = l_q)
 
+    else:
+
+        raise ValueError
+
     return mode_info
 
 def load_eigenfunc(run_info, mode_type, n, l, i_toroidal = None, norm_args = {'norm_func' : 'mineos', 'units' : 'SI', 'omega' : None}):
@@ -1414,7 +1501,7 @@ def load_eigenfunc(run_info, mode_type, n, l, i_toroidal = None, norm_args = {'n
     the load_eigenfunc_* functions for more detail).
     '''
 
-    if run_info['code'] == 'ouroboros':
+    if run_info['code'] in ['ouroboros', 'ouroboros_homogeneous']:
         
         eigenfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
                             i_toroidal = i_toroidal, **norm_args)

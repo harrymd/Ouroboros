@@ -29,7 +29,7 @@ def get_title_str(mode_type, n, l, code, i_toroidal = None):
 
     else:
         
-        if code == 'mineos':
+        if code in ['mineos', 'ouroboros_homogeneous']:
 
             mode_type_for_title = mode_type
 
@@ -57,13 +57,21 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     '''
     
     # Get model information for axis limits, scaling and horizontal lines.
-    model = load_model(run_info['path_model'])
-    # Convert to km.
-    model['r'] = model['r']*1.0E-3
-    # r_srf Radius of planet.
-    # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
-    r_srf = model['r'][-1]
-    i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(model['r'], model['v_s'])
+    if run_info['code'] == 'ouroboros_homogeneous':
+
+        r_srf = run_info['r']*1.0E-3
+        i_fluid = []
+        r_solid_fluid_boundary = []
+
+    else:
+
+        model = load_model(run_info['path_model'])
+        # Convert to km.
+        model['r'] = model['r']*1.0E-3
+        # r_srf Radius of planet.
+        # r_solid_fluid_boundary    List of radii of solid-fluid boundaries.
+        r_srf = model['r'][-1]
+        i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(model['r'], model['v_s'])
 
     # Get frequency information.
     mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal, n_q = n, l_q = l)
@@ -330,7 +338,19 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
 
             if run_info['attenuation'] == 'full':
 
-                raise NotImplementedError
+                common_args['ax'] = ax_imag
+                common_args['x_label'] = 'Imaginary'
+
+                plot_eigenfunc_S(eigfunc_dict['r'], eigfunc_dict['U_im'],
+                        eigfunc_dict['V_im'],
+                        h_lines = None,
+                        linestyles = [linestyle, linestyle],
+                        label_suffix = label_suffix,
+                        y_label = None,
+                        **common_args)
+
+                common_args['ax'] = ax
+                common_args['x_label'] = 'Real'
 
             plot_eigenfunc_S(eigfunc_dict['r'], eigfunc_dict['U'], eigfunc_dict['V'],
                     h_lines = r_solid_fluid_boundary,
@@ -404,7 +424,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             dir_out = run_info['dir_output']
             dir_plot = os.path.join(dir_out, 'plots')
 
-        elif run_info['code'] == 'ouroboros':
+        elif run_info['code'] in ['ouroboros', 'ouroboros_homogeneous']:
             
             _, _, _, dir_out = get_Ouroboros_out_dirs(run_info, mode_type)
 
@@ -428,6 +448,10 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             elif run_info['code'] == 'ouroboros':
 
                 fig_name = '{:}_{:>05d}_{:}{:1d}_{:>05d}_{:1d}.png'.format(fig_name, n, mode_type, i_toroidal, l, run_info['grav_switch'])
+
+            elif run_info['code'] == 'ouroboros_homogeneous':
+
+                fig_name = '{:}_{:>05d}_{:}_{:>05d}_{:>1d}.png'.format(fig_name, n, mode_type, l, run_info['grav_switch'])
 
             else:
 
@@ -648,6 +672,10 @@ def get_label_suffixes(path_compare, code, code_compare, plot_gradient):
             #label_suffix = ' (RadialPNM)'
             label_suffix = ''
 
+        elif code == 'ouroboros_homogeneous':
+
+            label_suffix = ''
+
         else:
 
             raise ValueError
@@ -746,15 +774,14 @@ def main():
             run_info['code'], code_compare, plot_gradient)
 
     # Plot.
-    if run_info['attenuation'] == 'full' or run_info_compare['attenuation'] == 'full':
-
-        no_title = True
-
-    else:
-
-        no_title = False
-
     if path_compare is not None:
+
+        if run_info['attenuation'] == 'full' or run_info_compare['attenuation'] == 'full':
+
+            no_title = True
+        else:
+
+            no_title = False
 
         if ((run_info['attenuation'] == 'full') and 
             (run_info_compare['attenuation'] != 'full')):
@@ -779,7 +806,7 @@ def main():
 
             # Plot two eigenfunctions overlaid on same plot.
             ax, ax_imag = plot_eigenfunc_wrapper(run_info_compare, mode_type, n, l,
-                    i_toroidal = i_toroidal, ax = None, ax_imag = ax_imag, show = False,
+                    i_toroidal = i_toroidal, ax = None, ax_imag = None, show = False,
                     transparent = False, save = False, linestyle = ':',
                     label_suffix = label_suffix_compare, x_label = None,
                     norm_func = norm_func, units = units,
@@ -794,6 +821,14 @@ def main():
                     no_title = no_title) 
 
     else:
+
+        if run_info['attenuation'] == 'full':
+
+            no_title = True
+
+        else:
+
+            no_title = False
 
         # Plot a single eigenfunction.
         plot_eigenfunc_wrapper(run_info, mode_type, n, l,

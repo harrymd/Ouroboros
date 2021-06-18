@@ -52,16 +52,25 @@ def main():
     if run_info['code'] == 'mineos':
 
         assert i_toroidal is None, 'The i_toroidal flag is not used with Mineos, try using mode_type == \'T\' for mantle toroidal modes and mode_type == \'I\' for inner-core toroidal modes.'
+    
+    if run_info['code'] == 'ouroboros_homogeneous':
 
-    # Load the planetary model.
-    model = load_model(run_info['path_model'])
+        if rho_scale is not None:
 
-    if rho_scale is not None:
+            run_info['rho'] = (run_info['rho'] * rho_scale)
 
-        model['rho'] = model['rho']*rho_scale
+    else:
+
+        # Load the planetary model.
+        model = load_model(run_info['path_model'])
+
+        if rho_scale is not None:
+
+            model['rho'] = model['rho']*rho_scale
 
     # Load frequency information.
-    mode_info = load_eigenfreq(run_info, mode_type, n_q = n, l_q = l)
+    mode_info = load_eigenfreq(run_info, mode_type, n_q = n, l_q = l,
+                    i_toroidal = i_toroidal)
     f_mHz = mode_info['f']
 
     if freq_scale is not None:
@@ -78,7 +87,8 @@ def main():
         load_eigfunc_norm_args['omega'] = f_rad_per_s
 
     # Load eigenfunction(s).
-    eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l, norm_args = load_eigfunc_norm_args)
+    eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l,
+                i_toroidal = i_toroidal, norm_args = load_eigfunc_norm_args)
     r = eigfunc_dict['r']
     if mode_type == 'R':
         
@@ -101,8 +111,15 @@ def main():
     if r_scale is not None:
         
         print('Multiplying radius by {:>10.3e}'.format(r_scale))
+
         r = r*r_scale
-        model['r'] = model['r']*r_scale
+        if run_info['code'] == 'ouroboros_homogeneous':
+
+            run_info['r'] = (run_info['r'] * r_scale)
+
+        else:
+
+            model['r'] = model['r']*r_scale
 
     if eig_scale is not None:
         
@@ -135,35 +152,53 @@ def main():
 
         max_abs_eigfunc = np.max(np.abs(W))
 
-    if mode_type in ['R', 'S']:
+    if run_info['code'] != 'ouroboros_homogeneous':
 
-        # Find indices of solid-fluid boundaries in the eigenfunction grid.
-        i_fluid_solid_boundary = (np.where(np.diff(r) == 0.0))[0] + 1
+        if mode_type in ['R', 'S']:
 
-        if run_info['code'] == 'mineos':
+            # Find indices of solid-fluid boundaries in the eigenfunction grid.
+            i_fluid_solid_boundary = (np.where(np.diff(r) == 0.0))[0] + 1
 
-            print("Warning: Assuming inner two discontinuities are CMB and ICB.")
-            i_fluid_solid_boundary = i_fluid_solid_boundary[0:2]
+            if run_info['code'] == 'mineos':
 
-        # Find the fluid-solid boundary points in the model.
-        i_fluid_model, r_solid_fluid_boundary_model, i_fluid_solid_boundary_model =\
-            get_r_fluid_solid_boundary(model['r'], model['v_s'])
+                print("Warning: Assuming inner two discontinuities are CMB and ICB.")
+                i_fluid_solid_boundary = i_fluid_solid_boundary[0:2]
 
-        # Interpolate from the model grid to the output grid.
-        #rho  = interp_n_parts(r*1.0E3, model['r'], model['rho'], i_fluid_solid_boundary, i_fluid_solid_boundary_model)
+            # Find the fluid-solid boundary points in the model.
+            i_fluid_model, r_solid_fluid_boundary_model, i_fluid_solid_boundary_model =\
+                get_r_fluid_solid_boundary(model['r'], model['v_s'])
 
-        rho  = interp_n_parts(r, model['r'], model['rho'], i_fluid_solid_boundary, i_fluid_solid_boundary_model)
+            # Interpolate from the model grid to the output grid.
+            #rho  = interp_n_parts(r*1.0E3, model['r'], model['rho'], i_fluid_solid_boundary, i_fluid_solid_boundary_model)
+
+            rho  = interp_n_parts(r, model['r'], model['rho'], i_fluid_solid_boundary, i_fluid_solid_boundary_model)
+
+        else:
+
+            rho = np.interp(r, model['r'], model['rho'])
 
     else:
 
-        rho = np.interp(r, model['r'], model['rho'])
+        rho = run_info['rho']
+
+        if mode_type in ['R', 'S']:
+
+            i_fluid_solid_boundary = []
 
     print('Calculating normalisation')
     print('Mode {:>5d} {:>1} {:>5d}'.format(n, mode_type, l))
     print('Freq.: {:>9.5f}'.format(f_mHz))
     print('omega: {:>9.5f}'.format(f_rad_per_s))
-    print('Max. density: {:>10.3f}'.format(np.max(rho)))
-    print('Max. radius (from model file):   {:>10.3f}'.format(np.max(model['r'])))
+    if run_info['code'] == 'ouroboros_homogeneous':
+
+        print('Density: {:>10.3f}'.format(run_info['rho']))
+        print('Max. radius (from model file):   {:>10.3f}'.format(run_info['r']))
+    
+    else:
+
+        print('Max. density: {:>10.3f}'.format(np.max(rho)))
+        print('Max. radius (from model file):   {:>10.3f}'.format(np.max(model['r'])))
+
     print('Max. radius (from eigfunc file): {:>10.3f}'.format(np.max(r)))
     print('Max. abs. eigfunc: {:>.3e}'.format(max_abs_eigfunc))
     

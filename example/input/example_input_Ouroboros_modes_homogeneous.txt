@@ -1,0 +1,11 @@
+code         ouroboros_homogeneous
+dir_output   example/output/Ouroboros_homogeneous
+r            6371.0E3
+mu             80.0E9 
+kappa         393.3333333333E9  
+rho             5.0E3
+n_max           5 
+l_max          10
+f_max_mHz       5.0
+root_tol_mHz    1.0E-3
+num_samples   200

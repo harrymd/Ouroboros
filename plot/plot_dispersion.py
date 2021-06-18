@@ -45,6 +45,20 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
 
             legend_label = 'Q'
 
+        elif var == 'gamma':
+
+            assert (run_info['attenuation'] == 'full'),\
+                    'Cannot plot imaginary part of eigenfunction unless using'\
+                    ' full attenuation mode.'
+
+            var = mode_info['gamma']
+            
+            legend_label = '$\gamma$ (s$^{-1}$)'
+
+        else:
+
+            raise ValueError('Variable {:} not recognised.'.format(var))
+
         # Get scaling.
         i_f = get_f_lims_indices(f, f_lims)
         var_min = np.min(var[i_f])
@@ -120,7 +134,7 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
 
             dir_out = run_info['dir_output'] 
 
-        elif run_info['code'] == 'ouroboros':
+        elif run_info['code'] in ['ouroboros', 'ouroboros_homogeneous']:
 
             _, _, _, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
             dir_out = dir_type
@@ -148,13 +162,17 @@ def plot_dispersion(n, l, f, ax = None, l_lims = 'auto', f_lims = 'auto', x_labe
 
     # Get a unique, sorted list of n-values.
     n_list = sorted(list(set(n)))
+
+    for i in range(len(n)):
+
+        print(n[i], l[i], f[i])
     
     # Create axes (if necessary).
     if ax is None:
     
         fig = plt.figure()
         ax  = plt.gca()
-    
+
     # Plot each overtone separately as a connected line.
     for ni in n_list:
         
@@ -367,8 +385,6 @@ def get_var_aligned(mode_type, run_info_0, run_info_1, var, f_lims, i_toroidal =
 
     # Find deviations of variable from mean.
     var_diff = (var_0 - var_1)
-    print(var_0)
-    print(var_diff)
     abs_var_diff = np.abs(var_diff)
     frac_abs_var_diff = abs_var_diff/var_mean
     min_frac_abs_var_diff = np.min(frac_abs_var_diff[i_f])
@@ -522,7 +538,7 @@ def plot_differences(run_info_0, run_info_1, mode_type, diff_type = 'eigenvalues
     # Save (if requested).
     if save:
         
-        if run_info_0['code'] == 'ouroboros':
+        if run_info_0['code'] in ['ouroboros', 'ouroboros_homogeneous']:
 
             _, _, _, dir_type = get_Ouroboros_out_dirs(run_info_0, mode_type)
             dir_out = dir_type
@@ -555,7 +571,7 @@ def main():
     parser.add_argument("--l_lims", type = float, nargs = 2, help = "Specify angular order of plot axes (default: limits are found automatically).")
     parser.add_argument("--path_input_comparison", help = "File path to second input file for comparison.")
     parser.add_argument("--plot_diff", choices = ['eigvals', 'eigvecs', 'Q'], help = 'Plot differences between mode frequencies (option \'eigvals\') or eigenfunctions (option \'eigvecs\').')
-    parser.add_argument("--plot_var", choices = ['Q'], help = 'Plot a variable. Options: Q (attenuation quality factor).')
+    parser.add_argument("--plot_var", choices = ['Q', 'gamma'], help = 'Plot a variable. Options: Q (attenuation quality factor [dimensionless]), gamma (imaginary part of eigenvalue).')
     parser.add_argument("--var_lims", type = float, nargs = 2)
     parser.add_argument("--highlight_box", type = float, nargs = 4, help = "(x0, y0, width, height) of highlight box.")
     args = parser.parse_args()

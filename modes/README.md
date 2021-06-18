@@ -76,6 +76,43 @@ The normalisation of the eigenfunctions used internally by *Ouroboros* differs f
 
 By default, the sensitivity kernels are also calculated and stored in the subdictory `kernels`. For more information, see `kernels/README.md`.
 
+#### Analytical solution for homogeneous sphere
+
+You can run *Ouroboros* with a homogeneous model. However, in this simple case, analytical solutions exist. These can be calculated with the command
+
+```
+python3 modes/modes_homogeneous.py example/input/example_input_Ouroboros_modes_homogeneous.txt
+```
+
+where the example homogeneous input file is
+
+```
+code         ouroboros_homogeneous
+dir_output   example/output/Ouroboros_homogeneous
+r            6371.0E3
+mu             80.0E9 
+kappa         393.3333333333E9  
+rho             5.0E3
+n_max           5 
+l_max          10
+f_max_mHz       5.0
+root_tol_mHz    1.0E-3
+num_samples   200
+```
+
+where the inputs are:
+
+* `dir_output`, `n_max`, `l_max`: Same as standard *Ouroboros* input file (see above).
+* `r`: Radius of planet (m).
+* `mu`: Shear modulus (Pa).
+* `kappa`: Bulk modulus (Pa).
+* `rho`: Density (kg m^-3 ).
+* `f_max_mHz`: Upper frequency cut-off (mHz).
+* `root_tol_mHz`: Numerical tolerance for zero-finding (mHz); controls the accuracy of the mode frequencies.
+* `num_samples`: The number of radial samples in the eigenfunction files.
+
+The outputs are saved in the same format as standard *Ouroboros* output, so all of the helper functions can be used in the same way.
+
  <a href="#top">Back to top</a>
 
 ### Plotting the output
@@ -173,7 +210,7 @@ The parameter `eig_start_mHz` is the starting point (frequency) for the eigenval
 ```
 model maxwell_uniform
 n_eigs 5
-eig_start_mHz 3.0
+eig_start_mHz 1.0
 eta 1.0E15
 ```
 

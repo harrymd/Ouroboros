@@ -5,45 +5,11 @@ using Printf
 #using DelimitedFiles
 #using PyCall
 include("lib.jl")
+include("common.jl")
 
 order_V = 1
 order = 2
 
-# Makes a directory if it doesn't already exist. ------------------------------
-function mkdir_if_not_exist(path_)
-
-    if isdir(path_) == false
-        
-        @printf("Making directory %s", path_)
-        mkdir(path_)
-
-    end
-
-end
-
-# Reads the anelastic input file specified in the modes input file.
-function read_input_anelastic(path_input_anelastic)
-    
-    println(path_input_anelastic)
-    anelastic_params = Dict()
-
-    open(path_input_anelastic) do f
-        
-        anelastic_params["model_type"] = split(readline(f), ' ')[2]
-        anelastic_params["n_eigs"] = parse(Int64, split(readline(f), ' ')[2])
-        anelastic_params["eig_start_mHz"] = parse(Float64, split(readline(f), ' ')[2])
-
-        if anelastic_params["model_type"] == "maxwell_uniform"
-            
-            anelastic_params["nu"] = parse(Float64, split(readline(f), ' ')[2])
-
-        end
-
-    end
-
-    return anelastic_params
-
-end
 
 # Finds the toroidal modes in anelastic case by solving REP (rational
 # eigenvalue problem).
@@ -182,7 +148,7 @@ function toroidal_rep(args)
 
     end
 
-    # Sort the eigenvalues by their real part#, in decreasing order.
+    # Sort the eigenvalues by their real part.
     #p = sortperm(real(eigvals), rev = true)
     p = sortperm(real(eigvals))
     eigvals = eigvals[p]
@@ -213,7 +179,7 @@ function toroidal_rep(args)
         W_eigen = eigvecs[1 : size_r, i]
 
         # Normalise eigenvector.
-        # GMIG report, eq. 3.4.
+        # GMIG report 2020, eq. 3.4.
         scale = sqrt(transpose(W_eigen)*A2*W_eigen-0.5/eigvals[i]*transpose(W_eigen)*compute_Mder(nep_h,eigvals[i],1)*W_eigen)
         W_eigen = W_eigen/scale
         # 

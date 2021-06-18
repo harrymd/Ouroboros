@@ -168,7 +168,7 @@ def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count
             f_p.write(str(dimension)+'\n')
             f_p.close()
 
-            cmd = "julia modes/toroidal_an.jl {:} {:} {:d}".format(path_input_anelastic, dir_output, i)
+            cmd = "julia modes/julia/toroidal_an.jl {:} {:} {:d}".format(path_input_anelastic, dir_output, i)
             subprocess.run(cmd, shell = True)
 
     return
@@ -241,7 +241,8 @@ def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickne
             # Write out the eigenvalues.
             with open(path_eigenvalues, 'a') as f_out:
     
-                f_out.write('{:>10d} {:>10d} {:>19.12e} {:>19.12e} {:>19.12e}\n'.format(n, l, omega[n], omega[n], 0.0))
+                f_out.write('{:>10d} {:>10d} {:>19.12e} {:>19.12e} {:>19.12e}\n'\
+                        .format(n, l, omega[n], omega[n], 0.0))
                 #f_out.write('{:>10d} {:>10d} {:>16.12f}\n'.format(n, l, omega[n]))
     
             # Write eigenfunction.
@@ -536,7 +537,7 @@ def spheroidal_modes(run_info):
     '''
 
     # Unpack input.
-    if run_info['use_attenuation']:
+    if run_info['attenuation'] == 'linear':
 
         model_path = get_path_adjusted_model(run_info)
 
@@ -572,28 +573,56 @@ def spheroidal_modes(run_info):
             print('Spheroidal modes with l = 0 are known as radial modes and should be calculated separately using radial_modes().') 
             continue
 
-        # Construct the matrices A and B.
-        A_singularity, B_singularity, A0_inv,                   \
-        E_singularity, B_eqv_pressure, block_type, block_len =  \
-            build_matrices_radial_or_spheroidal(
-                l, model, count_thick,
-                invV, invV_p, invV_V, invV_P,
-                order, order_p, order_V, order_P,
-                Dr, Dr_p, Dr_V, Dr_P,
-                rho, radius,
-                block_type, brk_radius, brk_num, layers, switch)
-        
-        # Find the eigenvalues and eigenvectors. 
-        eigvals, eigvecs = eigh(A_singularity, B_singularity)
-        
-        # Convert to mHz, remove essential spectrum, renormalise and save.            
-        process_eigen_radial_or_spheroidal(
-            l, eigvals, eigvecs,
-            count_thick, thickness, essen, layers,
-            nmin, nmax, order, order_V,
-            x, x_V,
-            block_type, block_len, A0_inv, E_singularity, B_eqv_pressure,
-            path_eigenvalues, dir_eigenfunc, switch, save = True)
+        if run_info['attenuation'] == 'full':
+
+            if run_info['grav_switch'] == 0:
+
+                # Construct the matrices A and B.
+                # They are saved.
+                build_matrices_spheroidal_noGP_an(
+                    l, model, count_thick, thickness,
+                    invV, invV_p, invV_V, invV_P,
+                    order, order_p, order_V, order_P,
+                    Dr, Dr_p, Dr_V, Dr_P,
+                    x, x_V,
+                    rho, radius,
+                    block_type, brk_radius, brk_num, layers, switch,
+                    dir_type)
+
+            else:
+
+                raise NotImplementedError
+
+            # Solve the anelastic non-linear eigenvalue problem using
+            # the Julia NEP-Pack library.
+            cmd = "julia modes/julia/spheroidal_an.jl {:} {:}".format(
+                    run_info['path_atten'], dir_type)
+            subprocess.run(cmd, shell = True)
+
+        else:
+
+            # Construct the matrices A and B.
+            A_singularity, B_singularity, A0_inv,                   \
+            E_singularity, B_eqv_pressure, block_type, block_len =  \
+                build_matrices_radial_or_spheroidal(
+                    l, model, count_thick,
+                    invV, invV_p, invV_V, invV_P,
+                    order, order_p, order_V, order_P,
+                    Dr, Dr_p, Dr_V, Dr_P,
+                    rho, radius,
+                    block_type, brk_radius, brk_num, layers, switch)
+            
+            # Find the eigenvalues and eigenvectors. 
+            eigvals, eigvecs = eigh(A_singularity, B_singularity)
+            
+            # Convert to mHz, remove essential spectrum, renormalise and save.            
+            process_eigen_radial_or_spheroidal(
+                l, eigvals, eigvecs,
+                count_thick, thickness, essen, layers,
+                nmin, nmax, order, order_V,
+                x, x_V,
+                block_type, block_len, A0_inv, E_singularity, B_eqv_pressure,
+                path_eigenvalues, dir_eigenfunc, switch, save = True)
 
     return
 
@@ -1012,7 +1041,8 @@ def process_eigen_radial_or_spheroidal(
         if block_type[0] == 1:
 
             # Specific handling of l = 1 to avoid wrong matching of modes to their names.
-            if l == 1:
+            #if l == 1:
+            if False:
 
                 # Skip the essential spectrum.
                 eigen       = omega[essen+1:]
@@ -1151,6 +1181,119 @@ def process_eigen_radial_or_spheroidal(
 
     return eigen, n_min_r 
 
+def build_matrices_spheroidal_noGP_an(
+        l, model, count_thick, thickness,
+        invV, invV_p, invV_V, invV_P,
+        order, order_p, order_V, order_P,
+        Dr, Dr_p, Dr_V, Dr_P,
+        x, x_V,
+        rho, radius,
+        block_type, brk_radius, brk_num, layers, switch,
+        dir_output):
+
+    k = np.sqrt(l*(l+1))
+
+    # model parameters
+    model.set_k(k)
+    # generate matrices A and B such that Ax  =  omega^2*Bx
+    A = []
+    B = []
+    #length of U,V,p,P, etc
+    #U,V for solid, U,V,p for fluid
+    block_len = []
+    block_pos = [0]
+    
+    #relative radius of eigenvector. This is done by squeeze of x in each layer
+    xx = []
+    
+    dir_numpy = os.path.join(dir_output, 'numpy')
+    mkdir_if_not_exist(dir_numpy)
+
+    f_p = open(os.path.join(dir_numpy, 'parameter_S.txt'),'w')
+
+    # *
+    f_p.write(str(l)+'\n')
+
+    for i in range(layers):
+        cur_model = lib.modelDiv(model,np.arange(count_thick[i],count_thick[i+1]))
+        #basically follow the original order
+        if block_type[i] == 0:
+            [tempA_e,tempB_e,temp_block_len] = FEM.fluid_noG_mixedV(cur_model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V)
+            [tempA,tempB,temp_Ki,temp_dimension,temp_dimension_V,temp_dimension_p,temp_block_len] = FEM.fluid_noG_mixedV_an(cur_model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V)
+
+            f_p.write(str(block_type[i])+' ')
+            f_p.write(str(temp_Ki)+' ')
+            f_p.write(str(temp_dimension)+' ')
+            f_p.write(str(temp_dimension_V)+' ')
+            f_p.write(str(temp_dimension_p)+'\n')
+        else:
+            [tempA_e,tempB_e,temp_block_len] = FEM.solid_noG(cur_model,invV,order,Dr)
+            [tempA,temp_Mmu,tempB,temp_Ki,temp_dimension,temp_block_len] = FEM.solid_noG_an(cur_model,invV,order,Dr)
+            #a=temp_Mmu+tempA
+            np.save(os.path.join(dir_numpy, 'Mmu'+str(i)+'.npy'),temp_Mmu)
+            np.save(os.path.join(dir_numpy, 'mu'+str(i)+'.npy'), cur_model.mu)
+            f_p.write(str(block_type[i])+' ')
+            f_p.write(str(temp_Ki)+' ')
+            blk = [str(x) for x in temp_block_len]
+            f_p.write(" ".join(blk)+'\n')
+            
+        if i == 0:
+            A = tempA_e
+            B = tempB_e
+            A0 = tempA
+            A2 = tempB
+        else:
+            A = block_diag(A,tempA_e)
+            B = block_diag(B,tempB_e)
+            A0 = block_diag(A0,tempA)
+            A2 = block_diag(A2,tempB)
+        block_len.append(temp_block_len)
+        xx = np.hstack((xx,lib.sqzx(x[:,count_thick[i]:count_thick[i+1]],thickness[i],order)))
+        for j in range(len(temp_block_len)):
+            block_pos.append(block_pos[-1]+temp_block_len[j])
+    block_pos_new = [str(x) for x in block_pos]
+    f_p.write(" ".join(block_pos_new))
+    f_p.write("\n")
+    f_p.close()
+    
+    # impose boundary condition
+    # boundary condition is constant matrix, should be added into constant matrix
+    C = np.zeros(np.shape(A0))
+    count_blk_size = 0
+    for i in range(layers-1):
+        count_blk_size = count_blk_size + np.sum(block_len[i])
+        if block_type[i] == 1: #solid-fluid
+            # manage unit: *1e12/1e15
+            C[count_blk_size+block_len[i+1][0]+block_len[i+1][1],block_len[i][0]-1] = brk_radius[i+1]**2*1e-3
+            C[block_len[i][0]-1,count_blk_size+block_len[i+1][0]+block_len[i+1][1]] = brk_radius[i+1]**2*1e-3
+        else: #fluid-solid
+            # manage unit: *1e12/1e15
+            C[count_blk_size-1,count_blk_size] = -brk_radius[i+1]**2*1e-3
+            C[count_blk_size,count_blk_size-1] = -brk_radius[i+1]**2*1e-3
+    #boundary condition for fluid outer layer
+    if block_type[-1] == 0:
+        #boundary condition if the outer layer is liquid
+        g_R0 = lib.gravfield(brk_radius[-1],rho,radius)
+        # change back to g_R0
+        C[-1,-1] = -brk_radius[-1]**2/rho[-1]/g_R0*1e-6
+    
+    #anelastic matrix, use -C because there is already a - sign in A0 calculation
+    A0 = A0-C
+    #elastic matrix
+    A = A+C
+    #no Generalized Helmhotz Dicomposition of any kind!
+    #save result for julia code
+    np.save(os.path.join(dir_numpy, 'A0.npy'),A0)
+    np.save(os.path.join(dir_numpy, 'A2.npy'),A2)
+    np.save(os.path.join(dir_numpy, 'A.npy'),A)
+    np.save(os.path.join(dir_numpy, 'B.npy'),B)        
+    np.save(os.path.join(dir_numpy, 'xx.npy'),xx)
+    np.save(os.path.join(dir_numpy, 'x_V.npy'),x_V)
+    np.save(os.path.join(dir_numpy, 'x.npy'),x)
+    np.save(os.path.join(dir_numpy, 'thickness.npy'),thickness)
+
+    return
+
 # All modes. ------------------------------------------------------------------
 def prep_fem(model_path, dir_output, num_elmt, switch): 
     '''
@@ -1180,7 +1323,7 @@ def prep_fem(model_path, dir_output, num_elmt, switch):
     # Calculate bulk and shear moduli (units of GPa).
     mu = rho*(vs**2.0)
     ka = rho*((vp**2.0) - (4.0/3.0)*(vs**2.0))
-    
+
     # brk_num:      Records the position of solid-liquid boundary.
     # layers:       Number of 'layers' (continuous regions of solid or fluid).
     # Thickness:    Thickness of each layer.
