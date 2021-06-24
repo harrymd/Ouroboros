@@ -23,16 +23,15 @@ from scipy.interpolate import interp1d
 import scipy.sparse as sps
 
 from Ouroboros.common import (  mkdir_if_not_exist, load_model,
+                                get_complex_out_paths_toroidal,
                                 get_path_adjusted_model)
 from Ouroboros.modes import FEM
 from Ouroboros.modes import lib
 from Ouroboros.modes import setup
 
-# Set G value (units of cm^3 g^(-1)s^(-2)*e-6). 
-## G value updated to current value based on Wikipedia.
-#G = 6.67408e-2  
-# G value in Mineos.
-G = 6.6723e-2
+# Set G value (units of cm^3 g^(-1) s^(-2) * e-6). 
+from Ouroboros.constants import G
+G = G*1.0E9
 
 # Toroidal modes. -------------------------------------------------------------
 def toroidal_modes(run_info):
@@ -154,6 +153,9 @@ def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count
 
             dir_numpy = os.path.join(dir_output, 'numpy_{:>03d}'.format(i))
             mkdir_if_not_exist(dir_numpy)
+
+            dir_julia = os.path.join(dir_output, 'julia_{:>03d}'.format(i))
+            mkdir_if_not_exist(dir_julia)
             
             xx = lib.sqzx(x[:,count_thick[i]:count_thick[i+1]],thickness[i],order)
             np.save(os.path.join(dir_numpy, 'xx.npy'),xx)
@@ -170,6 +172,9 @@ def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count
 
             cmd = "julia modes/julia/toroidal_an.jl {:} {:} {:d}".format(path_input_anelastic, dir_output, i)
             subprocess.run(cmd, shell = True)
+
+            # Process the Julia output.
+            process_eigen_toroidal_anelastic(dir_output, i)
 
     return
 
@@ -253,6 +258,374 @@ def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickne
             np.save(path_eigenfunc, out_arr)
     
     return omega
+
+# Processing anelastic modes. -------------------------------------------------
+def load_eigen_julia_toroidal_anelastic(dir_julia, dir_eigvecs, i_toroidal, l):
+
+    # Load frequency information.
+    name_eigvals = os.path.join('eigenvalues_{:>03d}_{:>05d}.txt'.format(i_toroidal, l))
+    path_eigvals_in = os.path.join(dir_julia, name_eigvals)
+    f_real_l, f_imag_l = np.loadtxt(path_eigvals_in).T
+
+    # Load eigenfunctions.
+    num_eigen = len(f_real_l)
+    for i in range(num_eigen):
+
+        name_eigvec = 'eigvec_{:>05d}_{:>05d}.txt'.format(i, l)
+        path_eigvec_in = os.path.join(dir_eigvecs, name_eigvec)
+
+        ri, W_real_li, W_imag_li = np.loadtxt(path_eigvec_in).T
+
+        if i == 0:
+            
+            r = ri
+            n_r = len(r)
+
+            W_real_l = np.zeros((num_eigen, n_r))
+            W_imag_l = np.zeros((num_eigen, n_r))
+
+        W_real_l[i, :] = W_real_li
+        W_imag_l[i, :] = W_imag_li
+
+    eigen_data_l = {
+            'f_real' : f_real_l,
+            'f_imag' : f_imag_l,
+            'W_real' : W_real_l,
+            'W_imag' : W_imag_l }
+
+    return r, eigen_data_l
+
+def separate_oscil_relax_modes(eigen_data, zero_tol_mHz):
+
+    # Find relaxation modes (real part approximately zero) and save the
+    # two types of modes (relaxation / oscillation) to separate lists.
+    cond_relax = (np.abs(eigen_data['f_real']) < zero_tol_mHz)
+    i_oscil = np.where(~cond_relax)[0]
+    i_relax = np.where( cond_relax)[0]
+
+    eigen_data_oscil = dict()
+    eigen_data_relax = dict()
+    for key in eigen_data.keys(): 
+
+        eigen_data_oscil[key] = eigen_data[key][i_oscil]
+        eigen_data_relax[key] = eigen_data[key][i_relax]
+    
+    return eigen_data_oscil, eigen_data_relax
+
+def remove_duplicate_complex_modes(eigen_data, f_diff_frac_thresh, dup_type = 'neg_freq'):
+    
+    # If dup_type == 'neg_freq'
+    # Look for negative-frequency duplicates in the oscillatory mode list
+    # and remove them.
+    # Negative-frequency duplicate pairs meet two criteria:
+    # 1. Imaginary part is the same.
+    # 2. Real part is the same except for a factor of -1.
+    #
+    # If dup_type == 'conj'
+    # Look for complex-conjugate duplicates in the oscillatory mode list
+    # and remove them.
+    # Complex-conjugate duplicate pairs meet two criteria:
+    # 1. Real part is the same.
+    # 2. Imaginary part is the same except for a factor of -1.
+
+    if dup_type == 'neg_freq':
+
+        key_cond_1 = 'f_imag'
+        key_cond_2 = 'f_real'
+        key_discard = 'f_real'
+
+    elif dup_type == 'conj':
+
+        key_cond_1 = 'f_real'
+        key_cond_2 = 'f_imag'
+        key_discard = 'f_imag'
+
+    num_eigen= len(eigen_data['f_real'])
+    i_remove = set() 
+    for i0 in range(num_eigen): 
+        
+        # Loop over pairs.
+        for i1 in range(i0 + 1, num_eigen):
+
+            # Calculate difference for criterion 1.
+            f_diff_frac_1 = np.abs(eigen_data[key_cond_1][i0] - eigen_data[key_cond_1][i1]) \
+                        / 0.5 * (np.abs(eigen_data[key_cond_1][i0]) + np.abs(eigen_data[key_cond_1][i1])) 
+
+            # Calculate difference for criterion 2.
+            f_diff_frac_2 = np.abs(eigen_data[key_cond_2][i0] + eigen_data[key_cond_2][i1]) \
+                        / 0.5 * (np.abs(eigen_data[key_cond_2][i1]) + np.abs(eigen_data[key_cond_2][i1])) 
+
+            # Check if both criteria are met.
+            if  (f_diff_frac_1 < f_diff_frac_thresh) and \
+                (f_diff_frac_2 < f_diff_frac_thresh):
+
+                # Decide which mode to discard.
+                # We discard the mode with the negative imaginary part.
+                if eigen_data[key_discard][i0] < 0:
+
+                    i_remove.add(i0)
+
+                else:
+
+                    i_remove.add(i1)
+
+    # Separate the two lists.
+    i_remove    = np.array(list(i_remove), dtype = np.int)
+    i_keep      = [i for i in range(num_eigen) if not (i in i_remove)]
+    i_keep      = np.array(i_keep, dtype = np.int)
+    # 
+    eigen_data_keep     = dict()
+    eigen_data_remove   = dict()
+    for key in eigen_data.keys(): 
+
+        eigen_data_keep[key]    = eigen_data[key][i_keep]
+        eigen_data_remove[key]  = eigen_data[key][i_remove]
+
+    return eigen_data_keep, eigen_data_remove
+
+def sort_complex_modes(eigen_data, sort_key):
+
+    i_sort = np.argsort(eigen_data[sort_key])
+    eigen_data_sorted = dict()
+    for key in eigen_data.keys(): 
+
+        eigen_data_sorted[key] = eigen_data[key][i_sort]
+
+    return eigen_data_sorted
+
+def label_complex_modes(eigen_data, l, n_offset = 0):
+
+    num_eigen = len(eigen_data['f_real'])
+
+    eigen_data['n'] = np.array(list(range(num_eigen)), dtype = np.int) + n_offset
+    eigen_data['l'] = np.zeros(num_eigen, dtype = np.int) + l
+
+    return eigen_data
+
+def save_eigenvalues_complex(path_eigenvalues, eigen_data, include_n = True):
+
+    num_eigen = len(eigen_data['f_real'])
+    print('Writing to {:}'.format(path_eigenvalues))
+    with open(path_eigenvalues, 'w') as out_id:
+
+        for i in range(num_eigen):
+            
+            if include_n:
+
+                out_id.write('{:>10d} {:>10d} {:>19.12e} {:>19.12e}\n'
+                    .format(eigen_data['n']     [i],
+                            eigen_data['l']     [i],
+                            eigen_data['f_real'][i],
+                            eigen_data['f_imag'][i]))
+
+            else:
+
+                out_id.write('{:>10d} {:>19.12e} {:>19.12e}\n'
+                    .format(eigen_data['l']     [i],
+                            eigen_data['f_real'][i],
+                            eigen_data['f_imag'][i]))
+
+    return num_eigen
+
+def save_eigenvectors_complex(dir_eigenfunc, eigvec_comps, r, eigen_data, include_n = True):
+
+    # Save eigenvectors in oscillatory case.
+    out_array_keys = []
+    for eigvec_comp in eigvec_comps:
+
+        out_array_keys.append('{:}_real'.format(eigvec_comp))
+        out_array_keys.append('{:}_imag'.format(eigvec_comp))
+    
+    num_eigen = len(eigen_data['l'])
+    for i in range(num_eigen):
+        
+        if include_n:
+
+            n = eigen_data['n'][i]
+            l = eigen_data['l'][i]
+            file_eigenfunc = '{:>05d}_{:>05d}.npy'.format(n, l)
+
+        else:
+
+            file_eigenfunc = '{:>05d}.npy'.format(i)
+
+        path_eigenfunc = os.path.join(dir_eigenfunc, file_eigenfunc)
+        print("Writing to {:}".format(path_eigenfunc))
+        
+        out_array_list = [r]
+        for key in out_array_keys:
+
+            out_array_list.append(eigen_data[key][i])
+
+        out_array = np.array(out_array_list)
+        np.save(path_eigenfunc, out_array)
+
+    return
+
+def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max, num_eigen):
+    
+    mode_type = 'T'
+    eigvec_comps = ['W']
+
+    # Define tolerances.
+    # zero_tol_mHz          Tolerance for modes which are defined as
+    #                       relaxation modes.
+    # f_diff_frac_thresh    Fractional tolerance for finding duplicate modes.
+    zero_tol_mHz = 1.0E-2
+    f_diff_frac_thresh = 1.0E-3
+
+    # Get directories.
+    dir_julia = os.path.join(dir_output, 'julia_{:>03d}'.format(i_toroidal))
+    name_eigvecs = 'eigenfunctions_{:>03d}'.format(i_toroidal)
+    dir_julia_eigvecs = os.path.join(dir_julia, name_eigvecs)
+
+    # Prepare output.
+    eigen_data_full = {
+            'oscil'             : dict(),
+            'oscil_duplicate'   : dict(),
+            'relax'             : dict(),
+            'relax_duplicate'   : dict()
+            }
+    
+    first_iteration = True
+    for l in range(1, l_max + 1):
+    #for l in [1]:
+        
+        # Load eigenvalues and eigenvectors.
+        r_l, eigen_data = load_eigen_julia_toroidal_anelastic(dir_julia,
+                        dir_julia_eigvecs, i_toroidal, l)
+
+        # Store radial coordinate.
+        if first_iteration:
+
+            r = r_l
+
+        # Separate oscillation and relaxation modes.
+        eigen_data_oscil, eigen_data_relax = separate_oscil_relax_modes(
+                eigen_data, zero_tol_mHz)
+
+        # Remove duplicate modes from oscillation modes.
+        eigen_data_oscil, eigen_data_oscil_duplicate = \
+                remove_duplicate_complex_modes(eigen_data_oscil, f_diff_frac_thresh,
+                        dup_type = 'neg_freq')
+
+        # Remove duplicate modes from relaxation modes.
+        eigen_data_relax, eigen_data_relax_duplicate = \
+                remove_duplicate_complex_modes(eigen_data_relax, f_diff_frac_thresh,
+                        dup_type = 'conj')
+
+        # Sort oscillation modes by real part of frequency.
+        eigen_data_oscil            = sort_complex_modes(eigen_data_oscil, 'f_real')
+        eigen_data_oscil_duplicate  = sort_complex_modes(eigen_data_oscil_duplicate,
+                                        'f_real')
+
+        # Sort relaxation modes by imaginary part of frequency.
+        eigen_data_relax            = sort_complex_modes(eigen_data_relax, 'f_imag')
+        eigen_data_relax_duplicate  = sort_complex_modes(eigen_data_relax_duplicate,
+                                        'f_imag')
+
+        # Label the modes.
+        n_offset = 0
+        if mode_type == 'T':
+
+            if l == 1:
+
+                n_offset = 1
+
+        eigen_data_oscil = label_complex_modes(eigen_data_oscil, l, n_offset = n_offset)
+        eigen_data_relax = label_complex_modes(eigen_data_relax, l, n_offset = n_offset)
+        eigen_data_oscil_duplicate['l'] = \
+            np.zeros(len(eigen_data_oscil_duplicate['f_real']), dtype = np.int)\
+            + l
+        eigen_data_relax_duplicate['l'] = \
+            np.zeros(len(eigen_data_relax_duplicate['f_real']), dtype = np.int)\
+            + l
+
+        # Add to master list.
+        eigen_data = {
+                'oscil'             : eigen_data_oscil,
+                'relax'             : eigen_data_relax,
+                'oscil_duplicate'   : eigen_data_oscil_duplicate,
+                'relax_duplicate'   : eigen_data_relax_duplicate
+                }
+        if first_iteration:
+
+            for dataset_key in eigen_data.keys():
+
+                for var_key in eigen_data[dataset_key]:
+
+                    eigen_data_full[dataset_key][var_key] = \
+                        eigen_data[dataset_key][var_key]
+
+            first_iteration = False
+
+        else:
+
+            for dataset_key in eigen_data.keys():
+
+                for var_key in eigen_data[dataset_key]:
+
+                    eigen_data_full[dataset_key][var_key] = np.append( 
+                            eigen_data_full[dataset_key][var_key],
+                            eigen_data[dataset_key][var_key], axis = 0)
+
+        plot = False
+        if plot:
+
+            import matplotlib.pyplot as plt
+            fig = plt.figure()
+            ax = plt.gca()
+
+            kwargs = {'alpha' : 0.5}
+
+            ax.scatter( eigen_data_oscil['f_real'],
+                        eigen_data_oscil['f_imag'],
+                        label = 'Oscillation, kept',
+                        **kwargs)
+            ax.scatter( eigen_data_oscil_duplicate['f_real'],
+                        eigen_data_oscil_duplicate['f_imag'],
+                        label = 'Oscillation, discarded',
+                        **kwargs)
+            ax.scatter( eigen_data_relax['f_real'],
+                        eigen_data_relax['f_imag'],
+                        label = 'Relaxation, kept',
+                        **kwargs)
+            #ax.scatter( eigen_data_relax_duplicate['f_real'],
+            #            eigen_data_relax_duplicate['f_imag'],
+            #            label = 'Relaxation, discarded',
+            #            **kwargs)
+
+            ax.legend()
+
+            plt.show()
+    
+    # Get output paths.
+    path_eigenvalues_dict, dir_eigvecs_dict = \
+            get_complex_out_paths_toroidal(dir_output, i_toroidal)
+    
+    # Save datasets.
+    include_n_dict = {'oscil' : True, 'oscil_duplicate' : False,
+                      'relax' : True, 'relax_duplicate' : False }
+    for dataset_key in eigen_data_full.keys():
+
+        # Save eigenvalues.
+        save_eigenvalues_complex(   path_eigenvalues_dict[dataset_key],
+                                    eigen_data_full[dataset_key],
+                                    include_n = include_n_dict[dataset_key])
+
+        # Save eigenvectors.
+        save_eigenvectors_complex(  dir_eigvecs_dict[dataset_key],
+                                    eigvec_comps, r, eigen_data_full[dataset_key],
+                                    include_n = include_n_dict[dataset_key])
+
+    #for key in eigen_data_full.keys():
+
+    #    print('\n')
+    #    for var_key in eigen_data_full[key].keys():
+
+    #        print(var_key, eigen_data_full[key][var_key])
+
+    return
 
 # Radial modes. ---------------------------------------------------------------
 def radial_modes(run_info):
@@ -580,6 +953,18 @@ def spheroidal_modes(run_info):
                 # Construct the matrices A and B.
                 # They are saved.
                 build_matrices_spheroidal_noGP_an(
+                    l, model, count_thick, thickness,
+                    invV, invV_p, invV_V, invV_P,
+                    order, order_p, order_V, order_P,
+                    Dr, Dr_p, Dr_V, Dr_P,
+                    x, x_V,
+                    rho, radius,
+                    block_type, brk_radius, brk_num, layers, switch,
+                    dir_type)
+
+            elif run_info['grav_switch'] == 1:
+
+                build_matrices_spheroidal_G_an(
                     l, model, count_thick, thickness,
                     invV, invV_p, invV_V, invV_P,
                     order, order_p, order_V, order_P,
@@ -1287,6 +1672,150 @@ def build_matrices_spheroidal_noGP_an(
     np.save(os.path.join(dir_numpy, 'A2.npy'),A2)
     np.save(os.path.join(dir_numpy, 'A.npy'),A)
     np.save(os.path.join(dir_numpy, 'B.npy'),B)        
+    np.save(os.path.join(dir_numpy, 'xx.npy'),xx)
+    np.save(os.path.join(dir_numpy, 'x_V.npy'),x_V)
+    np.save(os.path.join(dir_numpy, 'x.npy'),x)
+    np.save(os.path.join(dir_numpy, 'thickness.npy'),thickness)
+
+    return
+
+def build_matrices_spheroidal_G_an(
+        l, model, count_thick, thickness,
+        invV, invV_p, invV_V, invV_P,
+        order, order_p, order_V, order_P,
+        Dr, Dr_p, Dr_V, Dr_P,
+        x, x_V,
+        rho, radius,
+        block_type, brk_radius, brk_num, layers, switch,
+        dir_output):
+
+    k = np.sqrt(l*(l+1))
+
+    # model parameters
+    model.set_k(k)
+    # generate matrices A and B such that Ax  =  omega^2*Bx
+    A = []
+    B = []
+    #length of U,V,p,P, etc
+    #U,V for solid, U,V,p for fluid
+    block_len = []
+    block_pos = [0]
+    Ki = []
+
+    dir_numpy = os.path.join(dir_output, 'numpy')
+    mkdir_if_not_exist(dir_numpy)
+        
+    #relative radius of eigenvector. This is done by squeeze of x in each layer
+    xx = []
+    f_p = open(os.path.join(dir_numpy, 'parameter_S.txt'), 'w')
+    f_p.write(str(l)+'\n')
+    for i in range(layers):
+        cur_model = lib.modelDiv(model,np.arange(count_thick[i],count_thick[i+1]))
+        #basically follow the original order
+        if block_type[i] == 0:
+            [tempA_e,tempB_e,temp_block_len] = FEM.fluid_G_mixedV(cur_model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,rho,radius)
+            [tempA,tempB,temp_Ki,temp_block_len] = FEM.fluid_G_mixedV_an(cur_model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,rho,radius)
+
+        else:
+            [tempA_e,tempB_e,temp_block_len] = FEM.solid_G(cur_model,invV,order,Dr,rho,radius)
+            [tempA,temp_Mmu,tempB,temp_Ki,temp_block_len] = FEM.solid_G_an(cur_model,invV,order,Dr,rho,radius)
+                            
+            np.save(os.path.join(dir_numpy, 'Mmu'+str(i)+'.npy'), temp_Mmu)
+            np.save(os.path.join(dir_numpy, 'mu'+str(i)+'.npy'), cur_model.mu)
+        
+        if i == 0:
+            A = tempA_e
+            B = tempB_e
+            A0 = tempA
+            A2 = tempB
+        else:
+            A = block_diag(A,tempA_e)
+            B = block_diag(B,tempB_e)
+            A0 = block_diag(A0,tempA)
+            A2 = block_diag(A2,tempB)
+        
+        Ki.append(temp_Ki)
+        block_len.append(temp_block_len)
+        xx = np.hstack((xx,lib.sqzx(x[:,count_thick[i]:count_thick[i+1]],thickness[i],order)))
+    
+    # impose boundary condition
+    C = np.zeros(np.shape(A0))
+    count_blk_size = 0
+    for i in range(layers-1):
+        count_blk_size = count_blk_size + np.sum(block_len[i])
+        if block_type[i] == 1: #solid-fluid
+            # manage unit: *1e12/1e15
+            C[count_blk_size+block_len[i+1][0]+block_len[i+1][1],block_len[i][0]-1] = brk_radius[i+1]**2*1e-3
+            C[block_len[i][0]-1,count_blk_size+block_len[i+1][0]+block_len[i+1][1]] = brk_radius[i+1]**2*1e-3
+            
+            g_Rc_plus = lib.gravfield(brk_radius[i+1],rho,radius)
+            C[block_len[i][0]-1,block_len[i][0]-1] = -rho[brk_num[i+1]]*g_Rc_plus*brk_radius[i+1]**2
+        else: #fluid-solid
+            # manage unit: *1e12/1e15
+            C[count_blk_size-1,count_blk_size] = -brk_radius[i+1]**2*1e-3
+            C[count_blk_size,count_blk_size-1] = -brk_radius[i+1]**2*1e-3
+            
+            g_Rb_minus = lib.gravfield(brk_radius[i+1],rho,radius)
+            C[count_blk_size,count_blk_size] = rho[brk_num[i+1]-1]*g_Rb_minus*brk_radius[i+1]**2
+    #boundary condition for fluid outer layer
+    if block_type[-1] == 0:
+        #boundary condition if the outer layer is liquid
+        g_R0 = lib.gravfield(brk_radius[-1],rho,radius)
+        # change back to g_R0
+        C[-1,-1] = -brk_radius[-1]**2/rho[-1]/g_R0*1e-6
+        
+    #anelastic matrix, use -C because there is already a - sign in A0 calculation
+    A0 = A0-C
+    #elastic matrix
+    A = A+C
+    # generalized Helmholtz Decomposition: equivalent form for pressure
+    pos_pressure = []
+    count_blk_size = 0
+    pressure_size = 0
+    for i in range(layers):
+        if block_type[i] == 0:
+            #it is tricky to decide the position of pressure
+            if pressure_size == 0:
+                pos_pressure = np.arange(count_blk_size+block_len[i][0]+block_len[i][1],\
+                                         count_blk_size+block_len[i][0]+block_len[i][1]+block_len[i][2])
+            else:
+                pos_pressure = np.hstack((pos_pressure, np.arange(count_blk_size+block_len[i][0]+block_len[i][1],\
+                                                count_blk_size+block_len[i][0]+block_len[i][1]+block_len[i][2])))
+            pressure_size = pressure_size+block_len[i][2]
+            block_len[i].pop(2)
+        count_blk_size = count_blk_size + np.sum(block_len[i])
+        f_p.write(str(block_type[i])+' ')
+        f_p.write(str(Ki[i])+' ')
+        blk = [str(x) for x in block_len[i]]
+        f_p.write(" ".join(blk)+'\n')
+        
+        for j in range(len(block_len[i])):
+            block_pos.append(block_pos[-1]+block_len[i][j])
+        
+    if pressure_size == 0:
+        A_eqv_pressure = A
+        B_eqv_pressure = B
+        A0_eqv_pressure = A0
+        A2_eqv_pressure = A2
+    else:
+        cut_off_pos_pressure = np.shape(A)[0] - pressure_size
+        A_eqv_pressure = lib.equivForm(A,pos_pressure,cut_off_pos_pressure,1)[0]
+        B_eqv_pressure = lib.equivForm(B,pos_pressure,cut_off_pos_pressure,0)[0]
+        A0_eqv_pressure = lib.equivForm(A0,pos_pressure,cut_off_pos_pressure,1)[0]
+        A2_eqv_pressure = lib.equivForm(A2,pos_pressure,cut_off_pos_pressure,0)[0]
+        #sparse matrix version
+        #A_eqv_pressure = lib.sparse_equivForm(A_singularity_p,pos_pressure,cut_off_pos_pressure,1)[0]
+        #B_eqv_pressure = lib.sparse_equivForm(B_singularity_p,pos_pressure,cut_off_pos_pressure,0)[0]
+    
+    block_pos_new = [str(x) for x in block_pos]
+    f_p.write(" ".join(block_pos_new))
+    f_p.write("\n")
+    f_p.close()
+    #save result for julia code
+    np.save(os.path.join(dir_numpy, 'A0.npy'),A0_eqv_pressure)
+    np.save(os.path.join(dir_numpy, 'A2.npy'),A2_eqv_pressure)
+    np.save(os.path.join(dir_numpy, 'A.npy'),A_eqv_pressure)
+    np.save(os.path.join(dir_numpy, 'B.npy'),B_eqv_pressure)   
     np.save(os.path.join(dir_numpy, 'xx.npy'),xx)
     np.save(os.path.join(dir_numpy, 'x_V.npy'),x_V)
     np.save(os.path.join(dir_numpy, 'x.npy'),x)

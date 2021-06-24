@@ -24,7 +24,13 @@ function read_input_anelastic(path_input_anelastic)
 
         if anelastic_params["model_type"] == "maxwell_uniform"
             
-            anelastic_params["nu"] = parse(Float64, split(readline(f), ' ')[2])
+            anelastic_params["nu1"] = parse(Float64, split(readline(f), ' ')[2])
+        
+        elseif anelastic_params["model_type"] == "burgers_uniform"
+
+            anelastic_params["nu1"] = parse(Float64, split(readline(f), ' ')[2])
+            anelastic_params["nu2"] = parse(Float64, split(readline(f), ' ')[2])
+            anelastic_params["mu2_factor"] = parse(Float64, split(readline(f), ' ')[2])
 
         end
 

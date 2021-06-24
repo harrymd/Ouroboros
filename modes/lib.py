@@ -9,12 +9,9 @@ from scipy.sparse.linalg import spsolve
 from scipy.sparse.linalg import LinearOperator
 import scipy.sparse as sps
 
-## Define constants.
-## G     Gravitational constant, units of cm^3 g^(-1) s^(-2) * e-6
-## Wikipedia.
-##G = 6.67408e-2 
-## Mineos. 
-#G = 6.6723e-2 
+from Ouroboros.constants import G
+# Convert gravitational constant to units of cm^3 g^(-1) s^(-2) * e-6.
+G = G*1.0E9 
 
 # Define numerical tolerance.
 tol = 1e-12

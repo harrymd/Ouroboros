@@ -51,7 +51,7 @@ def get_title_str(mode_type, n, l, code, i_toroidal = None):
 
     return title
 
-def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, ax_imag = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'default', norm_func = 'mineos', units = 'SI', alpha = 1.0, r_lims = None, no_title = False): 
+def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = None, ax_imag = None, save = True, show = True, transparent = True, linestyle = '-', label_suffix = '', plot_gradient = False, plot_potential = False, x_label = 'default', norm_func = 'mineos', units = 'SI', alpha = 1.0, r_lims = None, no_title = False, relaxation = False, duplicate = False): 
     '''
     Wrapper script which gathers the necessary data to plot the eigenfunction.
     '''
@@ -74,7 +74,8 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
         i_fluid, r_solid_fluid_boundary, _ = get_r_fluid_solid_boundary(model['r'], model['v_s'])
 
     # Get frequency information.
-    mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal, n_q = n, l_q = l)
+    mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal, n_q = n, l_q = l,
+                                relaxation = relaxation, duplicate = duplicate)
     f = mode_info['f']
 
     # Get normalisation arguments.
@@ -85,7 +86,9 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     # Get eigenfunction information.
     eigfunc_dict = load_eigenfunc(run_info, mode_type, n, l,
                         i_toroidal = i_toroidal,
-                        norm_args = normalisation_args)
+                        norm_args = normalisation_args,
+                        relaxation = relaxation,
+                        duplicate = duplicate)
     eigfunc_dict['r'] = eigfunc_dict['r']*1.0E-3 # Convert to km.
 
     # Get title string.
@@ -717,6 +720,8 @@ def main():
     parser.add_argument("--norm_func", choices = ['mineos', 'DT'], default = 'DT', help = "Specify normalisation function. \'mineos\' is the normalisation function used by Mineos and Ouroboros. \'DT\' is the normalisation function used in the Dahlen and Tromp textbook. It does not include the factor of k. See also the --units flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.")
     parser.add_argument("--units", choices = ['SI', 'ouroboros', 'mineos'], default = 'mineos', help = 'Specify units used when applying normalisation to eigenfunction. \'SI\' is SI units. \'mineos\' is Mineos units. \'ouroboros\' is Ouroboros units. See also the --norm_func flag. For more detail, see Ouroboros/doc/Ouroboros_normalisation_notes.pdf.')
     parser.add_argument("--r_lims", nargs = 2, type = float, help = 'Specify radius limits of plot (km).')
+    parser.add_argument("--relaxation", action = 'store_true', help = 'Plot a relaxation mode (instead of oscillation mode). Note: only available when attenuation == \'full\'.')
+    parser.add_argument("--duplicate", action = 'store_true', help = 'Plot a duplicate mode. Note 1: only available when attenuation == \'full\'. Note 2: duplicate modes are not sorted by (n, l) but by a single index n (sorted by real part of frequency). l is ignored.')
     args = parser.parse_args()
 
     # Rename input arguments.
@@ -731,6 +736,8 @@ def main():
     norm_func = args.norm_func
     units = args.units
     r_lims = args.r_lims
+    relaxation = args.relaxation
+    duplicate = args.duplicate
 
     # Check input arguments.
     if mode_type == 'R':
@@ -837,7 +844,9 @@ def main():
                 plot_potential = plot_potential,
                 label_suffix = label_suffix, x_label = x_label,
                 norm_func = norm_func, units = units, r_lims = r_lims,
-                no_title = no_title) 
+                no_title = no_title,
+                relaxation = relaxation,
+                duplicate = duplicate) 
 
     return
 

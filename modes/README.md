@@ -66,11 +66,13 @@ The default model file (`prem_noocean_at_03.000_mHz_noq.txt`) is based on the Pr
 
 The path to the output is determined by the input parameters. For example, if `path_to_outdir = ../output`, `path_to_model = model/my_model.txt`, `anelastic` is `none`, `n_layers = 700`, `n_max = 5`, `l_max = 10`, `grav_switch = 0`, and `mode_type = S`, then the output will be saved in `../output/my_model_00700_elastic/00005_00010_0/grav_0/S`. The output consists of the two parts: eigenvalues and eigenvectors (also called eigenfunctions).
 
-For a planet with multiple solid regions separate by fluid regions (for example, the Earth), the toroidal modes in each solid region are completely decoupled from the toroidal modes of other solid regions. Therefore, the eigenvalues for each solid region are saved in separate files `eigenvalues_000.txt`, `eigevalues_001.txt`, ..., labelling from the centre of the planet outwards, and similarly for the eigenfunctions. As an example, for Earth, `000` corresponds to inner-core toroidal modes and `001` corresponds to mantle toroidal modes. Fluid regions do not have toroidal modes (therefore entirely fluid planets do not have any toroidal modes).
+Within the output directory eigenvalues are saved in the file `eigenvalues.txt`, for spheroidal or radial modes. For the toroidal modes, there can be multiple output files when the planet has ith multiple solid regions separate by fluid regions (for example, the Earth), the toroidal modes in each solid region are completely decoupled from the toroidal modes of other solid regions. Therefore, the eigenvalues for each solid region are saved in separate files `eigenvalues_000.txt`, `eigevalues_001.txt`, ..., labelling from the centre of the planet outwards, and similarly for the eigenfunctions. As an example, for Earth, `000` corresponds to inner-core toroidal modes and `001` corresponds to mantle toroidal modes. Fluid regions do not have toroidal modes (therefore entirely fluid planets do not have any toroidal modes).
 
-Within the output directory, the eigenvalues are saved in the file `eigenvalues.txt`. Each line has the value of *n*, *ℓ* and the frequency (in mHz) for a given mode. The modes are listed in order of increasing *n*, then increasing *ℓ*.
+Each line of an eigevalue file lists the value of *n*, *ℓ*, the uncorrected and corrected frequency (in mHz), and the *Q*-factor for a given mode. (If not using the attenuation correction, then the corrected frequency will be the same as the uncorrected frequency, and the *Q*-factor will be 0). The modes are listed in order of increasing *n*, then increasing *ℓ*.
 
 The eigenvectors are stored in the subdirectory `eigenfunctions`. There is one file per mode. The files are stored in NumPy binary format to save space. They can be read with the `numpy.load` function. As an example, the mode with *n* = 3 and *ℓ* = 5 will be saved as `00003_00005.npy`. For spheroidal modes, the output is an array with seven rows, corresponding to *r* (radial coordinate in metres), *U* and *U'* (radial eigenfunction and its gradient), *V* and *V'* (consoidal eigenfunction and its gradient), and *P* and *P'* (gravitational potential perturbation and its gradient). For toroidal modes, there are just three rows, corresponding to *r* and *W* and *W'* (toroidal eigenfunction and its gradient). For radial modes, there are five rows, corresponding to *r*, *U*, *U'*, *P* and *P'*. For definitions of *U*, *V*, *W*, and *P*, see Dahlen and Tromp (1998, section 8.6.1).
+
+When exact attenuation is used (see [below](#exact-attenuation)), the eigenvalues and eigenvalues are complex numbers. <span style="color:red">Describe format here</span>.
 
 The normalisation of the eigenfunctions used internally by *Ouroboros* differs from the normalisation used in *Mineos*. However, the scripts for loading eigenfunctions can convert between various normalisations; for more information, see `docs/Ouroboros_normalisation_notes.pdf` and the function `load_eigenfuncs()` from `common.py`.
 
@@ -78,7 +80,7 @@ By default, the sensitivity kernels are also calculated and stored in the subdic
 
 #### Analytical solution for homogeneous sphere
 
-You can run *Ouroboros* with a homogeneous model. However, in this simple case, analytical solutions exist. These can be calculated with the command
+You can run *Ouroboros* with a homogeneous model. However, in this simple case, analytical solutions exist (although so far we have only implemented toroidal modes). These can be calculated with the command
 
 ```
 python3 modes/modes_homogeneous.py example/input/example_input_Ouroboros_modes_homogeneous.txt
@@ -128,7 +130,7 @@ python3 plot/plot_dispersion.py example/input/example_input_Ouroboros_modes.txt
 
 The plot will appear on your screen, and will also be saved in `dir_output`, in a subdirectory called `plots/`. By default, the spheroidal modes are plotted, and the radial modes, with *ℓ* = 0, are added automatically if they are found in the output directory:
 
-<img src="../docs/figs//example_dispersion.png" width="90%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
+<img src="../docs/figs/example_dispersion.png" width="90%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
 
 For toroidal modes, you must specify the solid region whose modes you wish to plot (see discussion in section *The format of the output files*, above). For example, to plot the  Earth's mantle toroidal modes you would use the command
 
@@ -197,7 +199,7 @@ The format of the anelastic input file depends on the type of anelastic model wh
 model maxwell_uniform
 ```
 
-specifies a Maxwell rheology which is the same for each element. Anelastic models which are currently supported are: `maxwell_uniform`. The input file is described for each model below:
+specifies a Maxwell rheology which is the same for each element. Anelastic models which are currently supported are: `maxwell_uniform` and `burgers_uniform`. The input file is described for each model below:
 
 ##### Common parameters
 
@@ -207,6 +209,8 @@ The parameter `eig_start_mHz` is the starting point (frequency) for the eigenval
 
 ##### Uniform Maxwell rheology
 
+<img src="../docs/figs/diagram_maxwell_rheology.png" width="30%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
+
 ```
 model maxwell_uniform
 n_eigs 5
@@ -214,9 +218,23 @@ eig_start_mHz 1.0
 eta 1.0E15
 ```
 
-
-
 The parameter `eta` (η) is the viscosity of the Maxwell rheology in SI units (N m^-2 s^-1 ). The unrelaxed shear modulus (μ) is that of the input planetary model. Therefore μ can be a function of radius, but η is uniform throughout the planet.
+
+##### Uniform Burgers rheology
+
+<img src="../docs/figs/diagram_burgers_rheology.png" width="40%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
+
+```
+model burgers_uniform
+n_eigs 5
+eig_start_mHz 1.0
+eta1 1.0E22
+eta2 1.0E15
+mu2_factor 75.0
+```
+
+The parameters `eta1` and `eta2` (η<sub>1</sub> and η<sub>2</sub>) are the viscosities of the dashpot elements (see diagram) in SI units (N m^-2 s^-1 ). The parameter `mu2_factor` gives the ratio μ<sub>2</sub>/μ<sub>1</sub> of the spring constants shown in the diagram. These three variables are uniform throughout the planet, but μ<sub>1</sub> is specified by the input planetary model, and so μ<sub>1</sub> and μ<sub>2</sub> can vary as a function of radius (but not independently).
+
 
 <a style="color: #000000" name="method"/>
 

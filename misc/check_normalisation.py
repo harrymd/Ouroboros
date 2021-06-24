@@ -84,6 +84,7 @@ def main():
 
     load_eigfunc_norm_args = {'norm_func' : eig_norm, 'units' : eig_norm_units}
     if eig_norm == 'DT':
+
         load_eigfunc_norm_args['omega'] = f_rad_per_s
 
     # Load eigenfunction(s).
@@ -126,7 +127,6 @@ def main():
         print('Multiplying eigenfunction(s) by {:>10.3e}'.format(eig_scale))
         if mode_type == 'R':
 
-            #U = U/np.sqrt(1.0E9)
             U = U*eig_scale
 
         elif mode_type == 'S':

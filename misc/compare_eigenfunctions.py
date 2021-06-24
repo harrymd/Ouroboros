@@ -17,7 +17,7 @@ def get_eigfunc_comparison_out_path(run_info_A, run_info_B, mode_type):
     Find the path to the output file of the comparison.
     '''
 
-    if run_info_A['code'] == 'ouroboros':
+    if run_info_A['code'] in ['ouroboros', 'ouroboros_homogeneous']:
 
         _, _, _, dir_output = get_Ouroboros_out_dirs(run_info_A, mode_type)
 
@@ -302,13 +302,25 @@ def comparison_wrapper_T(run_info_A, run_info_B, n, l, om_A, om_B, norm_args, i_
         eigfunc_dict_B['W'] = (eigfunc_dict_B['W'] * -1.0)
 
     # Get locations of discontinuities.
-    model_A = load_model(run_info_A['path_model'])
-    _, _, i_discon_B = \
-            get_r_fluid_solid_boundary(model_A['r'], model_A['v_s'])
+    if run_info_A['code'] == 'ouroboros_homogeneous':
 
-    model_B = load_model(run_info_B['path_model'])
-    _, _, i_discon_A = \
-            get_r_fluid_solid_boundary(model_B['r'], model_B['v_s'])
+        i_discon_A = []
+
+    else:
+
+        model_A = load_model(run_info_A['path_model'])
+        _, _, i_discon_A = \
+                get_r_fluid_solid_boundary(model_A['r'], model_A['v_s'])
+
+    if run_info_B['code'] == 'ouroboros_homogeneous':
+
+        i_discon_B = []
+
+    else:
+
+        model_B = load_model(run_info_B['path_model'])
+        _, _, i_discon_B = \
+                get_r_fluid_solid_boundary(model_B['r'], model_B['v_s'])
 
     assert len(i_discon_A) == len(i_discon_B), \
             'Number of discontinuities must be the same for both models.'

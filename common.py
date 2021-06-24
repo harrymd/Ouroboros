@@ -700,7 +700,7 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
     # Generate the name of the output directory based on the Ouroboros
     # parameters.
     _, _, _, dir_eigval  = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-    
+
     # Get name of eigenvalues file.
     file_name = 'eigenvalues'
 
@@ -771,7 +771,7 @@ def load_eigenfreq_Ouroboros(Ouroboros_info, mode_type, n_q = None, l_q = None, 
 
     return mode_info
 
-def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None, norm_func = 'mineos', units = 'SI', omega = None):
+def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None, norm_func = 'mineos', units = 'SI', omega = None, relaxation = False, duplicate = False):
     '''
     Loads the eigenfunction(s) for a specific mode calculated with Ouroboros.
 
@@ -782,6 +782,12 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     SI          Use the Mineos/Ouroboros normalisation formula with SI units. 
     DT          Use the Dahlen and Tromp normalisation formula with SI units.
     '''
+
+    if (relaxation or duplicate):
+
+        assert Ouroboros_info['attenuation'] == 'full', \
+            'Options relaxation == True and duplicate == True are only '\
+            'compatible with attenuation == \'full\'.'
 
     # For toroidal modes, must specify the solid layer number.
     # This is due to the automatic separation of uncoupled toroidal modes
@@ -802,13 +808,45 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # Find the directory containing the eigenfunctions (which is contained
     # within the eigenvalue directory) based on the Ouroboros parameters.
     _, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-    dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
     if Ouroboros_info['attenuation'] == 'full':
 
-        file_eigenfunc  = 'eigvec_{:>05d}_{:>05d}.txt'.format(n, l)
+        path_eigenvalues_dict, dir_eigvecs_dict = \
+                get_complex_out_paths_toroidal(dir_eigval, i_toroidal)
+        
+        if relaxation:
+
+            if duplicate:
+
+                dataset_key = 'relax_duplicate'
+
+            else:
+
+                dataset_key = 'relax'
+
+        else:
+
+            if duplicate:
+
+                dataset_key = 'oscil_duplicate'
+
+            else:
+
+                dataset_key = 'oscil'
+
+        dir_eigenfuncs = dir_eigvecs_dict[dataset_key]
+
+        if duplicate:
+
+            file_eigenfunc  = '{:>05d}.npy'.format(n)
+
+        else:
+
+            file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
 
     else:
 
+
+        dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
         file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
 
     path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
@@ -835,7 +873,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
         eigfunc_norm = np.sqrt(1.0E-9)
         grad_norm = 1.0E-3
-        pot_norm = 1.0E3*np.sqrt(1.0E-9)
+        pot_norm = 1.0E3 * np.sqrt(1.0E-9)
 
     else:
 
@@ -871,7 +909,8 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     elif mode_type == 'S':
 
         if Ouroboros_info['attenuation'] == 'full':
-
+            
+            raise NotImplementedError
             # Load eigenfunction.
             r, U, U_im, V, V_im = np.loadtxt(path_eigenfunc).T
 
@@ -894,7 +933,8 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
         if Ouroboros_info['attenuation'] == 'full':
 
             # Load eigenfunction.
-            r, W, W_im = np.loadtxt(path_eigenfunc).T
+            #r, W, W_im = np.loadtxt(path_eigenfunc).T
+            r, W, W_im = np.load(path_eigenfunc)
 
             # Store in dictionary.
             eigenfunc_dict = {'r' : r, 'W' : W, 'W_im' : W_im}
@@ -1081,151 +1121,69 @@ def load_kernel(run_info, mode_type, n, l, units = 'standard', i_toroidal = None
     return r, K_ka, K_mu, K_rho
 
 # Loading data from Ouroboros (anelastic version). ----------------------------
-def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, n_q = None, l_q = None, i_toroidal = None, flatten = True):
+def get_complex_out_paths_toroidal(dir_output, i_toroidal):
+
+    path_eigenvalues = dict()
+    dir_eigvecs = dict()
+    key_list = ['oscil', 'oscil_duplicate', 'relax', 'relax_duplicate']
+
+    for key in key_list: 
+
+        name_eigenvalues = 'eigenvalues_{:}_{:>03d}.txt'.format(key, i_toroidal)
+        path_eigenvalues[key] = os.path.join(dir_output, name_eigenvalues)
+        
+        name_eigvecs = 'eigvecs_{:}_{:>03d}'.format(key, i_toroidal)
+        dir_eigvecs[key] = os.path.join(dir_output, name_eigvecs)
+        mkdir_if_not_exist(dir_eigvecs[key])
+
+    return path_eigenvalues, dir_eigvecs
+
+def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, i_toroidal = None):
 
     if mode_type == 'T':
 
         assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
 
-    # Generate the name of the output directory based on the Ouroboros
-    # parameters.
-    _, _, _, dir_eigval  = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-    
-    # Get name of eigenvalues file.
-    file_name = 'eigenvalues'
+    else:
 
-    l_list = list(range(Ouroboros_info['l_lims'][0],
-                        Ouroboros_info['l_lims'][1] + 1))
-    l_list = [l for l in l_list if l != 0]
-    l_list = np.array(l_list, dtype = np.int)
+        raise NotImplementedError
 
-    # Prepare output array.
-    n_l_values = len(l_list)
-    num_eigen = 5
-    #
-    # omega: Real part of angular frequency (rad / s).
-    # gamma: Imaginary part of angular frequency, i.e. decay rate (1 / s).
-    n     = np.zeros((n_l_values, num_eigen), dtype = np.int)
-    omega = np.zeros((n_l_values, num_eigen))
-    gamma = np.zeros((n_l_values, num_eigen))
-    
-    # Load eigenvalues for each mode.
-    for i, l in enumerate(l_list):
+    # Get output paths.
+    dir_model, dir_run, dir_g, dir_type = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
+    path_eigenvalues_dict, dir_eigvecs_dict = \
+            get_complex_out_paths_toroidal(dir_type, i_toroidal)
 
-        # Get name of eigenvalue for this l-value.
-        if i_toroidal is not None:
+    # Loop over dataset keys.
+    dataset_keys = ['oscil', 'relax', 'oscil_duplicate', 'relax_duplicate']
+    include_n_dict = {'oscil' : True, 'oscil_duplicate' : False,
+                      'relax' : True, 'relax_duplicate' : False }
+    eigval_info_full = dict()
+    for dataset_key in dataset_keys:
+        
+        eigval_data = np.loadtxt(path_eigenvalues_dict[dataset_key]).T
+        if len(eigval_data.shape) == 1:
 
-            file_eigval = '{:}_{:>03d}_{:>05d}.txt'.format(file_name,
-                            i_toroidal, l)
+            eigval_data = eigval_data[:, np.newaxis]
+
+        eigval_info = dict()
+
+        if include_n_dict[dataset_key]:
+
+            eigval_info['n']        = eigval_data[0, :].astype(np.int) 
+            eigval_info['l']        = eigval_data[1, :].astype(np.int) 
+            eigval_info['f']        = eigval_data[2, :]
+            eigval_info['gamma']    = eigval_data[3, :]
 
         else:
 
-            file_eigval = '{:}_{:>05d}.txt'.format(file_name, l)
+            eigval_info['l']        = eigval_data[0, :].astype(np.int) 
+            eigval_info['f']        = eigval_data[1, :]
+            eigval_info['gamma']    = eigval_data[2, :]
 
-        path_eigval = os.path.join(dir_eigval, file_eigval)
+        eigval_info_full[dataset_key] = eigval_info
 
-        # Here we assume that no modes are missing.
-        n[i, :] = range(num_eigen)
-        if l == 1:
+    return eigval_info_full
 
-            n[i, :] = n[i, :] + 1
-
-        # Load data for this l-value.
-        no_files = True
-        try:
-        
-            eigval_data_i = np.loadtxt(path_eigval)
-            #omega[i, :] = eigval_data_i[:, 3][::-1]
-            #gamma[i, :] = eigval_data_i[:, 4][::-1]
-            omega[i, :] = eigval_data_i[:, 3]
-            gamma[i, :] = eigval_data_i[:, 4]
-
-            no_files = False
-
-        except IOError: 
-
-            omega[i, :] = np.nan 
-            gamma[i, :] = np.nan 
-
-        if no_files:
-
-            raise IOError('Input files such as {:} not found'.format(path_eigval))
-
-    f_mHz = (omega * 1.0E3) / (2.0 * np.pi)
-
-    # Store in dictionary.
-    mode_info = dict()
-    mode_info['n'] = n
-    mode_info['l'] = (l_list[:, np.newaxis] * np.ones(omega.shape,
-                        dtype = np.int))
-    mode_info['omega'] = omega
-    mode_info['gamma'] = gamma
-    mode_info['f'] = f_mHz
-
-    if flatten:
-
-        for key in mode_info.keys():
-
-            mode_info[key] = mode_info[key].flatten()
-
-    if (n_q is not None) and (l_q is not None):
-
-        assert flatten
-        i = np.where((mode_info['n'] == n_q) & (mode_info['l'] == l_q))[0][0]
-        mode_info_new = dict()
-        for key in ['omega', 'gamma', 'f']:
-            
-            mode_info_new[key] = mode_info[key][i]
-        
-        mode_info = mode_info_new
-
-    return mode_info
-
-def load_eigenfunc_Ouroboros_anelastic(Ouroboros_info, mode_type, n, l, i_toroidal = None):
-
-    ## For toroidal modes, must specify the solid layer number.
-    ## This is due to the automatic separation of uncoupled toroidal modes
-    #if mode_type == 'T':
-
-    #    assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
-
-    ## Get the eigenfunction directory.
-    #dir_name = 'eigenfunctions'
-    #if i_toroidal is None:
-
-    #    dir_eigenfuncs = '{:}'.format(dir_name)
-
-    #else:
-
-    #    dir_eigenfuncs = '{:}_{:>03d}'.format(dir_name, i_toroidal)
-
-    ## Find the directory containing the eigenfunctions (which is contained
-    ## within the eigenvalue directory) based on the Ouroboros parameters.
-    #_, _, _, dir_eigval      = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)
-    #dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
-    #file_eigenfunc  = 'eigvec_{:>05d}_{:>05d}.txt'.format(n, l)
-    #path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
-
-    ## Load.
-    #if mode_type == 'T':
-
-    #    data_eigenfunc = np.loadtxt(path_eigenfunc)
-
-    #    r = data_eigenfunc[:, 0]
-    #    W_real = data_eigenfunc[:, 1]
-    #    W_imag = data_eigenfunc[:, 2]
-
-    #    eigfunc_info = {'r' : r, 'W_real' : W_real, 'W_imag' : W_imag}
-
-    #else:
-
-    #    raise NotImplementedError
-
-    #return eigfunc_info
-    pass
-
-    return
-    
 # Loading data from Mineos. ---------------------------------------------------
 def load_eigenfreq_Mineos(run_info, mode_type, n_q = None, l_q = None, n_skip = None):
     '''
@@ -1466,7 +1424,7 @@ def read_summation_input_file(path_input, code):
 
     return summation_info
 
-def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = None):
+def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = None, relaxation = False, duplicate = False):
     '''
     Loads mode frequencies from either Mineos or Ouroboros formats.
     Specify a single mode with the 'n_q' and 'l_q' variables.
@@ -1481,8 +1439,48 @@ def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = Non
 
         elif run_info['attenuation'] == 'full':
 
-            mode_info = load_eigenfreq_Ouroboros_anelastic(run_info, mode_type,
-                            n_q = n_q, l_q = l_q, i_toroidal = i_toroidal)
+            mode_info_full = load_eigenfreq_Ouroboros_anelastic(run_info, mode_type,
+                                i_toroidal = i_toroidal)
+
+            if relaxation:
+
+                if duplicate:
+
+                    database_key = 'relax_duplicate'
+
+                else:
+
+                    database_key = 'relax'
+
+            else:
+
+                if duplicate:
+
+                    database_key = 'oscil_duplicate'
+
+                else:
+
+                    database_key = 'oscil'
+
+            mode_info = mode_info_full[database_key]
+
+            if n_q is not None:
+                
+                if duplicate:
+
+                    i = n_q
+
+                else:
+
+                    assert l_q is not None
+                    i = np.where((mode_info['n'] == n_q) &
+                                 (mode_info['l'] == l_q))[0]
+
+                mode_info_copy = mode_info.copy()
+
+                for key in mode_info_copy.keys():
+                    
+                    mode_info[key] = mode_info_copy[key][i]
 
     elif run_info['code'] == 'mineos':
 
@@ -1494,7 +1492,7 @@ def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = Non
 
     return mode_info
 
-def load_eigenfunc(run_info, mode_type, n, l, i_toroidal = None, norm_args = {'norm_func' : 'mineos', 'units' : 'SI', 'omega' : None}):
+def load_eigenfunc(run_info, mode_type, n, l, i_toroidal = None, norm_args = {'norm_func' : 'mineos', 'units' : 'SI', 'omega' : None}, relaxation = False, duplicate = False):
     '''
     Loads a mode eigenfunction from either Mineos or Ouroboros formats.
     Specify the normalisation arguments with the norm_args variable (see
@@ -1504,7 +1502,10 @@ def load_eigenfunc(run_info, mode_type, n, l, i_toroidal = None, norm_args = {'n
     if run_info['code'] in ['ouroboros', 'ouroboros_homogeneous']:
         
         eigenfunc_dict = load_eigenfunc_Ouroboros(run_info, mode_type, n, l,
-                            i_toroidal = i_toroidal, **norm_args)
+                            relaxation  = relaxation,
+                            duplicate   = duplicate,
+                            i_toroidal  = i_toroidal,
+                            **norm_args)
 
     elif run_info['code'] == 'mineos':
 

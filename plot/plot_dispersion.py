@@ -163,9 +163,9 @@ def plot_dispersion(n, l, f, ax = None, l_lims = 'auto', f_lims = 'auto', x_labe
     # Get a unique, sorted list of n-values.
     n_list = sorted(list(set(n)))
 
-    for i in range(len(n)):
+    #for i in range(len(n)):
 
-        print(n[i], l[i], f[i])
+    #    print(n[i], l[i], f[i])
     
     # Create axes (if necessary).
     if ax is None:
