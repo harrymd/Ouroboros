@@ -10,9 +10,17 @@ from Ouroboros.common import (  get_Ouroboros_out_dirs, load_eigenfreq,
 from Ouroboros.plot.plot_dispersion import plot_dispersion_wrapper
 
 def get_var_lim(mode_info, dataset_key_list, var):
+
+    mode_info_merged = []
+    for dataset_key in dataset_key_list:
+
+        mode_info_merged.extend(mode_info[dataset_key][var])
+
+    x_min = np.min(mode_info_merged)
+    x_max = np.max(mode_info_merged)
     
-    x_min = np.min([np.min(mode_info[dataset_key][var]) for dataset_key in dataset_key_list])
-    x_max = np.max([np.max(mode_info[dataset_key][var]) for dataset_key in dataset_key_list])
+    #x_min = np.min([np.min(mode_info[dataset_key][var]) for dataset_key in dataset_key_list])
+    #x_max = np.max([np.max(mode_info[dataset_key][var]) for dataset_key in dataset_key_list])
     x_range = (x_max - x_min)
     if (x_range == 0.0):
 
@@ -34,7 +42,7 @@ def get_var_lim(mode_info, dataset_key_list, var):
 
     return x_lims
 
-def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True, include_duplicates = True, dataset_types = ['oscil', 'relax'], label_modes = False):
+def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True, include_duplicates = True, dataset_types = ['oscil', 'relax'], label_modes = False, equal_aspect = True):
 
     # Load mode data.
     #mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal)
@@ -66,12 +74,32 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
     else:
         
         dataset_key_list = dataset_types
-
+    
     f_lim       = get_var_lim(mode_info, dataset_key_list, 'f')
     gamma_lim   = get_var_lim(mode_info, dataset_key_list, 'gamma')
 
-    gamma_scale = 1.0E3
+    
+    if equal_aspect:
 
+        gamma_scale = 1.0
+        y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{3}$ s$^{-1}$)'
+
+    else:
+
+        gamma_scale = 1.0E3
+        y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{6}$ s$^{-1}$)'
+
+
+    if equal_aspect:
+
+        if np.abs(f_lim[1]) > np.abs(gamma_lim[1] * gamma_scale):
+
+            gamma_lim = f_lim / gamma_scale
+
+        else:
+            
+            f_lim = (gamma_lim * gamma_scale)
+    
     # Plot modes.
     for dataset_key in dataset_key_list:
 
@@ -114,8 +142,7 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
     #ax.set_ylabel('Decay rate, $\gamma$ (s$^{-1}$)',
     #                fontsize = font_size_label)
     ax.set_xlabel('Frequency, $f$ (mHz)', fontsize = font_size_label)
-    ax.set_ylabel('Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{6}$ s$^{-1}$)',
-                    fontsize = font_size_label)
+    ax.set_ylabel(y_label, fontsize = font_size_label)
     ax.legend(loc= 'best')
 
     # Set the x-spine.
@@ -131,6 +158,10 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
     # Turn off the top spine/ticks.
     ax.spines['top'].set_color('none')
     ax.xaxis.tick_bottom()
+    
+    if equal_aspect:
+
+        ax.set_aspect(1.0 / gamma_scale)
 
     ## Tidy axes.
     #line_kwargs = {'color' : 'black', 'alpha' : 0.5}
@@ -162,6 +193,7 @@ def main():
     parser.add_argument("--relax_or_oscil", choices = ['both', 'relax', 'oscil'], default = 'both', help = "Choose between plotting oscillation modes, relaxation modes, or both.")
     parser.add_argument("--show_duplicates", action = 'store_true', help = 'Include this flag to show modes that were identified as duplicates.')
     parser.add_argument("--label_modes", action = 'store_true', help = 'Include this flag to label modes.')
+    parser.add_argument("--equal_aspect", action = 'store_true', help = 'Include this flag to plot equal aspect ratios for real and imaginary axes.')
     #
     args = parser.parse_args()
 
@@ -171,6 +203,7 @@ def main():
     relax_or_oscil  = args.relax_or_oscil
     show_duplicates = args.show_duplicates
     label_modes     = args.label_modes
+    equal_aspect    = args.equal_aspect
 
     if relax_or_oscil == 'both':
 
@@ -200,7 +233,8 @@ def main():
     plot_modes_complex_plane(run_info, mode_type, i_toroidal = i_toroidal,
             include_duplicates  = show_duplicates,
             dataset_types       = dataset_types,
-            label_modes         = label_modes)
+            label_modes         = label_modes,
+            equal_aspect        = equal_aspect)
 
     return
 

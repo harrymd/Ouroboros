@@ -234,12 +234,13 @@ function toroidal_rep(args)
     # Solve non-linear eigenvalue problem.
     println("Trying to solve eigenvalue problem...")
     method = "iar"
+    tol = 1.0E-13
     if method == "iar"
 
         eigvals, eigvecs = iar( nep, maxit = 100 , σ = eig_start_rad_per_s,
                                 neigs = num_eigen,
                                 logger = 1,
-                                tol = 1.0E-5)
+                                tol = tol)
 
     #elseif method == "tiar"
 

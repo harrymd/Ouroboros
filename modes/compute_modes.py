@@ -83,7 +83,7 @@ def toroidal_modes(run_info):
         
         if run_info['attenuation'] == 'full':
 
-            solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num,
+            solve_toroidal_anelastic(l, nmin, nmax, lmax, model, x, vs, layers, brk_num,
                     count_thick, thickness, invV, order, Dr,
                     dir_type,
                     run_info['path_atten'])
@@ -94,6 +94,15 @@ def toroidal_modes(run_info):
             solve_toroidal_elastic(l, nmin, nmax, model, x, vs, layers, brk_num,
                     count_thick, thickness, invV, order, Dr,
                     dir_eigenfunc_list, path_eigenvalues_list)
+
+    # Process the Julia output.
+    if run_info['attenuation'] == 'full':
+
+        for i in range(layers):
+
+            if vs[brk_num[i]] != 0:
+
+                process_eigen_toroidal_anelastic(dir_type, i, lmax)
 
     return 
 
@@ -129,7 +138,7 @@ def solve_toroidal_elastic(l, nmin, nmax, model, x, vs, layers, brk_num, count_t
 
     return
 
-def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_output, path_input_anelastic):
+def solve_toroidal_anelastic(l, nmin, nmax, l_max, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_output, path_input_anelastic):
 
     # Calculate asymptotic wavenumber.
     k = np.sqrt(l*(l + 1.0))
@@ -149,7 +158,7 @@ def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count
 
             # generate matrices A and B such that Ax  =  omega^2*Bx
             [Mmu,A2,Ki,dimension] = FEM.toroidal_an(cur_model,invV,order,Dr)
-            [A,B] = FEM.toroidal(cur_model,invV,order,Dr)
+            #[A,B] = FEM.toroidal(cur_model,invV,order,Dr)
 
             dir_numpy = os.path.join(dir_output, 'numpy_{:>03d}'.format(i))
             mkdir_if_not_exist(dir_numpy)
@@ -159,8 +168,8 @@ def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count
             
             xx = lib.sqzx(x[:,count_thick[i]:count_thick[i+1]],thickness[i],order)
             np.save(os.path.join(dir_numpy, 'xx.npy'),xx)
-            np.save(os.path.join(dir_numpy, 'A.npy'),A)
-            np.save(os.path.join(dir_numpy, 'B.npy'),B)
+            #np.save(os.path.join(dir_numpy, 'A.npy'),A)
+            #np.save(os.path.join(dir_numpy, 'B.npy'),B)
             np.save(os.path.join(dir_numpy, 'Mmu.npy'),Mmu)
             np.save(os.path.join(dir_numpy, 'A2.npy'),A2)
             np.save(os.path.join(dir_numpy, 'mu.npy'),cur_model.mu)
@@ -170,11 +179,41 @@ def solve_toroidal_anelastic(l, nmin, nmax, model, x, vs, layers, brk_num, count
             f_p.write(str(dimension)+'\n')
             f_p.close()
 
+            #import matplotlib.pyplot as plt
+
+            ##fig = plt.figure()
+            ##ax  = plt.gca()
+            ##
+            ##N = A2.shape[0]
+            ##G = np.zeros((N,N,3))
+
+            ### Where we set the RGB for each pixel
+            ##G[A2>0.0] = [1,1,1]
+
+            ###ax.imshow(np.abs(A2), vmin = 0.0, vmax = np.max(np.abs(A2)))
+            ##ax.imshow(G)
+            ##plt.show()
+
+            #for i in range(Mmu.shape[0]):
+
+            #    fig = plt.figure()
+            #    ax = plt.gca()
+
+            #    N = Mmu[i, ...].shape[0]
+            #    G = np.zeros((N,N,3))
+            #    G[np.abs(Mmu[i, ...]) > 0.0] = [1,1,1]
+
+            #    #ax.imshow(np.abs(Mmu[i, ...]), vmin = 0.0, vmax = np.max(np.abs(Mmu[i, ...])))
+            #    ax.imshow(G)
+
+            #    print(i, np.linalg.matrix_rank(Mmu[i, ...]))
+            #    plt.show()
+
+            #import sys
+            #sys.exit()
+
             cmd = "julia modes/julia/toroidal_an.jl {:} {:} {:d}".format(path_input_anelastic, dir_output, i)
             subprocess.run(cmd, shell = True)
-
-            # Process the Julia output.
-            process_eigen_toroidal_anelastic(dir_output, i)
 
     return
 
@@ -462,7 +501,7 @@ def save_eigenvectors_complex(dir_eigenfunc, eigvec_comps, r, eigen_data, includ
 
     return
 
-def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max, num_eigen):
+def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
     
     mode_type = 'T'
     eigvec_comps = ['W']
@@ -526,20 +565,23 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max, num_eigen):
 
         # Label the modes.
         n_offset = 0
+        n_offset_oscil = 0
         if mode_type == 'T':
 
             if l == 1:
 
-                n_offset = 1
+                n_offset_oscil = 1
 
-        eigen_data_oscil = label_complex_modes(eigen_data_oscil, l, n_offset = n_offset)
-        eigen_data_relax = label_complex_modes(eigen_data_relax, l, n_offset = n_offset)
-        eigen_data_oscil_duplicate['l'] = \
-            np.zeros(len(eigen_data_oscil_duplicate['f_real']), dtype = np.int)\
-            + l
-        eigen_data_relax_duplicate['l'] = \
-            np.zeros(len(eigen_data_relax_duplicate['f_real']), dtype = np.int)\
-            + l
+        eigen_data_oscil            = label_complex_modes(eigen_data_oscil,             l, n_offset = n_offset_oscil)
+        eigen_data_oscil_duplicate  = label_complex_modes(eigen_data_oscil_duplicate,   l, n_offset = n_offset)
+        eigen_data_relax            = label_complex_modes(eigen_data_relax,             l, n_offset = n_offset)
+        eigen_data_relax_duplicate  = label_complex_modes(eigen_data_relax_duplicate,   l, n_offset = n_offset)
+        #eigen_data_oscil_duplicate['l'] = \
+        #    np.zeros(len(eigen_data_oscil_duplicate['f_real']), dtype = np.int)\
+        #    + l
+        #eigen_data_relax_duplicate['l'] = \
+        #    np.zeros(len(eigen_data_relax_duplicate['f_real']), dtype = np.int)\
+        #    + l
 
         # Add to master list.
         eigen_data = {
@@ -604,8 +646,10 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max, num_eigen):
             get_complex_out_paths_toroidal(dir_output, i_toroidal)
     
     # Save datasets.
-    include_n_dict = {'oscil' : True, 'oscil_duplicate' : False,
-                      'relax' : True, 'relax_duplicate' : False }
+    include_n_dict = {'oscil' : True, 'oscil_duplicate' : True,
+                      'relax' : True, 'relax_duplicate' : True }
+    #include_n_dict = {'oscil' : True, 'oscil_duplicate' : False,
+    #                  'relax' : True, 'relax_duplicate' : False }
     for dataset_key in eigen_data_full.keys():
 
         # Save eigenvalues.

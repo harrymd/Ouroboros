@@ -235,6 +235,16 @@ mu2_factor 75.0
 
 The parameters `eta1` and `eta2` (η<sub>1</sub> and η<sub>2</sub>) are the viscosities of the dashpot elements (see diagram) in SI units (N m^-2 s^-1 ). The parameter `mu2_factor` gives the ratio μ<sub>2</sub>/μ<sub>1</sub> of the spring constants shown in the diagram. These three variables are uniform throughout the planet, but μ<sub>1</sub> is specified by the input planetary model, and so μ<sub>1</sub> and μ<sub>2</sub> can vary as a function of radius (but not independently).
 
+#### Plotting complex modes
+
+All of the standard plotting commands are compatible with `attenuation = full`. For example, `plot_dispersion()` will show the real part of the frequency of the oscillatory modes. To see the modes plotted on the complex plane, use
+
+```
+python3 plot/plot_complex_modes.py example/???
+```
+
+The standard command `plot_eigenfunctions()` will show the real and imaginary parts of the eigenfunctions. For the previous two commands, the `--relaxation` flag can be used to show relaxation modes, and the `--duplicate` flag can be used to show duplicate modes.
+
 
 <a style="color: #000000" name="method"/>
 

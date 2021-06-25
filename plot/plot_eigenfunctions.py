@@ -90,7 +90,7 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
                         relaxation = relaxation,
                         duplicate = duplicate)
     eigfunc_dict['r'] = eigfunc_dict['r']*1.0E-3 # Convert to km.
-
+    
     # Get title string.
     title = get_title_str(mode_type, n, l, run_info['code'], i_toroidal = i_toroidal)
 

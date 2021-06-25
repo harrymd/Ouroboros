@@ -835,20 +835,11 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
         dir_eigenfuncs = dir_eigvecs_dict[dataset_key]
 
-        if duplicate:
-
-            file_eigenfunc  = '{:>05d}.npy'.format(n)
-
-        else:
-
-            file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
-
     else:
 
-
         dir_eigenfuncs  = os.path.join(dir_eigval, dir_eigenfuncs)
-        file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
 
+    file_eigenfunc  = '{:>05d}_{:>05d}.npy'.format(n, l)
     path_eigenfunc  = os.path.join(dir_eigenfuncs, file_eigenfunc)
     
     # Define normalisation constants.
@@ -984,6 +975,11 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     # Apply normalisation to terms requiring factor of k.
     k_norm_list = ['V', 'Vp', 'V_im', 'W', 'Wp', 'W_im']
     if norm_func == 'DT':
+
+        # Check for error.
+        if (k == 0.0) & (mode_type != 'R'):
+
+            print('Warning: Multiplying by k = 0.')
 
         for var in k_norm_list:
 
@@ -1157,13 +1153,21 @@ def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, i_toroidal = N
     dataset_keys = ['oscil', 'relax', 'oscil_duplicate', 'relax_duplicate']
     include_n_dict = {'oscil' : True, 'oscil_duplicate' : False,
                       'relax' : True, 'relax_duplicate' : False }
+    include_n_dict = {'oscil' : True, 'oscil_duplicate' : True,
+                      'relax' : True, 'relax_duplicate' : True }
     eigval_info_full = dict()
     for dataset_key in dataset_keys:
         
         eigval_data = np.loadtxt(path_eigenvalues_dict[dataset_key]).T
         if len(eigval_data.shape) == 1:
 
-            eigval_data = eigval_data[:, np.newaxis]
+            if eigval_data.shape[0] == 0:
+
+                eigval_data = np.zeros((4, 0))
+            
+            else:
+
+                eigval_data = eigval_data[:, np.newaxis]
 
         eigval_info = dict()
 
@@ -1466,15 +1470,9 @@ def load_eigenfreq(run_info, mode_type, n_q = None, l_q = None, i_toroidal = Non
 
             if n_q is not None:
                 
-                if duplicate:
-
-                    i = n_q
-
-                else:
-
-                    assert l_q is not None
-                    i = np.where((mode_info['n'] == n_q) &
-                                 (mode_info['l'] == l_q))[0]
+                assert l_q is not None
+                i = np.where((mode_info['n'] == n_q) &
+                             (mode_info['l'] == l_q))[0]
 
                 mode_info_copy = mode_info.copy()
 
