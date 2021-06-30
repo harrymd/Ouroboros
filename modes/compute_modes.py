@@ -501,6 +501,36 @@ def save_eigenvectors_complex(dir_eigenfunc, eigvec_comps, r, eigen_data, includ
 
     return
 
+def get_unique_within_tol_old(a, tol_exponent):
+    
+    a = np.around(a, decimals = tol_exponent)
+    a = np.unique(a, axis = 0)
+    
+    return a 
+
+def get_unique_within_tol(a, tol):
+        
+    n_in = len(a)
+    a_new = np.atleast_1d(a[0])
+
+    for i in range(1, n_in):
+        
+        n_out = len(a_new)
+        for j in range(n_out):
+
+            diff = np.absolute(a_new[j] - a[i])
+
+            if diff < tol:
+                
+                a_new[j] = 0.5*(a_new[j] + a[i])
+                break
+
+            if j == (n_out - 1):
+                
+                a_new = np.append(a_new, a[i])
+
+    return a_new
+
 def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
     
     mode_type = 'T'
@@ -512,6 +542,12 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
     # f_diff_frac_thresh    Fractional tolerance for finding duplicate modes.
     zero_tol_mHz = 1.0E-2
     f_diff_frac_thresh = 1.0E-3
+    #
+    ## tol_roots_zeros_exp sets the tolerance for whether two poles or roots are
+    ## equal. The numerical tolerance in mHz is 10 ** (-tol_roots_zeros_exp)
+    ## This must be an integer.
+    #tol_roots_poles_exp = 10
+    tol_roots_poles_mHz = 1.0E-10
 
     # Get directories.
     dir_julia = os.path.join(dir_output, 'julia_{:>03d}'.format(i_toroidal))
@@ -525,6 +561,8 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
             'relax'             : dict(),
             'relax_duplicate'   : dict()
             }
+    poles = []
+    roots = []
     
     first_iteration = True
     for l in range(1, l_max + 1):
@@ -640,6 +678,34 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
             ax.legend()
 
             plt.show()
+
+        # Process the poles and roots.
+        name_poles_in = 'poles_{:>03d}_{:>05d}.txt'.format(i_toroidal, l)
+        path_poles_in = os.path.join(dir_julia, name_poles_in) 
+        poles_l = np.loadtxt(path_poles_in)
+        poles_l = poles_l[:, 0] + 1.0j * poles_l[:, 1] 
+        poles_l = get_unique_within_tol(poles_l, tol_roots_poles_mHz)
+        poles.extend(poles_l)
+        #
+        name_roots_in = 'roots_{:>03d}_{:>05d}.txt'.format(i_toroidal, l)
+        path_roots_in = os.path.join(dir_julia, name_roots_in) 
+        roots_l = np.loadtxt(path_roots_in)
+        roots_l = roots_l[:, 0] + 1.0j * roots_l[:, 1] 
+        roots_l = get_unique_within_tol(roots_l, tol_roots_poles_mHz)
+        roots.extend(roots_l)
+    
+    # Combine the pole and root lists and save them..
+    poles = get_unique_within_tol(poles, tol_roots_poles_mHz)
+    name_poles_out = 'poles_{:>03d}.txt'.format(i_toroidal)
+    path_poles_out = os.path.join(dir_output, name_poles_out)
+    print("Writing to {:}".format(path_poles_out))
+    np.savetxt(path_poles_out, poles)
+    #
+    roots = get_unique_within_tol(roots, tol_roots_poles_mHz)
+    name_roots_out = 'roots_{:>03d}.txt'.format(i_toroidal)
+    path_roots_out = os.path.join(dir_output, name_roots_out)
+    print("Writing to {:}".format(path_roots_out))
+    np.savetxt(path_roots_out, roots)
     
     # Get output paths.
     path_eigenvalues_dict, dir_eigvecs_dict = \

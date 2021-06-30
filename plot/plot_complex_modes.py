@@ -9,13 +9,19 @@ from Ouroboros.common import (  get_Ouroboros_out_dirs, load_eigenfreq,
                                 mkdir_if_not_exist, read_input_file)
 from Ouroboros.plot.plot_dispersion import plot_dispersion_wrapper
 
-def get_var_lim(mode_info, dataset_key_list, var):
+def get_var_lim(mode_info, dataset_key_list, var, append_vals = None):
 
     mode_info_merged = []
     for dataset_key in dataset_key_list:
 
         mode_info_merged.extend(mode_info[dataset_key][var])
+    
+    if (append_vals is not None) and len(append_vals) > 0:
 
+        for append_val_i in append_vals:
+
+            mode_info_merged.extend(append_val_i)
+    
     x_min = np.min(mode_info_merged)
     x_max = np.max(mode_info_merged)
     
@@ -42,12 +48,59 @@ def get_var_lim(mode_info, dataset_key_list, var):
 
     return x_lims
 
-def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True, include_duplicates = True, dataset_types = ['oscil', 'relax'], label_modes = False, equal_aspect = True):
+def load_roots_poles_Ouroboros_anelastic(run_info, mode_type, i_toroidal = None):
+
+    if mode_type == 'T':
+
+        assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
+        
+        name_poles = 'poles_{:>03d}.txt'.format(i_toroidal)
+        name_roots = 'roots_{:>03d}.txt'.format(i_toroidal)
+
+    else:
+
+        raise NotImplementedError
+
+    # Get output paths.
+    dir_model, dir_run, dir_g, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
+
+    # Get path to files.
+    path_poles = os.path.join(dir_type, name_poles)
+    path_roots = os.path.join(dir_type, name_roots)
+
+    # Load.
+    poles = np.loadtxt(path_poles, dtype = np.complex_)
+    roots = np.loadtxt(path_roots, dtype = np.complex_)
+
+    return poles, roots
+
+def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True, include_duplicates = True, dataset_types = ['oscil', 'relax'], label_modes = False, equal_aspect = True, show_roots = False, show_poles = False):
 
     # Load mode data.
     #mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal)
     mode_info = load_eigenfreq_Ouroboros_anelastic(run_info, mode_type,
                     i_toroidal = i_toroidal)
+
+    # Load roots and/or poles, if requested.
+    if (show_roots or show_poles):
+
+        poles, roots = load_roots_poles_Ouroboros_anelastic(run_info,
+                            mode_type, i_toroidal = i_toroidal)
+    
+        # Convert from Laplace variable to angular frequency.
+        if show_poles:
+            
+            poles = -1.0j * poles
+
+        if show_roots:
+
+            roots = -1.0j * roots
+
+    print('roots:')
+    print(roots)
+
+    print('poles:')
+    print(poles)
 
     # Create canvas.
     fig = plt.figure(figsize = (8.5, 8.5), constrained_layout = True)
@@ -75,9 +128,23 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
         
         dataset_key_list = dataset_types
     
-    f_lim       = get_var_lim(mode_info, dataset_key_list, 'f')
-    gamma_lim   = get_var_lim(mode_info, dataset_key_list, 'gamma')
+    # Find axis limits.
+    append_vals_real = []
+    append_vals_imag = []
+    if show_roots:
 
+        append_vals_real.append(np.real(roots))
+        append_vals_imag.append(np.imag(roots))
+
+    if show_poles:
+
+        append_vals_real.append(np.real(poles))
+        append_vals_imag.append(np.imag(poles))
+
+    f_lim       = get_var_lim(mode_info, dataset_key_list, 'f',
+                        append_vals = append_vals_real)
+    gamma_lim   = get_var_lim(mode_info, dataset_key_list, 'gamma',
+                        append_vals = append_vals_imag)
     
     if equal_aspect:
 
@@ -130,6 +197,17 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
                 ax.annotate(label, (f[i], gamma[i] * gamma_scale),
                         xytext = (5, 5), xycoords = 'data',
                         textcoords = 'offset points')
+
+    # Plot roots and/or poles.
+    if show_roots:
+        
+        ax.scatter(np.real(roots), np.imag(roots) * gamma_scale, marker = 'x', 
+                    label = 'Roots', **scatter_kwargs)
+
+    if show_poles:
+
+        ax.scatter(np.real(poles), np.imag(poles) * gamma_scale, marker = 'x', 
+                    label = 'Poles', **scatter_kwargs)
 
     # Set axis limits.
     ax.set_xlim(f_lim)
@@ -194,6 +272,8 @@ def main():
     parser.add_argument("--show_duplicates", action = 'store_true', help = 'Include this flag to show modes that were identified as duplicates.')
     parser.add_argument("--label_modes", action = 'store_true', help = 'Include this flag to label modes.')
     parser.add_argument("--equal_aspect", action = 'store_true', help = 'Include this flag to plot equal aspect ratios for real and imaginary axes.')
+    parser.add_argument("--poles", action = 'store_true', help = 'Include this flag to plot the poles of the anelastic model.')
+    parser.add_argument("--roots", action = 'store_true', help = 'Include this flag to plot the roots of the anelastic model.')
     #
     args = parser.parse_args()
 
@@ -204,6 +284,8 @@ def main():
     show_duplicates = args.show_duplicates
     label_modes     = args.label_modes
     equal_aspect    = args.equal_aspect
+    roots           = args.roots
+    poles           = args.poles
 
     if relax_or_oscil == 'both':
 
@@ -234,7 +316,9 @@ def main():
             include_duplicates  = show_duplicates,
             dataset_types       = dataset_types,
             label_modes         = label_modes,
-            equal_aspect        = equal_aspect)
+            equal_aspect        = equal_aspect,
+            show_poles          = poles,
+            show_roots          = roots)
 
     return
 

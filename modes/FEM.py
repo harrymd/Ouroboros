@@ -1244,7 +1244,7 @@ def toroidal_an(model,invV,order,Dr):
     B = np.zeros((dimension,dimension)) #Xi matrix
     Mmu = np.zeros((Ki,dimension,dimension)) #Matrix for each layer
     M = np.matmul(invV.T,invV)
-    
+
     for i in range(Ki):
         Ji = model.J[0,i] #This is a number
         rxi = model.rx[0,i] #This is a number

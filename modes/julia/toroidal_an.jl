@@ -14,22 +14,53 @@ include("common.jl")
 order_V = 1
 order = 2
 
-function save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_output, i_toroidal, l, num_eigen)
+function save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_output, i_toroidal, l, num_eigen, poles, roots)
 
     # Get number of samples.
     size_r = size(xx)[1]
 
     # Convert from rad/s to mHz.
-    fre = (eigvals / (2.0 * pi)) * 1000.0
+    rad_s_to_mHz = (1000.0 / (2.0 * pi))
+    fre = (eigvals * rad_s_to_mHz)
+    poles = (poles * rad_s_to_mHz)
+    roots = (roots * rad_s_to_mHz)
     
     # Save the eigenvalues.
     name_eigvals = @sprintf("eigenvalues_%03d_%05d.txt", i_toroidal, l)
     path_eigvals = joinpath(dir_output, name_eigvals)
-    open(path_eigvals, "w") do f_eigval
+    open(path_eigvals, "w") do f_out
 
         for i = 1 : num_eigen
 
-            write(f_eigval, string(real(fre[i]), " ", imag(fre[i]), "\n"))
+            write(f_out, @sprintf("%+19.12e %+19.12e\n", real(fre[i]), imag(fre[i])))
+
+        end
+
+    end
+
+    # Save the roots.
+    num_roots = length(roots)
+    name_eigvals = @sprintf("roots_%03d_%05d.txt", i_toroidal, l)
+    path_eigvals = joinpath(dir_output, name_eigvals)
+    open(path_eigvals, "w") do f_out
+
+        for i = 1 : num_roots
+
+            write(f_out, @sprintf("%+19.12e %+19.12e\n", real(roots[i]), imag(roots[i])))
+
+        end
+
+    end
+    
+    # Save the poles.
+    num_poles = length(poles)
+    name_eigvals = @sprintf("poles_%03d_%05d.txt", i_toroidal, l)
+    path_eigvals = joinpath(dir_output, name_eigvals)
+    open(path_eigvals, "w") do f_out
+
+        for i = 1 : num_poles
+
+            write(f_out, @sprintf("%+19.12e %+19.12e\n", real(poles[i]), imag(poles[i])))
 
         end
 
@@ -147,6 +178,9 @@ function toroidal_rep(args)
     nep = PEP([temp_A0, A1, A2])
 
     # Loop over elements.
+    poles = Vector{Float64}()
+    roots = Vector{Float64}()
+    #
     for k = 1:Ki
 
         # Get the mu matrix for this element.
@@ -182,42 +216,70 @@ function toroidal_rep(args)
                 temp_roots = [0.0]
 
                 # Get expression for poles (zeros of eq. 2.28 in ref. [1]).
-                temp_poles = [mu[k] / nu1]
+                temp_poles = [-mu[k] / nu1]
 
             # Standard linear solid.
             elseif anelastic_params["model_type"] == 1
 
                 # Get expression for roots (zeros of numerator of
                 # eq. 13c in ref. [2]).
-                # hrmd 2021-06-21: Missing negative sign?
-                temp_roots = [mu2[k] / nu2]
+                # Note that there is an error in the numerator of eq. 13c.
+                # \mu (s) = \frac{\mu_{1}(s + \frac{\mu_{1}}{\nu_{2}})}{s +
+                # \frac{1}{\nu_{2}}(\mu_{1} + \mu_{2})} 
+                temp_roots = [-mu[k] / nu2]
 
                 # Get expression for poles (zeros of denominator of eq. 13c
                 # in ref. [2]).
-                temp_poles = [(mu[k] + mu2[k]) / nu2]
+                temp_poles = [-(mu[k] + mu2[k]) / nu2]
 
             # Burger's solid with uniform viscosities.
             #elseif anelastic_params["model_type"] == 2
             elseif anelastic_params["model_type"] == "burgers_uniform" 
                 
                 # Get expression for roots (zeros of eq. 2.32 in ref. [1]). 
-                temp_roots = [0.0, (mu2[k] / nu2)]
+                temp_roots = [0.0, -(mu2[k] / nu2)]
 
                 # Get expression for poles (zeros of eq. 2.33 in ref. [1]).
-                b = (mu[k] / nu1) + (mu[k] / nu2) + (mu2[k] / nu2)
-                ac = (mu[k] / nu1)^2.0 + (mu[k] / nu2)^2 + (mu2[k] / nu2)^2.0 +
-                        2.0 * (mu[k]^2.0 + (mu[k] * mu2[k])) / (nu1 * nu2) + 
-                        2.0 * (mu[k] * mu2[k]) / (nu2^2.0)
-                x1 = (b + sqrt(ac)) / 2.0
-                x2 = (b - sqrt(ac)) / 2.0
-                temp_poles = [x1, x2]
+                # Use quadratic formula.
+                a = (nu1 * nu2) / (mu[k] * mu2[k]) 
+                b = (nu1 / mu[k]) + (nu1 / mu2[k]) + (nu2 / mu2[k])
+                c = 1.0
+                #
+                det = (b^2.0) - (4.0 * a * c)
+                sqrt_det = sqrt(det)
+                #
+                p1 = (-b - sqrt_det) / (2.0 * a)
+                p2 = (-b + sqrt_det) / (2.0 * a)
+                #
+                println(p1)
+                println(p2)
+                println('\n')
+                temp_poles = [p1, p2]
+
+            end
+
+            # Store roots and poles.
+            for temp_root in temp_roots
+                
+                push!(roots, temp_root)
+
+            end
+
+            for temp_pole in temp_poles
+
+                push!(poles, temp_pole)
 
             end
 
             # Create the rational eigenvalue problem for this element.
-            # Not the factor of i (imaginary unit)
-            temp_rep = REP([temp_A0, temp_A1],
-                           im * temp_roots, im * temp_poles)
+            # The Laplace variable s and the angular frequency omega are
+            # related by
+            #    s = i omega  <-->  omega = -i s
+            # We are seeking solutions omega, so the roots and poles must
+            # be converted from s to omega:
+            temp_roots = -im * temp_roots 
+            temp_poles = -im * temp_poles
+            temp_rep = REP([temp_A0, temp_A1], temp_roots, temp_poles)
 
         end
 
@@ -261,9 +323,9 @@ function toroidal_rep(args)
 
     end
     
-    # Save the eigenvectors and eigenvalues.
+    # Save the eigenvector, eigenvalues, poles and roots.
     save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_julia,
-                                  i_toroidal, l, num_eigen)
+                                  i_toroidal, l, num_eigen, poles, roots)
 
 end
 
