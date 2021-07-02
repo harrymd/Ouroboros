@@ -1264,12 +1264,13 @@ def toroidal_an(model,invV,order,Dr):
 #        A[i_order:i_order+Np,i_order:i_order+Np] = A[i_order:i_order+Np,i_order:i_order+Np] -\
 #                    (Aelmt+Aelmt.T)/2 #Symmetric operation to eliminate little error
         
-        Belmt = Ji*rho[i]*np.matmul(np.matmul(ri,M),ri)
+        Belmt = Ji * rho[i] * ((ri @ M) @ ri)
+
         # manage unit: *1e21/1e15
         B[i_order:i_order+Np,i_order:i_order+Np] = B[i_order:i_order+Np,i_order:i_order+Np] +\
                     (Belmt+Belmt.T)/2*1e6 #Symmetric operation to eliminate little error
 
-    return Mmu,B,Ki,dimension
+    return Mmu, B, Ki, dimension
 
 def fluid_noG_mixedV_an(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V):
     # implement finite element method on fluid speroidal modes

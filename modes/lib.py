@@ -53,23 +53,44 @@ def equivForm(A_input,pos,cut_off_pos,isA):
 
     Af_inv = None
     E = None
+
+    # If pos = [0],
+    # Go from this
+    #
+    #   1 | . 2 .
+    #   --+------ 
+    #   . | . . .
+    #   3 | . 4 .
+    #   . | . . . 
+    #
+    # to this:
+    #
+    #   . . . | .
+    #   . 4 . | 3 
+    #   . . . + .
+    #   ------|--
+    #   . 2 . | 1
+    # Move row "pos" to bottom.
+    tempA_row = A_input[pos, :]
+    A_input = np.delete(A_input, pos, 0)
+    A_input = np.vstack((A_input, tempA_row))
     
-    tempA_row = A_input[pos,:]
-    A_input = np.delete(A_input,pos,0)
-    A_input = np.vstack((A_input,tempA_row))
-    
+    # Move col "pos" to right.
     tempA_col = A_input[:,pos]
     A_input = np.delete(A_input,pos,1)
     A_input = np.hstack((A_input,tempA_col))
     
     if isA == 1:
+    
+        # In the block diagram above,
+        # A_temp is block 4, E is block 3, and Af is block 1.
         A_temp = A_input[:cut_off_pos,:cut_off_pos]
         E = A_input[:cut_off_pos,cut_off_pos:]
         Af = A_input[cut_off_pos:,cut_off_pos:]
     
         Af_inv = np.linalg.inv(Af)
-        A_output = A_temp-np.matmul(np.matmul(E,Af_inv),E.T)
-        A_output = (A_output+A_output.T)/2
+        A_output = A_temp - ((E @ Af_inv) @ E.T)
+        A_output = (A_output + A_output.T) / 2.0
     
     elif isA == 0:
         A_output = A_input[:cut_off_pos,:cut_off_pos]
@@ -79,8 +100,8 @@ def equivForm(A_input,pos,cut_off_pos,isA):
         Af = A_input[cut_off_pos:,cut_off_pos:]
     
         Af_inv = np.linalg.inv(Af)
-        A_output = np.matmul(np.matmul(E,Af_inv),E.T)
-        A_output = (A_output+A_output.T)/2
+        A_output = ((E @ Af_inv) @ E.T)
+        A_output = (A_output + A_output.T) / 2.0
     
     return A_output,Af_inv,E
 

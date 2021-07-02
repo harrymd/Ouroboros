@@ -77,7 +77,6 @@ def load_roots_poles_Ouroboros_anelastic(run_info, mode_type, i_toroidal = None)
 def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True, include_duplicates = True, dataset_types = ['oscil', 'relax'], label_modes = False, equal_aspect = True, show_roots = False, show_poles = False):
 
     # Load mode data.
-    #mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal)
     mode_info = load_eigenfreq_Ouroboros_anelastic(run_info, mode_type,
                     i_toroidal = i_toroidal)
 
@@ -87,20 +86,20 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
         poles, roots = load_roots_poles_Ouroboros_anelastic(run_info,
                             mode_type, i_toroidal = i_toroidal)
     
-        # Convert from Laplace variable to angular frequency.
+        ## Convert from Laplace variable to angular frequency.
         if show_poles:
             
-            poles = -1.0j * poles
+            #poles = -1.0j * poles
+
+            print('roots:')
+            print(roots)
 
         if show_roots:
 
-            roots = -1.0j * roots
+            #roots = -1.0j * roots
 
-    print('roots:')
-    print(roots)
-
-    print('poles:')
-    print(poles)
+            print('poles:')
+            print(poles)
 
     # Create canvas.
     fig = plt.figure(figsize = (8.5, 8.5), constrained_layout = True)
@@ -262,6 +261,28 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
 
     return
 
+def plot_f_versus_Q(run_info, mode_type, i_toroidal = None):
+
+
+    # Load mode data.
+    mode_info = load_eigenfreq_Ouroboros_anelastic(run_info, mode_type,
+                    i_toroidal = i_toroidal)
+    mode_info = mode_info['oscil']
+
+    font_size_label = 13
+
+    fig = plt.figure(figsize = (8.5, 8.5), constrained_layout = True)
+    ax  = plt.gca()
+
+    ax.scatter(mode_info['f'], mode_info['Q'])
+
+    ax.set_xlabel('Frequency (mHz)', fontsize = font_size_label)
+    ax.set_ylabel('$Q$ (s$^{-1}$)', fontsize = font_size_label)
+
+    plt.show()
+
+    return
+
 def main():
 
     # Read input arguments.
@@ -269,6 +290,7 @@ def main():
     parser.add_argument("path_input", help = "File path (relative or absolute) to input file.")
     parser.add_argument("--i_toroidal", dest = "layer_number", help = "Plot toroidal modes for the solid shell given by LAYER_NUMBER (0 is outermost solid shell). Default is to plot spheroidal modes.", type = int)
     parser.add_argument("--relax_or_oscil", choices = ['both', 'relax', 'oscil'], default = 'both', help = "Choose between plotting oscillation modes, relaxation modes, or both.")
+    parser.add_argument("--fQ", action = 'store_true', help = "Include this flag to plot frequency (f) versus quality factor (Q).")
     parser.add_argument("--show_duplicates", action = 'store_true', help = 'Include this flag to show modes that were identified as duplicates.')
     parser.add_argument("--label_modes", action = 'store_true', help = 'Include this flag to label modes.')
     parser.add_argument("--equal_aspect", action = 'store_true', help = 'Include this flag to plot equal aspect ratios for real and imaginary axes.')
@@ -281,6 +303,7 @@ def main():
     path_input      = args.path_input    
     i_toroidal      = args.layer_number
     relax_or_oscil  = args.relax_or_oscil
+    plot_f_Q        = args.fQ
     show_duplicates = args.show_duplicates
     label_modes     = args.label_modes
     equal_aspect    = args.equal_aspect
@@ -312,7 +335,13 @@ def main():
         mode_type = 'S'
 
     # Plot.
-    plot_modes_complex_plane(run_info, mode_type, i_toroidal = i_toroidal,
+    if plot_f_Q:
+
+        plot_f_versus_Q(run_info, mode_type, i_toroidal = i_toroidal) 
+    
+    else:
+
+        plot_modes_complex_plane(run_info, mode_type, i_toroidal = i_toroidal,
             include_duplicates  = show_duplicates,
             dataset_types       = dataset_types,
             label_modes         = label_modes,

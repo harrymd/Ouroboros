@@ -73,7 +73,7 @@ function spheroidal_rep(args)
     blk_type = Int16[]
     blk_len = Any[]
     l = parse.(Int64, (lines[1]))
-    for i=1:size(lines)[1] - 2
+    for i = 1 : (size(lines)[1] - 2)
 
         line = parse.(Int64, (split(lines[i + 1], " ")))
         append!(blk_type, line[1])
@@ -122,7 +122,7 @@ function spheroidal_rep(args)
     end
 
     # Create the NEP with the constant (non-frequency-dependent) parts of the
-    # matrices.
+    # matrices. The coefficients are for terms A0 + A1 s + A2 s^2.
     nep = PEP([A0, A1, A2])
 
     # Prepare loop variables.
@@ -134,8 +134,9 @@ function spheroidal_rep(args)
     count_thick = [1]
 
     # Loop over the layers in the model.
-    for i=1:layers
+    for i = 1 : layers
 
+        # Solid layers only.
         if blk_type[i] == 1
 
             Mmu = npzread(joinpath(dir_numpy, string("Mmu",i-1,".npy")))
@@ -152,45 +153,64 @@ function spheroidal_rep(args)
             #    
             #end
 
-            num = num+1
-            for k = 1:Ki[num]
+            # Loop over the elements of this layer.
+            num = (num + 1)
+            for k = 1 : Ki[num]
 
+                # Get the mu matrix for this element.
+                # This is zero except within the block:
+                # 0 0 0
+                # 0 M 0
+                # 0 0 0
                 temp_A1 = zeros(dimension, dimension)
-                temp_A1[count_blk_size:count_blk_size+2*blk_len[i][1]-1,
-                        count_blk_size:count_blk_size+2*blk_len[i][1]-1] = Mmu[k,:,:]
+                j1 = count_blk_size
+                j2 = (count_blk_size + (2 * blk_len[i][1]) - 1
+                temp_A1[j1 : j2, j1 : j2] = Mmu[k, :, :]
 
                 # Elastic.
                 if anelastic_params["model_type"] == 0
 
+                    # The elastic case is a polynomial of order 0, in other words
+                    # a constant; the elastic case is not frequency dependent.
                     temp_rep = PEP([temp_A1])
-
-                # Uniform Maxwell solid.
-                elseif anelastic_params["model_type"] == "maxwell_uniform" 
-
-                    temp_pole = mu[k]/nu1
-                    temp_rep = REP([temp_A0, temp_A1], [0], [im*temp_pole])
 
                 # Kelvin solid.
                 elseif anelastic_params["model_type"] == -2
 
-                    temp_rep = PEP([temp_A1/mu[k]*mu2[k],temp_A1/mu[k]*nu2*im])
+                    # hrmd 2021-07-01: Need reference for this form.
+                    temp_rep = PEP([temp_A1/mu[k]*mu2[k], temp_A1/mu[k]*nu2*im])
 
-                # Standard linear solid.
-                elseif anelastic_params["model_type"] == 1
+                # The remaining rheologies can be expressed as REPs (rational
+                # eigenvalue problems).
+                else:
 
-                    temp_pole = (mu[k]+mu2[k])/nu2
-                    temp_rep = REP([temp_A0,temp_A1],[im*mu2[k]/nu2],[im*temp_pole])
+                    # Maxwell solid with uniform viscosity.
+                    if anelastic_params["model_type"] == "maxwell_uniform" 
 
-                # Burgers body.
-                elseif anelastic_params["model_type"] == 2
+                        # Get expression for roots (zeros of eq. 2.27 in ref. [1]).
+                        temp_roots = [0.0]
 
-                    b = mu[k]/nu1+mu[k]/nu2+mu2[k]/nu2
-                    ac = (mu[k]/nu1)^2+(mu[k]/nu2)^2+(mu2[k]/nu2)^2+2*(mu[k]^2+mu[k]*mu2[k])/(nu1*nu2)+2*mu[k]*mu2[k]/(nu2^2)
-                    x1 = (b+sqrt(ac))/2
-                    x2 = (b-sqrt(ac))/2
-                    temp_poles = [x1, x2]
-                    temp_rep = REP([temp_A0,temp_A1], [0,im*mu2[k]/nu2],
-                                   [im * temp_poles[1], im * temp_poles[2]])
+                        # Get expression for poles (zeros of eq. 2.28 in ref. [1]).
+                        temp_poles = [-mu[k] / nu1]
+
+                    # Standard linear solid.
+                    elseif anelastic_params["model_type"] == 1
+
+                        temp_pole = (mu[k]+mu2[k])/nu2
+                        temp_rep = REP([temp_A0,temp_A1],[im*mu2[k]/nu2],[im*temp_pole])
+
+                    # Burgers body.
+                    elseif anelastic_params["model_type"] == 2
+
+                        b = mu[k]/nu1+mu[k]/nu2+mu2[k]/nu2
+                        ac = (mu[k]/nu1)^2+(mu[k]/nu2)^2+(mu2[k]/nu2)^2+2*(mu[k]^2+mu[k]*mu2[k])/(nu1*nu2)+2*mu[k]*mu2[k]/(nu2^2)
+                        x1 = (b+sqrt(ac))/2
+                        x2 = (b-sqrt(ac))/2
+                        temp_poles = [x1, x2]
+                        temp_rep = REP([temp_A0,temp_A1], [0,im*mu2[k]/nu2],
+                                       [im * temp_poles[1], im * temp_poles[2]])
+
+                    end
 
                 end
 

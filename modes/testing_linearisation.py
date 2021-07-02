@@ -112,10 +112,10 @@ def rank_revealing_decomp(A, n, Np, K, N):
 def minimal_realisation_wrapper(mu, K, mu2_factor, nu1, nu2):
 
     # Prepare output arrays.
-    a  = np.zeros((K, 2), dtype = np.complex)
-    bv = np.zeros((K, 2))
-    C  = np.zeros((K, 2, 2), dtype = np.complex)
-    D  = np.zeros((K, 2, 2))
+    ai  = np.zeros((K, 2, 1), dtype = np.complex)
+    bi  = np.zeros((K, 2, 1))
+    Ci  = np.zeros((K, 2, 2), dtype = np.complex)
+    Di  = np.zeros((K, 2, 2))
     
     # Get mu2 parameter.
     mu2 = (mu2_factor * mu)
@@ -124,42 +124,45 @@ def minimal_realisation_wrapper(mu, K, mu2_factor, nu1, nu2):
     for k in range(K):
 
         # Get expression for roots (zeros of eq. 2.32 in ref. [1]). 
-        r1, r2 = 1.0j * np.array([0.0, (mu2[k] / nu2)])
+        r1, r2 = -1.0j * np.array([0.0, -(mu2[k] / nu2)])
 
         # Get expression for poles (zeros of eq. 2.33 in ref. [1]).
-        b = (mu[k] / nu1) + (mu[k] / nu2) + (mu2[k] / nu2)
-        ac = (mu[k] / nu1)**2.0 + (mu[k] / nu2)**2.0 + (mu2[k] / nu2)**2.0 + \
-                2.0 * (mu[k]**2.0 + (mu[k] * mu2[k])) / (nu1 * nu2) +    \
-                2.0 * (mu[k] * mu2[k]) / (nu2**2.0)
-        x1 = (b + np.sqrt(ac)) / 2.0
-        x2 = (b - np.sqrt(ac)) / 2.0
-        p1, p2 = 1.0j * np.array([x1, x2])
-        
-        print('{:>.2e} {:>.2e}'.format(mu[k], mu2[k]))
-        print('{:>.2e} {:>.2e}'.format(nu1, nu2))
+        # Get expression for poles (zeros of eq. 2.33 in ref. [1]).
+        # Use quadratic formula.
+        a = (nu1 * nu2) / (mu[k] * mu2[k]) 
+        b = (nu1 / mu[k]) + (nu1 / mu2[k]) + (nu2 / mu2[k])
+        c = 1.0
+        #
+        det = (b ** 2.0) - (4.0 * a * c)
+        sqrt_det = np.sqrt(det)
+        #
+        p1 = (-b - sqrt_det) / (2.0 * a)
+        p2 = (-b + sqrt_det) / (2.0 * a)
+        #
+        p1 = (p1 * -1.0j)
+        p2 = (p2 * -1.0j)
 
-        print('b, sqrt(ac)', b, np.sqrt(ac))
-        print(r1, r2)
-        print(p1, p2)
-
-        import sys
-        sys.exit()
-        
         # Calculate components of minimal realisation.
-        a[k, :], bv[k, :], C[k, :, :], D[k, :, :] = \
+        #ai[k, :, :], bi[k, :, :], Ci[k, :, :], Di[k, :, :] = \
+        aik, bik, Cik, Dik = \
             minimal_realisation(p1, p2, r1, r2)
-    
-    return a, bv, C, D
+        ai[k, :, :] = aik[:, np.newaxis]
+        bi[k, :, :] = bik[:, np.newaxis]
+        Ci[k, :, :] = Cik
+        Di[k, :, :] = Dik
+
+    return ai, bi, Ci, Di
 
 def minimal_realisation(p1, p2, r1, r2):
 
     alpha   = (p1 + p2 - r1 - r2)
     beta    = (p1 * p2) + (r1 * r2)
 
+
     a = np.array([-beta, alpha])
     b = np.array([0.0, 1.0])
 
-    C = np.array([[0.0, -1.0], [(p1 * p1), -1.0 * (p1 + p2)]])
+    C = np.array([[0.0, -1.0], [(p1 * p2), -1.0 * (p1 + p2)]])
     D = -1.0 * np.identity(2)
 
     return a, b, C, D
@@ -179,7 +182,7 @@ def plot_black_white_imshow(A):
     return
 
 def build_kronecker_matrices(ai, bi, Ci, Di, Li, Ui):
-    
+
     # Infer integers.
     rank = Li.shape[-1]
     K = Ci.shape[0]
@@ -190,28 +193,58 @@ def build_kronecker_matrices(ai, bi, Ci, Di, Li, Ui):
     U_list = []
     C_list = []
     D_list = []
-    for j in range(K):
+    for k in range(K):
         
-        t = np.kron(Ir, ai[j, :])
+        I_kron_a = np.kron(Ir, ai[k, :])
+        L_list.append(Li[k, :, :] @ I_kron_a.T)
 
-        print(t.shape)
-        plot_black_white_imshow(t)
+        I_kron_b = np.kron(Ir, bi[k, :])
+        U_list.append(Ui[k, :, :] @ I_kron_b.T)
 
-        import sys
-        sys.exit()
-        C_list.append(np.kron(Ir, Ci[j, ...]))
-        D_list.append(np.kron(Ir, Di[j, ...]))
+        C_list.append(np.kron(Ir, Ci[k, ...]))
 
-        #plot_black_white_imshow(C_list[-1])
+        D_list.append(np.kron(Ir, Di[k, ...]))
+
+
+    L = np.concatenate(L_list, axis = 1)
+    U = np.concatenate(U_list, axis = 1)
 
     C = scipy.linalg.block_diag(*C_list)
     D = scipy.linalg.block_diag(*D_list)
+    
+    return L, U, C, D
 
-    #print(C.shape)
-    plot_black_white_imshow(D)
+def build_linearised_matrices(B, E, L, U, C, D):
 
+    N = E.shape[-1]
 
-    return
+    E_sum = np.sum(E, axis = 0)
+    
+    zeros_NN = np.zeros((N, N))
+    ident_NN = np.eye(N)
+    zeros_Nm = np.zeros(L.shape)
+
+    calA = np.block([   [ zeros_NN,     -E_sum,     L],
+                        [-ident_NN,     zeros_NN,   zeros_Nm],
+                        [ zeros_Nm.T,   U.T,        C]])
+
+    calB = scipy.linalg.block_diag(*[B, -ident_NN, D])
+    
+    tt = np.linalg.det(B)
+    print(tt)
+    import sys
+    sys.exit()
+    t = np.linalg.det(calB)
+    print(t)
+    print(calA.shape)
+    print(calB.shape)
+
+    plot_black_white_imshow(calB)
+    import sys
+    sys.exit()
+
+    
+    return calA, calB
 
 def main():
 
@@ -240,9 +273,10 @@ def main():
     dir_numpy = os.path.join(dir_type, 'numpy_{:>03d}'.format(i_toroidal))
 
     # Load arrays.
-    A  = np.load(os.path.join(dir_numpy, 'Mmu.npy'))
+    E  = np.load(os.path.join(dir_numpy, 'Mmu.npy'))
     mu = np.load(os.path.join(dir_numpy, 'mu.npy'))
-    
+    B  = np.load(os.path.join(dir_numpy, 'A2.npy'))
+
     # Set integer variables.
     # n     Polynomial order of elements.
     # Np    Number of nodal points per element, equal to (n + 1).
@@ -252,7 +286,7 @@ def main():
     #       
     n = 2
     Np = (n + 1)
-    N = A.shape[-1]
+    N = E.shape[-1]
     K = (N - 1) // 2
 
     # Calculate minimal realization.
@@ -264,13 +298,21 @@ def main():
     print('Di', Di.shape)
 
     # Do rank-revealing decomposition.
-    Li, Ui = rank_revealing_decomp(A, n, Np, K, N)
+    Li, Ui = rank_revealing_decomp(E, n, Np, K, N)
 
     print('Li', Li.shape)
     print('Ui', Ui.shape)
 
     # Build Kronecker representations.
-    build_kronecker_matrices(ai, bi, Ci, Di, Li, Ui)
+    L, U, C, D = build_kronecker_matrices(ai, bi, Ci, Di, Li, Ui)
+
+    print('L', L.shape)
+    print('U', U.shape)
+    print('C', C.shape)
+    print('D', D.shape)
+
+    # Build linearised matrices.
+    calA, calB = build_linearised_matrices(B, E, L, U, C, D)
 
     return
 

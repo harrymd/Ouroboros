@@ -179,39 +179,6 @@ def solve_toroidal_anelastic(l, nmin, nmax, l_max, model, x, vs, layers, brk_num
             f_p.write(str(dimension)+'\n')
             f_p.close()
 
-            #import matplotlib.pyplot as plt
-
-            ##fig = plt.figure()
-            ##ax  = plt.gca()
-            ##
-            ##N = A2.shape[0]
-            ##G = np.zeros((N,N,3))
-
-            ### Where we set the RGB for each pixel
-            ##G[A2>0.0] = [1,1,1]
-
-            ###ax.imshow(np.abs(A2), vmin = 0.0, vmax = np.max(np.abs(A2)))
-            ##ax.imshow(G)
-            ##plt.show()
-
-            #for i in range(Mmu.shape[0]):
-
-            #    fig = plt.figure()
-            #    ax = plt.gca()
-
-            #    N = Mmu[i, ...].shape[0]
-            #    G = np.zeros((N,N,3))
-            #    G[np.abs(Mmu[i, ...]) > 0.0] = [1,1,1]
-
-            #    #ax.imshow(np.abs(Mmu[i, ...]), vmin = 0.0, vmax = np.max(np.abs(Mmu[i, ...])))
-            #    ax.imshow(G)
-
-            #    print(i, np.linalg.matrix_rank(Mmu[i, ...]))
-            #    plt.show()
-
-            #import sys
-            #sys.exit()
-
             cmd = "julia modes/julia/toroidal_an.jl {:} {:} {:d}".format(path_input_anelastic, dir_output, i)
             subprocess.run(cmd, shell = True)
 

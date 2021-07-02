@@ -1183,6 +1183,11 @@ def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, i_toroidal = N
             eigval_info['l']        = eigval_data[0, :].astype(np.int) 
             eigval_info['f']        = eigval_data[1, :]
             eigval_info['gamma']    = eigval_data[2, :]
+        
+        # D&T 1998, eq. 9.53.
+        # Note 'f' and 'gamma' are multiplied by 1000/(2 pi) but this
+        # factor cancels out.
+        eigval_info['Q'] = (eigval_info['f'] / (2.0 * eigval_info['gamma']))
 
         eigval_info_full[dataset_key] = eigval_info
 
