@@ -13,14 +13,15 @@ def get_var_lim(mode_info, dataset_key_list, var, append_vals = None):
 
     mode_info_merged = []
     for dataset_key in dataset_key_list:
-
+        
         mode_info_merged.extend(mode_info[dataset_key][var])
-    
+
     if (append_vals is not None) and len(append_vals) > 0:
-
+        
         for append_val_i in append_vals:
-
-            mode_info_merged.extend(append_val_i)
+            
+            append_val_i = np.atleast_1d(append_val_i)
+            mode_info_merged.extend(list(append_val_i))
     
     x_min = np.min(mode_info_merged)
     x_max = np.max(mode_info_merged)
@@ -59,7 +60,8 @@ def load_roots_poles_Ouroboros_anelastic(run_info, mode_type, i_toroidal = None)
 
     else:
 
-        raise NotImplementedError
+        name_poles = 'poles.txt'
+        name_roots = 'roots.txt'
 
     # Get output paths.
     dir_model, dir_run, dir_g, dir_type = get_Ouroboros_out_dirs(run_info, mode_type)
@@ -73,6 +75,25 @@ def load_roots_poles_Ouroboros_anelastic(run_info, mode_type, i_toroidal = None)
     roots = np.loadtxt(path_roots, dtype = np.complex_)
 
     return poles, roots
+
+def plot_YP1982_data(ax, gamma_scale):
+
+    path_in = "/Users/hrmd_work/Documents/research/refs/yuen_1982/yuen_1982_fig_03a.txt"
+    data = np.loadtxt(path_in)
+    s_r_per_day, s_i_per_min = data.T
+
+    s_r_mHz = (1000.0 / (2.0 * np.pi)) * s_r_per_day / (60.0 * 60.0 * 24.0)
+    s_i_mHz = (1000.0 / (2.0 * np.pi)) * s_i_per_min / 60.0
+
+    s = s_r_mHz + (1.0j * s_i_mHz)
+    nu = -1.0j * s
+
+    om = np.real(nu)
+    ga = np.imag(nu)
+
+    ax.scatter(om, ga * gamma_scale, label = 'Yuen and Peltier (1982)')
+
+    return
 
 def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True, include_duplicates = True, dataset_types = ['oscil', 'relax'], label_modes = False, equal_aspect = True, show_roots = False, show_poles = False):
 
@@ -139,7 +160,7 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
 
         append_vals_real.append(np.real(poles))
         append_vals_imag.append(np.imag(poles))
-
+     
     f_lim       = get_var_lim(mode_info, dataset_key_list, 'f',
                         append_vals = append_vals_real)
     gamma_lim   = get_var_lim(mode_info, dataset_key_list, 'gamma',
@@ -148,12 +169,14 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
     if equal_aspect:
 
         gamma_scale = 1.0
-        y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{3}$ s$^{-1}$)'
+        #y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{3}$ s$^{-1}$)'
+        y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{-3}$ s$^{-1}$)'
 
     else:
 
         gamma_scale = 1.0E3
-        y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{6}$ s$^{-1}$)'
+        #y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{6}$ s$^{-1}$)'
+        y_label = 'Decay rate, $\gamma$ (2$\pi$ $\\times$ 10$^{-6}$ s$^{-1}$)'
 
 
     if equal_aspect:
@@ -173,6 +196,10 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
         l       = mode_info[dataset_key]['l']
         f       = mode_info[dataset_key]['f']
         gamma   = mode_info[dataset_key]['gamma']
+    
+        print('\n')
+        print(dataset_key)
+        print(f, gamma)
 
         ax.scatter(f, gamma * gamma_scale,
                 c = color_dict[dataset_key],
@@ -207,10 +234,15 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
 
         ax.scatter(np.real(poles), np.imag(poles) * gamma_scale, marker = 'x', 
                     label = 'Poles', **scatter_kwargs)
+    
+    show_YP1982 = True
+    if show_YP1982:
+
+        plot_YP1982_data(ax, gamma_scale)
 
     # Set axis limits.
     ax.set_xlim(f_lim)
-    ax.set_ylim(gamma_lim * gamma_scale)
+    #ax.set_ylim(gamma_lim * gamma_scale)
     
     # Label axes.
     font_size_label = 16
@@ -243,6 +275,9 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
     ## Tidy axes.
     #line_kwargs = {'color' : 'black', 'alpha' : 0.5}
     #ax.axhline(**line_kwargs)
+
+
+
 
     # Save file.
     if save:

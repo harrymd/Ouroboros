@@ -7,10 +7,66 @@ using Printf
 include("lib.jl")
 include("common.jl")
 
-order_V = 1
-order = 2
+# Import the Python library for the Extended Burgers Model (EBM).
+#ENV["PYTHON"] = "/anaconda/envs/stoneley_data/bin/python"
+#using Pkg
+#Pkg.build("PyCall")    # Can be necessary to rebuild PyCall if Python environment 
+                        # has changed.
+#using PyCall
+#py_ebm = pyimport("anelasticity.ebm")
+#py_ebm = pyimport("anelasticity.calculate_EBM_response_empirical")
 
-function save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_output, i_toroidal, l, num_eigen, poles, roots)
+#conditions = Dict()
+#conditions["mineral_id"] = zeros(Int64, 1) .+ 0 # Integer ID of mineral.
+#conditions["T"]     = zeros(1) .+ 900.0 .+ 273.0  # Temperature (K).
+#conditions["P"]     = zeros(1) .+ 0.2E9          # Pressure (Pa).
+#conditions["d"]     = zeros(1) .+ 13.4E-6        # Grain size (m).
+#conditions["omega"] = zeros(1) .+ (5.0E-3 * 2.0 * pi) # Angular
+#                                                    # frequency (rad/s).
+#conditions["n_samples"] = length(conditions["mineral_id"]) 
+
+function prepare_model_dictionary_toroidal(mu, anelastic_params)
+
+    if anelastic_params["model_type"] == "SLS_uniform"
+
+        model = Dict("mu1" => mu,
+                     "mu2" => mu * anelastic_params["mu2_factor"],
+                     "nu2" => zeros(size(mu)) .+ anelastic_params["nu2"])
+
+    elseif anelastic_params["model_type"] == "burgers_uniform"
+
+        model = Dict("mu1" => mu,
+                     "mu2" => mu * anelastic_params["mu2_factor"],
+                     "nu1" => zeros(size(mu)) .+ anelastic_params["nu1"],
+                     "nu2" => zeros(size(mu)) .+ anelastic_params["nu2"])
+
+    elseif anelastic_params["model_type"] == "extended_burgers_uniform"
+        
+        mineral_id = py_ebm.mineral_name_to_int[anelastic_params["mineral"]]
+        model = Dict(   "mu1"           => mu,
+                        "mineral_id"    => zeros(Int8, size(mu)) .+ mineral_id,
+                        "temp_K"        => zeros(size(mu)) .+ anelastic_params["temp_K"],
+                        "pressure_GPa"  => zeros(size(mu)) .+ anelastic_params["pressure_GPa"],
+                        "grain_size_m"  => zeros(size(mu)) .+ anelastic_params["grain_size_m"])
+
+    else
+
+        error("Not implemented.")
+
+    end
+
+    return model
+
+end
+
+function save_toroidal_eigvecs(eigvals, eigvecs, dir_output, dir_julia, l,
+        j_search, i_toroidal, n_eigs, save_params)
+    #function save_toroidal_eigvecs(eigvals, xx, eigvecs, A2, nep_h, dir_output, i_toroidal, l, num_eigen)
+    
+    # Unpack save parameter dictionary.
+    xx      = save_params["xx"]
+    B      = save_params["B"]
+    nep_h   = save_params["nep_h"]
 
     # Get number of samples.
     size_r = size(xx)[1]
@@ -18,62 +74,20 @@ function save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_outp
     # Convert from rad/s to mHz.
     rad_s_to_mHz = (1000.0 / (2.0 * pi))
     fre = (eigvals * rad_s_to_mHz)
-    poles = (poles * rad_s_to_mHz)
-    roots = (roots * rad_s_to_mHz)
     
-    # Save the eigenvalues.
-    name_eigvals = @sprintf("eigenvalues_%03d_%05d.txt", i_toroidal, l)
-    path_eigvals = joinpath(dir_output, name_eigvals)
-    open(path_eigvals, "w") do f_out
-
-        for i = 1 : num_eigen
-
-            write(f_out, @sprintf("%+19.12e %+19.12e\n", real(fre[i]), imag(fre[i])))
-
-        end
-
-    end
-
-    # Save the roots.
-    num_roots = length(roots)
-    name_eigvals = @sprintf("roots_%03d_%05d.txt", i_toroidal, l)
-    path_eigvals = joinpath(dir_output, name_eigvals)
-    open(path_eigvals, "w") do f_out
-
-        for i = 1 : num_roots
-
-            write(f_out, @sprintf("%+19.12e %+19.12e\n", real(roots[i]), imag(roots[i])))
-
-        end
-
-    end
-    
-    # Save the poles.
-    num_poles = length(poles)
-    name_eigvals = @sprintf("poles_%03d_%05d.txt", i_toroidal, l)
-    path_eigvals = joinpath(dir_output, name_eigvals)
-    open(path_eigvals, "w") do f_out
-
-        for i = 1 : num_poles
-
-            write(f_out, @sprintf("%+19.12e %+19.12e\n", real(poles[i]), imag(poles[i])))
-
-        end
-
-    end
-
     # Save the eigenvectors.
     name_eigvecs = @sprintf("eigenfunctions_%03d", i_toroidal)
-    dir_eigvecs = joinpath(dir_output, name_eigvecs)
+    dir_eigvecs = joinpath(dir_julia, name_eigvecs)
+    println('\n', dir_eigvecs)
     mkdir_if_not_exist(dir_eigvecs)
     k = sqrt(l * (l + 1.0))
-    for i = 1 : num_eigen
+    for i = 1 : n_eigs
 
         W_eigen = eigvecs[1 : size_r, i]
 
         # Normalise eigenvector.
         # GMIG report 2020, eq. 3.4.
-        scale = sqrt(transpose(W_eigen) * A2 * W_eigen -
+        scale = sqrt(transpose(W_eigen) * B * W_eigen -
                      (1.0 / (2.0 * eigvals[i])) * transpose(W_eigen) *
                         compute_Mder(nep_h, eigvals[i], 1) * W_eigen)
         W_eigen = (W_eigen / scale)
@@ -83,7 +97,7 @@ function save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_outp
 
         # Get output path.
         n = i - 1
-        name_eigvec = @sprintf("eigvec_%05d_%05d.txt", n, l)
+        name_eigvec = @sprintf("eigvec_%05d_%05d_%05d.txt", n, l, j_search)
         path_eigvec = joinpath(dir_eigvecs, name_eigvec)
         #
         open(path_eigvec, "w") do f_eigvec
@@ -104,7 +118,7 @@ function save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_outp
 
 end
 
-function read_numpy_files(dir_output, i_toroidal)
+function read_numpy_files_toroidal(dir_output, i_toroidal)
 
     dir_numpy = joinpath(dir_output, @sprintf("numpy_%03d", i_toroidal))
     dir_julia = joinpath(dir_output, @sprintf("julia_%03d", i_toroidal))
@@ -114,12 +128,14 @@ function read_numpy_files(dir_output, i_toroidal)
     Ki = parse.(Int64,(lines[2]))
     dimension = parse.(Int64,(lines[3]))
     #
-    Mmu = npzread(joinpath(dir_numpy, "Mmu.npy"))
+    #Mmu = npzread(joinpath(dir_numpy, "Mmu.npy"))
+    A = npzread(joinpath(dir_numpy, "A.npy"))
+    B = npzread(joinpath(dir_numpy, "B.npy"))
     mu  = npzread(joinpath(dir_numpy, "mu.npy"))
-    A2  = npzread(joinpath(dir_numpy, "A2.npy"))
+    #A2  = npzread(joinpath(dir_numpy, "A2.npy"))
     xx  = npzread(joinpath(dir_numpy, "xx.npy"))
 
-    return dir_julia, l, Ki, dimension, Mmu, mu, A2, xx
+    return dir_julia, l, Ki, dimension, A, mu, B, xx
     
 end
 
@@ -130,12 +146,13 @@ function toroidal_rep(args)
     # Load anelastic parameters.
     path_input_anelastic = args[1]
     anelastic_params = read_input_anelastic(path_input_anelastic)
-
+   
     # Read files generated by Python script, relating to matrices.
+    # ? Put polynomials here.
     dir_output = args[2]
     i_toroidal = parse(Int64, args[3])
-    dir_julia, l, Ki, dimension, Mmu, mu, A2, xx = read_numpy_files(dir_output,
-                                                            i_toroidal)
+    dir_julia, l, Ki, dimension, A, mu, B, xx = read_numpy_files_toroidal(
+                                                        dir_output, i_toroidal)
 
     # Change units of radius array, and get number of points.
     xx  = (xx * 1000.0)
@@ -145,18 +162,11 @@ function toroidal_rep(args)
     # is equal to zero.
     temp_A0 = zeros(dimension, dimension)
 
-    # Unpack variables.
-    # eig_start is converted from mHz to rad/s.
-    eig_start_rad_per_s = (anelastic_params["eig_start_mHz"] * 1.0E-3) * (2.0 * pi)
-    @printf("eig_start_rad_per_s %.6f (%.3f mHz) \n", eig_start_rad_per_s,
-            anelastic_params["eig_start_mHz"])
-    num_eigen = anelastic_params["n_eigs"] 
-    
     # Convert viscosities from SI units to Ouroboros units.
     anelastic_params = change_anelastic_param_units(anelastic_params)
 
     # Prepare model dictionary.
-    model = prepare_model_dictionary(mu, anelastic_params)
+    model = prepare_model_dictionary_toroidal(mu, anelastic_params)
 
     # Define linear term in polynomial eigenvalue problem.
     # This is generally zero, however when the individual elements consist of
@@ -165,27 +175,35 @@ function toroidal_rep(args)
     # terms out.
     #
     # Elastic case (0) and Kelvin case (-2) have no REP terms.
-    if (anelastic_params["model_type"] == 0) || (anelastic_params["model_type"] == -2)
+    # Uniform extended Burgers has no REP terms.
+    if anelastic_params["model_type"] in [0, -2, "extended_burgers_uniform"]
 
         # This is a zero matrix.
         A1 = temp_A0
 
     # All other cases have REP terms.
-    else
+    elseif anelastic_params["model_type"] in ["maxwell_uniform", "SLS_uniform",
+                                              "burgers_uniform"]
 
         A1 = (Ki * Matrix(1.0I, dimension, dimension))
+
+    else
+        
+        error_str = @sprintf("Model type %s not recognised.",
+                             anelastic_params["model_type"])
+        error(error_str)
 
     end
 
     # Create the NEP with the constant (non-frequency-dependent) parts of the
     # matrices. The coefficients are for terms A0 + A1 s + A2 s^2.
-    nep = PEP([temp_A0, A1, A2])
+    nep = PEP([temp_A0, A1, B])
 
     # Loop over elements.
     poles = Vector{ComplexF64}()
     roots = Vector{ComplexF64}()
     #
-    for k = 1:Ki
+    for k = 1 : Ki
 
         # Get the mu matrix for this element.
         # This is zero except within the block:
@@ -193,12 +211,12 @@ function toroidal_rep(args)
         # 0 M 0
         # 0 0 0
         @printf("Element %4d of %4d\n", k, Ki)
-        temp_A1 = Mmu[k, :, :]
+        temp_A1 = A[k, :, :]
 
         # Get the parameters for this element.
         ele_params = Dict()
         for key in keys(model)
-            
+                
             ele_params[key] = model[key][k]
 
         end
@@ -219,29 +237,18 @@ function toroidal_rep(args)
 
     # Build operator ∫𝜑*H*rho*𝜑 from original nep ω^2*∫𝜑*rho*𝜑 - ∫𝜑*H*rho*𝜑 = 0
     # This is used for calculating derivative during normalisation.
-    nep_h = SumNEP(nep, PEP([-temp_A0, -temp_A0, -A2]))
+    # The negative signs are used to cancel out unwanted terms.
+    nep_h = SumNEP(nep, PEP([-temp_A0, -temp_A0, -B]))
+
+    # Make dictionary of values needed to save output.
+    save_params = Dict()
+    save_params["xx"]       = xx
+    save_params["B"]       = B 
+    save_params["nep_h"]    = nep_h
 
     # Solve non-linear eigenvalue problem.
-    println("Trying to solve eigenvalue problem...")
-    method = "iar"
-    #tol = 1.0E-13 
-    tol = 1.0E-10
-    if method == "iar"
-
-        eigvals, eigvecs = iar( nep, maxit = 100 , σ = eig_start_rad_per_s,
-                                neigs = num_eigen,
-                                logger = 1,
-                                tol = tol)
-
-    else
-
-        error(@sprintf("method %s not recognised", method))
-
-    end
-    
-    # Save the eigenvector, eigenvalues, poles and roots.
-    save_toroidal_eigvecs_eigvals(eigvals, xx, eigvecs, A2, nep_h, dir_julia,
-                                  i_toroidal, l, num_eigen, poles, roots)
+    solve_NEP_wrapper(nep, anelastic_params, poles, roots, l, i_toroidal,
+                      dir_output, dir_julia, save_params)
 
 end
 

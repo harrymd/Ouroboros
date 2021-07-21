@@ -203,13 +203,25 @@ specifies a Maxwell rheology which is the same for each element. Anelastic model
 
 ##### Common parameters
 
-The parameter `n_eigs` controls the number of eigenvalues which are saved for each value of *ℓ*.
+The next line `control_file` gives the path to another text file which controls the eigenvalue search, for example
 
-The parameter `eig_start_mHz` is the starting point (frequency) for the eigenvalue search in mHz.
+```
+control_file example/input/example_nep_control_file.txt
+```
+
+Each line of the control file provides the parameters for one search, which are: the real and imaginary parts of the starting value (in mHz), the number of eigenvalues to seek, the maximum number of iterations, and the tolerance. For example, the example file has one line
+
+```
+1.0 0.0 5 100 1.0E-10
+```
+
+specifying a single search, starting from 1.0 mHz, for 5 eigenvalues, with up to 100 iterations and a tolerance of 1.0E-10. When multiple searches are used, duplicate eigensolutions are merged.
+
+<span style="color:red">The parameter `n_eigs` controls the number of eigenvalues which are saved for each value of *ℓ*. The parameter `eig_start_mHz` is the starting point (frequency) for the eigenvalue search in mHz.</span>
 
 ##### Uniform Maxwell rheology
 
-<img src="../docs/figs/diagram_maxwell_rheology.png" width="30%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
+<img src="../docs/figs/diagram_maxwell_rheology.png" width="30%" title = "Schematic diagram of Maxwell element.">
 
 ```
 model maxwell_uniform
@@ -220,9 +232,23 @@ eta 1.0E15
 
 The parameter `eta` (η) is the viscosity of the Maxwell rheology in SI units (N m^-2 s^-1 ). The unrelaxed shear modulus (μ) is that of the input planetary model. Therefore μ can be a function of radius, but η is uniform throughout the planet.
 
+##### Uniform Standard Linear Solid (SLS) rheology
+
+<img src="../docs/figs/diagram_SLS_rheology.png" width="30%" title = "Schematic diagram of Standard Linear Solid element (from Yuen and Peltier, 1982).">
+
+Diagram from Yuen and Peltier (1982). 
+
+```
+model SLS_uniform
+n_eigs 5
+eig_start_mHz 1.0
+eta2 1.0E16
+mu2_factor 75.0
+```
+
 ##### Uniform Burgers rheology
 
-<img src="../docs/figs/diagram_burgers_rheology.png" width="40%" title = "Angular-order--frequency diagram for spheroidal modes using example input file.">
+<img src="../docs/figs/diagram_burgers_rheology.png" width="40%" title = "Schematic diagram of Burgers element.">
 
 ```
 model burgers_uniform
@@ -234,6 +260,58 @@ mu2_factor 75.0
 ```
 
 The parameters `eta1` and `eta2` (η<sub>1</sub> and η<sub>2</sub>) are the viscosities of the dashpot elements (see diagram) in SI units (N m^-2 s^-1 ). The parameter `mu2_factor` gives the ratio μ<sub>2</sub>/μ<sub>1</sub> of the spring constants shown in the diagram. These three variables are uniform throughout the planet, but μ<sub>1</sub> is specified by the input planetary model, and so μ<sub>1</sub> and μ<sub>2</sub> can vary as a function of radius (but not independently).
+
+##### Uniform Extended Burgers rheology: Spring-dashpot representation
+
+The Extended Burgers (EB) rheology is usually represented as a Burgers element with additional Kelvin-Voigt elements (see diagram).
+
+<img src="../docs/figs/diagram_extended_burgers_rheology.png" width="50%" title = "Schematic diagram of Extended Burgers element.">
+
+The input file looks like
+
+```
+model extended_burgers_uniform_SD
+n_eigs 5
+eig_start_mHz    1.0
+path_SD_file  example/input/example_SD_file.txt
+```
+
+The file specified by `path_SD_file` lists the springs and dashpots which make up the rheology. The file has two columns which are the modulus μ (Pa) and viscosity η (Pa s) of each element. It has $N$ rows where $N$ is the number of elements. Remember that the first row is special because it corresponds to the elastic response (μ<sub>1</sub>) and creep response (η<sub>1</sub>). The example given in `example/input/example_spring_dashpot.txt` is
+
+```
+8.000000000000000000e+10 2.416000000000000000e+18
+9.770585969912386475e+11 9.770585969912387133e+08
+2.011636085436417847e+11 6.361351853364153290e+10
+4.154793251572750854e+10 4.154793251572750977e+12
+8.581227533293863297e+09 2.713622412535699062e+14
+5.622385378273685303e+11 5.622385378273685504e+18
+```
+
+For this rheology, we use the analytical form of the response. This is converted to a rational form where the numerator and denominator are polynomials of degree $N$. It is numerically difficult to treat polynomials of high degree, so this rheology should not be used for values of $N$ larger than 10 or so. Finally, the rational form is written in terms of its roots and poles by finding   numerically the zeros of the numerator and denominator. This is the form required by the *NEP-PACK* library.
+
+The frequency-dependent modulus can be plotted with
+
+```
+python3 anelasticity/plot/plot_response.py example/input/example_input_spring_dashpot.txt
+```
+
+##### Uniform Extended Burgers rheology: Empirical representation
+
+<img src="../docs/figs/lau_2019a_f1b.jpeg" width="50%" title = "Lau and Faul (2019), fig. 1b.">
+
+Diagram from Lau and Faul (2019). In works such as Jackson and Faul (2015), they take the limit of a large number of elements, and their summation becomes an integral. The weighting of the integral is chosen to match experimental data. It has two peaks, the 'absorption band' (B) and the 'high-frequency plateau' (C).
+
+We implement the EB model as described by Lau and Faul (2019), for the three mineralogies `olivine`, `wadsleyite` and `ringwoodite`. The input file looks like
+
+```
+model extended_burgers_uniform
+n_eigs 5
+eig_start_mHz    1.0
+mineralogy	 olivine
+temperature_K 1173.0
+pressure_GPa     0.2
+grain_size_m 	13.4E-6
+```
 
 #### Plotting complex modes
 

@@ -68,10 +68,19 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
     attenuation = Ouroboros_info['attenuation']
 
     # Find the name of the model directory.
-    #name_model_with_layers = '{:}_{:>05d}'.format(name_model, n_layers)
-    attenuation_to_str = {'none' : 'elastic', 'linear' : 'linear_an', 'full' : 'full_an'}
+    if attenuation == 'full':
+
+        anelastic_params = read_Ouroboros_anelastic_input_file(
+                                Ouroboros_info['path_atten'])
+        attenuation_str = anelastic_params['model_type']
+
+    else:
+
+        attenuation_to_str = {'none' : 'elastic', 'linear' : 'linear_an'}
+        attenuation_str = attenuation_to_str[attenuation]
+
     name_model_with_layers_and_anelasticity  = '{:}_{:>05d}_{:}'.format(
-            name_model, n_layers, attenuation_to_str[attenuation])
+            name_model, n_layers, attenuation_str)
     #dir_model = os.path.join(dir_output, name_model_with_layers)
     dir_model = os.path.join(dir_output, name_model_with_layers_and_anelasticity)
     #mkdir_if_not_exist(dir_model)
@@ -367,6 +376,24 @@ def read_Ouroboros_homogeneous_input_file(path_input):
     run_info['grav_switch'] = 0
 
     return run_info
+
+def read_Ouroboros_anelastic_input_file(path_input):
+
+    print(path_input)
+    
+    anelastic_params = dict()
+
+    with open(path_input, 'r') as in_id:
+
+        anelastic_params["model_type"]      = in_id.readline().split()[-1]
+        anelastic_params["control_file"]    = in_id.readline().split()[-1]
+
+    with open(anelastic_params["control_file"], 'r') as in_id:
+        
+        lines = in_id.readlines()
+        anelastic_params["n_searches"] = len(lines)
+
+    return anelastic_params
 
 def read_Mineos_input_file(path_input_file):
     '''
@@ -869,7 +896,7 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
     else:
 
         raise ValueError
-
+    
     if norm_func == 'DT':
 
         eigfunc_norm = (eigfunc_norm * omega)
@@ -901,9 +928,10 @@ def load_eigenfunc_Ouroboros(Ouroboros_info, mode_type, n, l, i_toroidal = None,
 
         if Ouroboros_info['attenuation'] == 'full':
             
-            raise NotImplementedError
+            #raise NotImplementedError
             # Load eigenfunction.
-            r, U, U_im, V, V_im = np.loadtxt(path_eigenfunc).T
+            #r, U, U_im, V, V_im = np.loadtxt(path_eigenfunc).T
+            r, U, U_im, V, V_im = np.load(path_eigenfunc)
 
             # Store in dictionary.
             eigenfunc_dict = {'r' : r,  'U' : U, 'U_im' : U_im,
@@ -1124,11 +1152,20 @@ def get_complex_out_paths_toroidal(dir_output, i_toroidal):
     key_list = ['oscil', 'oscil_duplicate', 'relax', 'relax_duplicate']
 
     for key in key_list: 
+        
+        if i_toroidal is None:
 
-        name_eigenvalues = 'eigenvalues_{:}_{:>03d}.txt'.format(key, i_toroidal)
+            name_eigenvalues = 'eigenvalues_{:}.txt'.format(key)
+            name_eigvecs = 'eigvecs_{:}'.format(key)
+
+        else:
+
+            name_eigenvalues = 'eigenvalues_{:}_{:>03d}.txt'.format(key, i_toroidal)
+            name_eigvecs = 'eigvecs_{:}_{:>03d}'.format(key, i_toroidal)
+
         path_eigenvalues[key] = os.path.join(dir_output, name_eigenvalues)
         
-        name_eigvecs = 'eigvecs_{:}_{:>03d}'.format(key, i_toroidal)
+
         dir_eigvecs[key] = os.path.join(dir_output, name_eigvecs)
         mkdir_if_not_exist(dir_eigvecs[key])
 
@@ -1139,10 +1176,6 @@ def load_eigenfreq_Ouroboros_anelastic(Ouroboros_info, mode_type, i_toroidal = N
     if mode_type == 'T':
 
         assert i_toroidal is not None, 'For toroidal modes, the optional argument \'i toroidal\' must specify the layer number.'
-
-    else:
-
-        raise NotImplementedError
 
     # Get output paths.
     dir_model, dir_run, dir_g, dir_type = get_Ouroboros_out_dirs(Ouroboros_info, mode_type)

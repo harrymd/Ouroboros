@@ -2,6 +2,8 @@
 Scripts to compute modes.
 
 Some parameters:
+    Ki          Number of elements.
+    dimension   Size of matrix problem.
     order, order_V, order_p, order_P
                 FEM orders of specified variables.
     brk_num     Number of solid-liquid discontinuities ('breaks') in the model. 
@@ -24,7 +26,8 @@ import scipy.sparse as sps
 
 from Ouroboros.common import (  mkdir_if_not_exist, load_model,
                                 get_complex_out_paths_toroidal,
-                                get_path_adjusted_model)
+                                get_path_adjusted_model,
+                                read_Ouroboros_anelastic_input_file)
 from Ouroboros.modes import FEM
 from Ouroboros.modes import lib
 from Ouroboros.modes import setup
@@ -102,7 +105,11 @@ def toroidal_modes(run_info):
 
             if vs[brk_num[i]] != 0:
 
-                process_eigen_toroidal_anelastic(dir_type, i, lmax)
+                anelastic_params = read_Ouroboros_anelastic_input_file(
+                                    run_info['path_atten'])
+
+                process_eigen_anelastic(dir_type, 'T', lmin, lmax,
+                        anelastic_params["n_searches"], i_toroidal = i)
 
     return 
 
@@ -113,7 +120,7 @@ def solve_toroidal_elastic(l, nmin, nmax, model, x, vs, layers, brk_num, count_t
     '''
     
     # Calculate asymptotic wavenumber.
-    k = np.sqrt(l*(l + 1.0))
+    k = np.sqrt(l * (l + 1.0))
     model.set_k(k)
 
     # Loop over the layers of the model.
@@ -123,8 +130,8 @@ def solve_toroidal_elastic(l, nmin, nmax, model, x, vs, layers, brk_num, count_t
         # Toroidal modes only exist in solid layers.
         if vs[brk_num[i]] != 0:
 
-            # Build the matrices A and B and solve to get the eigenvalues
-            # and eigenvectors.
+            # Build the matrices A and B such that Ax = omega^2 * Bx and solve
+            # to get the eigenvalues and eigenvectors.
             eigvals, eigvecs = build_matrices_toroidal_and_solve(model,
                                 count_thick, i, invV, order, Dr)
 
@@ -141,45 +148,50 @@ def solve_toroidal_elastic(l, nmin, nmax, model, x, vs, layers, brk_num, count_t
 def solve_toroidal_anelastic(l, nmin, nmax, l_max, model, x, vs, layers, brk_num, count_thick, thickness, invV, order, Dr, dir_output, path_input_anelastic):
 
     # Calculate asymptotic wavenumber.
-    k = np.sqrt(l*(l + 1.0))
+    k = np.sqrt(l * (l + 1.0))
     model.set_k(k)
     
-    # hrmd: Jiayuan's code skips first layer, maybe because of Helmholtz?
-    #for i in range(layers-1,layers):
-
-    #    if i == 0:
-
-    #        continue
     for i in range(layers):
 
         if vs[brk_num[i]] != 0:
 
-            cur_model = lib.modelDiv(model,np.arange(count_thick[i],count_thick[i+1]))
+            # Get the model from this layer.
+            cur_model = lib.modelDiv(model,
+                            np.arange(count_thick[i], count_thick[i + 1]))
 
-            # generate matrices A and B such that Ax  =  omega^2*Bx
-            [Mmu,A2,Ki,dimension] = FEM.toroidal_an(cur_model,invV,order,Dr)
-            #[A,B] = FEM.toroidal(cur_model,invV,order,Dr)
+            # Generate matrices A and B such that Ax  =  omega^2*Bx
+            A, B = FEM.toroidal(cur_model, invV, order, Dr, anelastic = True)
 
+            # Create output directories.
             dir_numpy = os.path.join(dir_output, 'numpy_{:>03d}'.format(i))
             mkdir_if_not_exist(dir_numpy)
-
+            #
             dir_julia = os.path.join(dir_output, 'julia_{:>03d}'.format(i))
             mkdir_if_not_exist(dir_julia)
             
-            xx = lib.sqzx(x[:,count_thick[i]:count_thick[i+1]],thickness[i],order)
-            np.save(os.path.join(dir_numpy, 'xx.npy'),xx)
-            #np.save(os.path.join(dir_numpy, 'A.npy'),A)
-            #np.save(os.path.join(dir_numpy, 'B.npy'),B)
-            np.save(os.path.join(dir_numpy, 'Mmu.npy'),Mmu)
-            np.save(os.path.join(dir_numpy, 'A2.npy'),A2)
-            np.save(os.path.join(dir_numpy, 'mu.npy'),cur_model.mu)
-            f_p = open(os.path.join(dir_numpy, 'parameter_T.txt'),'w')
-            f_p.write(str(l)+'\n')
-            f_p.write(str(Ki)+'\n')
-            f_p.write(str(dimension)+'\n')
-            f_p.close()
+            # Save arrays required by Julia code.
+            xx = lib.sqzx(x[:, count_thick[i] : count_thick[i + 1]],
+                    thickness[i], order)
+            np.save(os.path.join(dir_numpy, 'xx.npy'),  xx)
+            np.save(os.path.join(dir_numpy, 'A.npy'), A)
+            np.save(os.path.join(dir_numpy, 'B.npy'), B)
+            #np.save(os.path.join(dir_numpy, 'Mmu.npy'), Mmu)
+            #np.save(os.path.join(dir_numpy, 'A2.npy'),  A2)
+            np.save(os.path.join(dir_numpy, 'mu.npy'),  cur_model.mu)
+            
+            # Save parameters used by Julia code.
+            Ki = A.shape[0]
+            dimension = A.shape[1]
+            path_param_T = os.path.join(dir_numpy, 'parameter_T.txt')
+            with open(path_param_T, 'w') as f_p:
 
-            cmd = "julia modes/julia/toroidal_an.jl {:} {:} {:d}".format(path_input_anelastic, dir_output, i)
+                f_p.write(str(l) + '\n')
+                f_p.write(str(Ki)+ '\n')
+                f_p.write(str(dimension) + '\n')
+
+            # Call Julia code.
+            cmd = "julia modes/julia/toroidal_an.jl {:} {:} {:d}".format(
+                        path_input_anelastic, dir_output, i)
             subprocess.run(cmd, shell = True)
 
     return
@@ -190,38 +202,33 @@ def build_matrices_toroidal_and_solve(model, count_thick, i, invV, order, Dr):
     eigenvalue equation.
     '''
 
-    cur_model = lib.modelDiv(model,np.arange(count_thick[i],count_thick[i+1]))
-    # generate matrices A and B such that Ax  =  omega^2*Bx
-    [A,B] = FEM.toroidal(cur_model,invV,order,Dr)
-    
-    if i==0:
+    # Get the part of the model from the current layer.
+    cur_model = lib.modelDiv(model,
+                    np.arange(count_thick[i], count_thick[i + 1]))
 
-        #pos must be a list even with one number
+    # Generate matrices A and B such that Ax = omega^2*Bx
+    A, B = FEM.toroidal(cur_model, invV, order, Dr, anelastic = False)
+    
+    # If the layer contains the central singularity, use equivalent form.
+    if i == 0:
+
+        # Get equivalent form.
         pos = [0]
-        cut_off_pos = np.shape(A)[0]-1
-        #A_singularity = lib.equivForm(A,pos,cut_off_pos,1)[0]
-        #B_singularity = lib.equivForm(B,pos,cut_off_pos,0)[0]
-        #sparse form doesn't work for only on singularity, use non-sparse form instead
-        #A = sps.csc_matrix(A)
-        #B = sps.csc_matrix(B)
-        #A_list = lib.sparse_equivForm(A,pos,cut_off_pos,1)
-        #A_singularity = A_list[0].toarray()
-        #A0_inv = A_list[1].toarray()
-        #E_singularity = A_list[2].toarray()
-        #B_singularity = lib.equivForm(B,pos,cut_off_pos,0)[0].toarray()
-        A_list = lib.equivForm(A,pos,cut_off_pos,1)
-        A_singularity = A_list[0]
-        A0_inv = A_list[1]
-        E_singularity = A_list[2]
-        B_singularity = lib.equivForm(B,pos,cut_off_pos,0)[0]
-        #test matlab code by computing T0 of each eigenfunction to check if it is done correctly
-        eigvals,eigvecs0 = eigh(A_singularity,B_singularity)
-        T0 = -A0_inv@E_singularity.T@eigvecs0
-        eigvecs = np.vstack((T0,eigvecs0))
+        cut_off_pos = np.shape(A)[0] - 1
+        A_singularity, A0_inv, E_singularity = lib.equivForm(A, pos,
+                                                    cut_off_pos, 1)
+        B_singularity, _, _ = lib.equivForm(B, pos, cut_off_pos, 0)
+
+        # Solve for eigenvalues and eigenvectors.
+        eigvals, eigvecs0 = eigh(A_singularity, B_singularity)
+        T0 = -A0_inv @ E_singularity.T @ eigvecs0
+        eigvecs = np.vstack((T0, eigvecs0))
 
     else:
-        # eigensolver
-        eigvals,eigvecs = eigh(A,B)
+
+        # Solve for eigenvalues and eigenvectors without using equivalent
+        # form.
+        eigvals, eigvecs = eigh(A, B)
 
     return eigvals, eigvecs
 
@@ -266,40 +273,116 @@ def process_eigen_toroidal(l, eigvals, eigvecs, nmin, nmax, count_thick, thickne
     return omega
 
 # Processing anelastic modes. -------------------------------------------------
-def load_eigen_julia_toroidal_anelastic(dir_julia, dir_eigvecs, i_toroidal, l):
+def load_eigen_julia_anelastic(dir_julia, dir_eigvecs, mode_type, l, j_search, i_toroidal = None):
+
+    # Define components of the eigenvector.
+    if mode_type == 'T':
+        
+        assert i_toroidal is not None
+        eigvec_comps = ['W']
+
+    elif mode_type == 'S':
+
+        eigvec_comps = ['U', 'V']
+
+    else:
+
+        raise ValueError
+
+    eigvec_parts = []
+    for comp in eigvec_comps:
+
+        eigvec_parts.append('{:}_real'.format(comp))
+        eigvec_parts.append('{:}_imag'.format(comp))
 
     # Load frequency information.
-    name_eigvals = os.path.join('eigenvalues_{:>03d}_{:>05d}.txt'.format(i_toroidal, l))
+    if i_toroidal is None:
+
+        name_eigvals = os.path.join('eigenvalues_{:>05d}_{:>05d}.txt'.format(l, j_search))
+
+    else:
+
+        name_eigvals = os.path.join('eigenvalues_{:>03d}_{:>05d}_{:>05d}.txt'.format(i_toroidal, l, j_search))
+
     path_eigvals_in = os.path.join(dir_julia, name_eigvals)
     f_real_l, f_imag_l = np.loadtxt(path_eigvals_in).T
+    f_real_l = np.atleast_1d(f_real_l)
+    f_imag_l = np.atleast_1d(f_imag_l)
+
+    # Store in dictionary.
+    eigen_data = {
+        'f_real' : f_real_l,
+        'f_imag' : f_imag_l}
 
     # Load eigenfunctions.
     num_eigen = len(f_real_l)
     for i in range(num_eigen):
 
-        name_eigvec = 'eigvec_{:>05d}_{:>05d}.txt'.format(i, l)
+        name_eigvec = 'eigvec_{:>05d}_{:>05d}_{:>05d}.txt'.format(i, l, j_search)
         path_eigvec_in = os.path.join(dir_eigvecs, name_eigvec)
 
-        ri, W_real_li, W_imag_li = np.loadtxt(path_eigvec_in).T
+        #ri, W_real_li, W_imag_li = np.loadtxt(path_eigvec_in).T
+        data_i = np.loadtxt(path_eigvec_in).T
 
         if i == 0:
             
+            ri = data_i[0, :]
             r = ri
             n_r = len(r)
 
-            W_real_l = np.zeros((num_eigen, n_r))
-            W_imag_l = np.zeros((num_eigen, n_r))
+            for var in eigvec_parts:
 
-        W_real_l[i, :] = W_real_li
-        W_imag_l[i, :] = W_imag_li
+                eigen_data[var] = np.zeros((num_eigen, n_r))
 
-    eigen_data_l = {
-            'f_real' : f_real_l,
-            'f_imag' : f_imag_l,
-            'W_real' : W_real_l,
-            'W_imag' : W_imag_l }
+        for j, var in enumerate(eigvec_parts):
 
-    return r, eigen_data_l
+            eigen_data[var][i, :] = data_i[j + 1, :]
+
+    return r, eigen_data
+
+def load_eigen_julia_anelastic_multi_search(dir_julia, dir_eigvecs, mode_type, l,
+        n_searches, i_toroidal = None):
+
+    for i in range(n_searches):
+
+        r_i, eigen_data_i = load_eigen_julia_anelastic(dir_julia,
+                            dir_eigvecs, mode_type, l, i + 1,
+                            i_toroidal = i_toroidal)
+
+        #print('\n')
+        #for key in eigen_data_i:
+
+        #    print(key, len(eigen_data_i[key]))
+
+        if i == 0:
+
+            r = r_i
+
+            eigen_data = eigen_data_i
+
+        else:
+
+            for key in eigen_data:
+
+                eigen_data[key] = np.concatenate([eigen_data[key],
+                                    eigen_data_i[key]])
+
+    
+    #print('\n')
+    #for key in eigen_data:
+
+    #    print(key, len(eigen_data[key]))
+    
+    f_diff_frac_thresh = 1.0E-3
+    eigen_data, _ = remove_duplicate_complex_modes(eigen_data,
+                        f_diff_frac_thresh, dup_type = 'equal')
+
+    #print('\n')
+    #for key in eigen_data:
+
+    #    print(key, len(eigen_data[key]))
+
+    return r, eigen_data
 
 def separate_oscil_relax_modes(eigen_data, zero_tol_mHz):
 
@@ -318,7 +401,115 @@ def separate_oscil_relax_modes(eigen_data, zero_tol_mHz):
     
     return eigen_data_oscil, eigen_data_relax
 
-def remove_duplicate_complex_modes(eigen_data, f_diff_frac_thresh, dup_type = 'neg_freq'):
+def remove_duplicate_complex_modes(eigen_data, f_diff_frac_thresh, dup_type = 'equal'):
+    
+    #for i in range(len(eigen_data['f_real'])):
+
+    #    print('{:>+8.3e} {:>+8.3e}'.format(eigen_data['f_real'][i],
+    #            eigen_data['f_imag'][i]))
+    
+    # If dup_type == 'equal'
+    # Look for duplicates in the mode list and remove them.
+    # Duplicate pairs meet two criteria.
+    # 1. Real part is the same.
+    # 2. Imaginary part is the same.
+    #
+    # If dup_type == 'neg_freq'
+    # Look for negative-frequency duplicates in the mode list
+    # and remove them.
+    # Negative-frequency duplicate pairs meet two criteria:
+    # 1. Imaginary part is the same.
+    # 2. Real part is the same except for a factor of -1.
+    #
+    # If dup_type == 'conj'
+    # Look for complex-conjugate duplicates in the mode list
+    # and remove them.
+    # Complex-conjugate duplicate pairs meet two criteria:
+    # 1. Real part is the same.
+    # 2. Imaginary part is the same except for a factor of -1.
+    if dup_type == 'equal':
+
+        sign_real = -1.0
+        sign_imag = -1.0
+
+        key_discard = 'f_real'
+
+    elif dup_type == 'neg_freq':
+        
+        sign_real = +1.0
+        sign_imag = -1.0
+
+        key_discard = 'f_real'
+
+    elif dup_type == 'conj':
+
+        sign_real = -1.0
+        sign_imag = +1.0
+
+        key_cond_1 = 'f_real'
+        key_cond_2 = 'f_imag'
+        key_discard = 'f_imag'
+
+    nu = eigen_data['f_real'] + (1.0j * eigen_data['f_imag'])
+    abs_nu = np.abs(nu)
+
+    num_eigen= len(eigen_data['f_real'])
+    i_remove = set() 
+    for i0 in range(num_eigen): 
+        
+        # Loop over pairs.
+        for i1 in range(i0 + 1, num_eigen):
+            
+            abs_i0 = abs_nu[i0]
+            abs_i1 = abs_nu[i1]
+            mean_abs = 0.5 * (abs_i0 + abs_i1)
+
+            # Calculate difference for real part.
+            f_diff_frac_1 = (np.abs(eigen_data['f_real'][i0] +
+                                    (sign_real * eigen_data['f_real'][i1]))
+                                            / mean_abs)
+            # Calculate difference for imaginary part.
+            f_diff_frac_2 = (np.abs(eigen_data['f_imag'][i0] +
+                                    (sign_imag * eigen_data['f_imag'][i1]))
+                                            / mean_abs)
+
+            #f_diff_frac_1 = np.abs(eigen_data[key_cond_1][i0] - eigen_data[key_cond_1][i1]) \
+            #            / abs_nu
+
+            ## Calculate difference for criterion 2.
+            #f_diff_frac_2 = np.abs(eigen_data[key_cond_2][i0] + eigen_data[key_cond_2][i1]) \
+            #            / abs_nu
+
+            # Check if both criteria are met.
+            if  (f_diff_frac_1 < f_diff_frac_thresh) and \
+                (f_diff_frac_2 < f_diff_frac_thresh):
+
+                # Decide which mode to discard.
+                # We discard the first mode if it has a 
+                # negative component of the specified type.
+                if eigen_data[key_discard][i0] < 0:
+
+                    i_remove.add(i0)
+
+                else:
+
+                    i_remove.add(i1)
+
+    # Separate the two lists.
+    i_remove    = np.array(list(i_remove), dtype = np.int)
+    i_keep      = [i for i in range(num_eigen) if not (i in i_remove)]
+    i_keep      = np.array(i_keep, dtype = np.int)
+    # 
+    eigen_data_keep     = dict()
+    eigen_data_remove   = dict()
+    for key in eigen_data.keys(): 
+
+        eigen_data_keep[key]    = eigen_data[key][i_keep]
+        eigen_data_remove[key]  = eigen_data[key][i_remove]
+
+    return eigen_data_keep, eigen_data_remove
+
+def remove_duplicate_complex_modes_old(eigen_data, f_diff_frac_thresh, dup_type = 'neg_freq'):
     
     # If dup_type == 'neg_freq'
     # Look for negative-frequency duplicates in the oscillatory mode list
@@ -498,10 +689,21 @@ def get_unique_within_tol(a, tol):
 
     return a_new
 
-def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
+def process_eigen_anelastic(dir_output, mode_type, l_min, l_max, n_searches, i_toroidal = None):
     
-    mode_type = 'T'
-    eigvec_comps = ['W']
+    # Define components of the eigenvector.
+    if mode_type == 'T':
+
+        assert i_toroidal is not None
+        eigvec_comps = ['W']
+
+    elif mode_type == 'S':
+
+        eigvec_comps = ['U', 'V']
+
+    else:
+
+        raise ValueError
 
     # Define tolerances.
     # zero_tol_mHz          Tolerance for modes which are defined as
@@ -517,8 +719,16 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
     tol_roots_poles_mHz = 1.0E-10
 
     # Get directories.
-    dir_julia = os.path.join(dir_output, 'julia_{:>03d}'.format(i_toroidal))
-    name_eigvecs = 'eigenfunctions_{:>03d}'.format(i_toroidal)
+    if i_toroidal is None:
+
+        dir_julia = os.path.join(dir_output, 'julia')
+        name_eigvecs = 'eigenfunctions'
+    
+    else:
+
+        dir_julia = os.path.join(dir_output, 'julia_{:>03d}'.format(i_toroidal))
+        name_eigvecs = 'eigenfunctions_{:>03d}'.format(i_toroidal)
+
     dir_julia_eigvecs = os.path.join(dir_julia, name_eigvecs)
 
     # Prepare output.
@@ -532,12 +742,27 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
     roots = []
     
     first_iteration = True
-    for l in range(1, l_max + 1):
+    for l in range(l_min, l_max + 1):
     #for l in [1]:
+
+        if l == 0:
+
+            if mode_type == 'S':
+
+                continue
         
-        # Load eigenvalues and eigenvectors.
-        r_l, eigen_data = load_eigen_julia_toroidal_anelastic(dir_julia,
-                        dir_julia_eigvecs, i_toroidal, l)
+        if n_searches == 1:
+
+            # Load eigenvalues and eigenvectors.
+            r_l, eigen_data = load_eigen_julia_anelastic(dir_julia,
+                            dir_julia_eigvecs, mode_type, l, 1,
+                            i_toroidal = i_toroidal)
+
+        else:
+
+            r_l, eigen_data = load_eigen_julia_anelastic_multi_search(
+                                dir_julia, dir_julia_eigvecs, mode_type, l,
+                                n_searches, i_toroidal = i_toroidal)
 
         # Store radial coordinate.
         if first_iteration:
@@ -645,31 +870,52 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
             ax.legend()
 
             plt.show()
+        
+        # Input/output files for poles/roots.
+        if i_toroidal is None:
+
+            name_poles_in = 'poles_{:>05d}.txt'.format(l)
+            name_roots_in = 'roots_{:>05d}.txt'.format(l)
+            name_poles_out = 'poles.txt'
+            name_roots_out = 'roots.txt'
+
+        else:
+
+            name_poles_in = 'poles_{:>03d}_{:>05d}.txt'.format(i_toroidal, l)
+            name_roots_in = 'roots_{:>03d}_{:>05d}.txt'.format(i_toroidal, l)
+            name_poles_out = 'poles_{:>03d}.txt'.format(i_toroidal)
+            name_roots_out = 'roots_{:>03d}.txt'.format(i_toroidal)
 
         # Process the poles and roots.
-        name_poles_in = 'poles_{:>03d}_{:>05d}.txt'.format(i_toroidal, l)
         path_poles_in = os.path.join(dir_julia, name_poles_in) 
         poles_l = np.loadtxt(path_poles_in)
-        poles_l = poles_l[:, 0] + 1.0j * poles_l[:, 1] 
-        poles_l = get_unique_within_tol(poles_l, tol_roots_poles_mHz)
-        poles.extend(poles_l)
+        if len(poles_l) > 0:
+
+            poles_l = poles_l[:, 0] + 1.0j * poles_l[:, 1] 
+            poles_l = get_unique_within_tol(poles_l, tol_roots_poles_mHz)
+            poles.extend(poles_l)
         #
-        name_roots_in = 'roots_{:>03d}_{:>05d}.txt'.format(i_toroidal, l)
         path_roots_in = os.path.join(dir_julia, name_roots_in) 
         roots_l = np.loadtxt(path_roots_in)
-        roots_l = roots_l[:, 0] + 1.0j * roots_l[:, 1] 
-        roots_l = get_unique_within_tol(roots_l, tol_roots_poles_mHz)
-        roots.extend(roots_l)
+        if len(roots_l) > 0:
+
+            roots_l = roots_l[:, 0] + 1.0j * roots_l[:, 1] 
+            roots_l = get_unique_within_tol(roots_l, tol_roots_poles_mHz)
+            roots.extend(roots_l)
     
     # Combine the pole and root lists and save them..
-    poles = get_unique_within_tol(poles, tol_roots_poles_mHz)
-    name_poles_out = 'poles_{:>03d}.txt'.format(i_toroidal)
+    if len(poles) > 0:
+
+        poles = get_unique_within_tol(poles, tol_roots_poles_mHz)
+
     path_poles_out = os.path.join(dir_output, name_poles_out)
     print("Writing to {:}".format(path_poles_out))
     np.savetxt(path_poles_out, poles)
     #
-    roots = get_unique_within_tol(roots, tol_roots_poles_mHz)
-    name_roots_out = 'roots_{:>03d}.txt'.format(i_toroidal)
+    if len(roots) > 0:
+
+        roots = get_unique_within_tol(roots, tol_roots_poles_mHz)
+
     path_roots_out = os.path.join(dir_output, name_roots_out)
     print("Writing to {:}".format(path_roots_out))
     np.savetxt(path_roots_out, roots)
@@ -681,8 +927,6 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
     # Save datasets.
     include_n_dict = {'oscil' : True, 'oscil_duplicate' : True,
                       'relax' : True, 'relax_duplicate' : True }
-    #include_n_dict = {'oscil' : True, 'oscil_duplicate' : False,
-    #                  'relax' : True, 'relax_duplicate' : False }
     for dataset_key in eigen_data_full.keys():
 
         # Save eigenvalues.
@@ -694,13 +938,6 @@ def process_eigen_toroidal_anelastic(dir_output, i_toroidal, l_max):
         save_eigenvectors_complex(  dir_eigvecs_dict[dataset_key],
                                     eigvec_comps, r, eigen_data_full[dataset_key],
                                     include_n = include_n_dict[dataset_key])
-
-    #for key in eigen_data_full.keys():
-
-    #    print('\n')
-    #    for var_key in eigen_data_full[key].keys():
-
-    #        print(var_key, eigen_data_full[key][var_key])
 
     return
 
@@ -1025,6 +1262,11 @@ def spheroidal_modes(run_info):
 
         if run_info['attenuation'] == 'full':
 
+            dir_numpy = os.path.join(dir_type, 'numpy')
+            mkdir_if_not_exist(dir_numpy)
+            dir_julia = os.path.join(dir_type, 'julia')
+            mkdir_if_not_exist(dir_julia)
+
             if run_info['grav_switch'] == 0:
 
                 # Construct the matrices A and B.
@@ -1085,6 +1327,15 @@ def spheroidal_modes(run_info):
                 x, x_V,
                 block_type, block_len, A0_inv, E_singularity, B_eqv_pressure,
                 path_eigenvalues, dir_eigenfunc, switch, save = True)
+
+    # Process the Julia output.
+    if run_info['attenuation'] == 'full':
+
+        anelastic_params = read_Ouroboros_anelastic_input_file(
+                                run_info['path_atten'])
+
+        process_eigen_anelastic(dir_type, 'S', lmin, lmax, 
+                anelastic_params["n_searches"])
 
     return
 

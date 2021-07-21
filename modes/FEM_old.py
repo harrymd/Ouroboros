@@ -13,7 +13,6 @@ from Ouroboros.modes import lib
 # tol_FEM   Used for checking if value is effectively 0.
 tol_FEM = 1e-16
 
-# Radial modes. ---------------------------------------------------------------
 def radial_solid_GPmixed(model,invV,invV_P,order,order_P,Dr,Dr_P,rho,radius):
     '''
     Create A and B matrices.
@@ -491,7 +490,6 @@ def radial_fluid_noG_mixedV(model,invV,invV_p,order,order_p,Dr,Dr_p):
     
     return A,B,block_len
 
-# Spheroidal modes. -----------------------------------------------------------
 def solid_GPmixed(model,invV,invV_P,order,order_P,Dr,Dr_P,rho,radius):
     '''
     Create A and B matrices.
@@ -1185,91 +1183,96 @@ def fluid_noG_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V
     
     return A,B,block_len
 
-# Toroidal modes. -------------------------------------------------------------
-def toroidal(model, invV, order, Dr, anelastic = False):
+def toroidal(model,invV,order,Dr):
     '''
-    Build spring matrix A and mass matrix B such that
-        A x = om^2 B x
-    for the toroidal modes in one solid region (toroidal modes do not exist
-    in fluid regions).
+    Create A and B matrices.
+    For the toroidal modes (necessarily in solid region).
 
     For definitions of variables, see modes/compute_modes.py
     '''
 
-    # Unpack variables.
-    Np  = (order + 1)
-    mu  = model.mu
+    # implement finite element method on toroidal modes
+    Np = order+1
+    mu = model.mu
     rho = model.rho
-    x   = model.x
-    k   = model.k
-    Ki  = len(x[0])
-    dimension = (Ki * order) + 1
+    x = model.x
+    k = model.k
+    Ki = len(x[0]) #number of elements
+    dimension = Ki*order+1
     
-    # Prepare output matrices.
-    B = np.zeros((dimension, dimension)) 
-    if anelastic:
-        
-        # In the anelastic case, we have a separate spring matrix for each
-        # layer.
-        A = np.zeros((Ki, dimension, dimension))
-
-    else:
-        
-        # In the elastic case, we have a single spring matrix.
-        A = np.zeros((dimension, dimension)) 
+    A = np.zeros((dimension,dimension)) #integraral of test function matrix
+    B = np.zeros((dimension,dimension)) #Xi matrix
     
-    # Calculate local mass matrix M.
-    M = (invV.T @ invV)
+    M = np.matmul(invV.T,invV)
     
     for i in range(Ki):
+        Ji = model.J[0,i] #This is a number
+        rxi = model.rx[0,i] #This is a number
+        ri = np.diag(x[:,i]) #2*2 matrix
+        # Dr: 2*2 matrix, mu[i]: number
+        # Aelmt: 4 terms of the RHS of the weak form equation
+        # Belmt: 1 term of the LHS of the weak form equation
+        # must check if A and B are symmetric
+        #ri is still different
+        i_order = i*order
+        Aelmt = Ji*mu[i]*(-(rxi * ((Dr.T @ M) @ ri) +   \
+                     (ri @ (M @ Dr)) * rxi) +           \
+                     (k**2.0 - 1.0)*M +                 \
+                     (rxi**2.0) * ((((Dr.T @ ri) @ M) @ ri) @ Dr))
+        # manage unit: *1e15/1e15
+        A[i_order:i_order+Np,i_order:i_order+Np] = A[i_order:i_order+Np,i_order:i_order+Np] +\
+                    (Aelmt+Aelmt.T)/2 #Symmetric operation to eliminate little error
         
-        # Calculate spring matrix A (four terms on RHS of weak form equation)
-        # and mass matrix B (one term on LHS).
-        # Enforce symmetry of output and account for units.
-        #
-        # Ji    Jacobian of i_th element (a scalar).
-        # rxi   rx of i_th elment (a scalar).
-        # ri    r (metric) of i_th element (a 2x2 matrix).
-        Ji  = model.J[0, i]
-        rxi = model.rx[0, i]
-        ri  = np.diag(x[:, i])
-        i_order = (i * order)
-        i0 = i_order
-        i1 = (i_order + Np)
-        #
-        Aelmt = Ji * mu[i] * (
-                    - (rxi * ((Dr.T @ M) @ ri)
-                    + (ri @ (M @ Dr)) * rxi)
-                    + (k ** 2.0 - 1.0) * M
-                    + (rxi ** 2.0) * ((((Dr.T @ ri) @ M) @ ri) @ Dr))
-        #
-        unit_factor_A = 1.0 # 1e15 / 1e15
-        Aelmt = (Aelmt + Aelmt.T) / 2.0 
-        Aelmt = (Aelmt * unit_factor_A)
-        #
-        Belmt = Ji * rho[i] * ((ri @ M) @ ri)
-        #
-        unit_factor_B = 1.0E6 # 1e21 / 1e15
-        Belmt = (Belmt + Belmt.T) / 2.0 
-        Belmt = (Belmt * unit_factor_B)
-        
-        # Store.
-        if anelastic:
-            
-            # Note negative sign in anelastic case, due to different
-            # convention for writing eigenvalue problem.
-            A[i, i0 : i1, i0 : i1] = A[i, i0 : i1, i0 : i1] - Aelmt
-
-        else:
-
-            A[i0 : i1, i0 : i1] = A[i0 : i1, i0 : i1] + Aelmt
-
-        B[i0 : i1, i0 : i1] = B[i0 : i1, i0 : i1] + Belmt
+        Belmt = Ji*rho[i]*np.matmul(np.matmul(ri,M),ri)
+        # manage unit: *1e21/1e15
+        B[i_order:i_order+Np,i_order:i_order+Np] = B[i_order:i_order+Np,i_order:i_order+Np] +\
+                    (Belmt+Belmt.T)/2*1e6 #Symmetric operation to eliminate little error
     
-    #return Mmu, B, Ki, dimension
-    return A, B
+    return A,B
 
 # Anelastic versions. ---------------------------------------------------------
+def toroidal_an(model,invV,order,Dr):
+    # implement finite element method on toroidal modes
+    Np = order+1
+    mu = model.mu
+    rho = model.rho
+    x = model.x
+    k = model.k
+    Ki = len(x[0]) #number of elements
+    dimension = Ki*order+1
+    
+    #A = np.zeros((dimension,dimension)) #integraral of test function matrix
+    B = np.zeros((dimension,dimension)) #Xi matrix
+    Mmu = np.zeros((Ki,dimension,dimension)) #Matrix for each layer
+    M = np.matmul(invV.T,invV)
+
+    for i in range(Ki):
+        Ji = model.J[0,i] #This is a number
+        rxi = model.rx[0,i] #This is a number
+        ri = np.diag(x[:,i]) #2*2 matrix
+        # Dr: 2*2 matrix, mu[i]: number
+        # Aelmt: 4 terms of the RHS of the weak form equation
+        # Belmt: 1 term of the LHS of the weak form equation
+        # must check if A and B are symmetric
+        #ri is still different
+        i_order = i*order
+        Aelmt = Ji*mu[i]*(-(rxi*((Dr.T @ M) @ ri)+\
+                     (ri @ (M @ Dr))*rxi)+\
+                    (k**2-1)*M + \
+                    rxi**2*((((Dr.T @ ri) @ M) @ ri) @ Dr))
+        # manage unit: *1e15/1e15, change + to -
+        Mmu[i,i_order:i_order+Np,i_order:i_order+Np]  = -(Aelmt+Aelmt.T)/2
+#        A[i_order:i_order+Np,i_order:i_order+Np] = A[i_order:i_order+Np,i_order:i_order+Np] -\
+#                    (Aelmt+Aelmt.T)/2 #Symmetric operation to eliminate little error
+        
+        Belmt = Ji * rho[i] * ((ri @ M) @ ri)
+
+        # manage unit: *1e21/1e15
+        B[i_order:i_order+Np,i_order:i_order+Np] = B[i_order:i_order+Np,i_order:i_order+Np] +\
+                    (Belmt+Belmt.T)/2*1e6 #Symmetric operation to eliminate little error
+
+    return Mmu, B, Ki, dimension
+
 def fluid_noG_mixedV_an(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V):
     # implement finite element method on fluid speroidal modes
     Np = order+1
