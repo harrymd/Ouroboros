@@ -14,11 +14,19 @@ function save_spheroidal_eigvecs(eigvals, eigvecs, dir_julia, l, j_search,
     #
     
     # Unpack save params.
-    A2      = save_params["A2"]
-    x       = save_params["x"]
-    x_V     = save_params["x_V"]
-    xx      = save_params["xx"]
-    nep_h   = save_params["nep_h"]
+    B               = save_params["B"]
+    x               = save_params["x"]
+    x_V             = save_params["x_V"]
+    xx              = save_params["xx"]
+    nep_h           = save_params["nep_h"]
+    layers          = save_params["layers"]
+    count_thick     = save_params["count_thick"]
+    thickness       = save_params["thickness"]
+    order           = save_params["order"]
+    order_V         = save_params["order_V"]
+    blk_len         = save_params["blk_len"]
+    blk_type        = save_params["blk_type"]
+    count_blk_size  = save_params["count_blk_size"]
 
     size_r = size(xx)[1]
     
@@ -27,10 +35,10 @@ function save_spheroidal_eigvecs(eigvals, eigvecs, dir_julia, l, j_search,
 
     # Save the eigenvectors.
     name_eigvecs = "eigenfunctions"
-    dir_eigvecs = joinpath(dir_output, name_eigvecs)
+    dir_eigvecs = joinpath(dir_julia, name_eigvecs)
     mkdir_if_not_exist(dir_eigvecs)
     #
-    for i = 1 : num_eigen
+    for i = 1 : n_eigs
 
         # Prepare output arrays.
         U_eigen = ComplexF64[]
@@ -60,7 +68,7 @@ function save_spheroidal_eigvecs(eigvals, eigvecs, dir_julia, l, j_search,
 
         # Normalise eigenvector.
         # GMIG report 2020, eq. 3.4.
-        scale = sqrt(transpose(eigvecs[1:end,i])*A2*eigvecs[1:end,i]-0.5/eigvals[i]*transpose(eigvecs[1:end,i])
+        scale = sqrt(transpose(eigvecs[1:end,i])*B*eigvecs[1:end,i]-0.5/eigvals[i]*transpose(eigvecs[1:end,i])
                     *compute_Mder(nep_h,eigvals[i],1)*eigvecs[1:end,i])
         U_eigen = U_eigen/scale
         V_eigen = V_eigen/scale
@@ -103,6 +111,7 @@ function save_spheroidal_eigvecs(eigvals, eigvecs, dir_julia, l, j_search,
 end
 
 function read_numpy_files_spheroidal(dir_output)
+#function read_numpy_files_spheroidal(dir_output, model_type)
 
     dir_julia = joinpath(dir_output, "julia")
     dir_numpy = joinpath(dir_output, "numpy")
@@ -132,98 +141,17 @@ function read_numpy_files_spheroidal(dir_output)
     dimensions = parse.(Int64, (split(lines[end], " ")))
     dimension = dimensions[end]
     #
-    A0 = npzread(joinpath(dir_numpy, "A0.npy"))
-    A2 = npzread(joinpath(dir_numpy, "A2.npy"))
-    xx = npzread(joinpath(dir_numpy, "xx.npy"))
-    x_V = npzread(joinpath(dir_numpy, "x_V.npy"))
-    x   = npzread(joinpath(dir_numpy, "x.npy"))
-    thickness = npzread(joinpath(dir_numpy, "thickness.npy"))
+    A_ka        = npzread(joinpath(dir_numpy, "A_ka.npy"))
+    B           = npzread(joinpath(dir_numpy, "B.npy"))
+    xx          = npzread(joinpath(dir_numpy, "xx.npy"))
+    x_V         = npzread(joinpath(dir_numpy, "x_V.npy"))
+    x           = npzread(joinpath(dir_numpy, "x.npy"))
+    thickness   = npzread(joinpath(dir_numpy, "thickness.npy"))
 
-    return dir_numpy, dir_julia, A0, A2, xx, x, x_V, l, dimension, layers,
+    #extra_params = read_extra_anelastic_params(dir_numpy, model_type, "")
+
+    return dir_numpy, dir_julia, A_ka, B, xx, x, x_V, l, dimension, layers,
         blk_type, blk_len, Ki, size_K, thickness
-
-end
-
-function prepare_model_dictionary_spheroidal(anelastic_params, dir_numpy, layers, blk_type)
-
-    if anelastic_params["model_type"] == "maxwell_uniform"
-
-        mu1 = Array{Any}(nothing, layers)
-        nu1 = Array{Any}(nothing, layers)
-
-        for i = 1 : layers
-
-            # Solid layers only.
-            if blk_type[i] == 1
-                
-                mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
-                nu1[i] = zeros(size(mu1[i])) .+ anelastic_params["nu1"]
-
-            end
-
-        end
-
-        model = Dict("mu1" => mu1,
-                     "nu1" => nu1)
-
-    elseif anelastic_params["model_type"] == "SLS_uniform"
-
-        mu1 = Array{Any}(nothing, layers)
-        mu2 = Array{Any}(nothing, layers)
-        nu2 = Array{Any}(nothing, layers)
-
-        for i = 1 : layers
-
-            # Solid layers only.
-            if blk_type[i] == 1
-                
-                mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
-                mu2[i] = mu1[i] * anelastic_params["mu2_factor"]
-                nu2[i] = zeros(size(mu1[i])) .+ anelastic_params["nu2"]
-
-            end
-
-        end
-
-        model = Dict("mu1" => mu1,
-                     "mu2" => mu2,
-                     "nu2" => nu2)
-
-    elseif anelastic_params["model_type"] == "burgers_uniform"
-
-        mu1 = Array{Any}(nothing, layers)
-        mu2 = Array{Any}(nothing, layers)
-        nu1 = Array{Any}(nothing, layers)
-        nu2 = Array{Any}(nothing, layers)
-
-        for i = 1 : layers
-
-            # Solid layers only.
-            if blk_type[i] == 1
-                
-                mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
-                mu2[i] = mu1[i] * anelastic_params["mu2_factor"]
-                nu1[i] = zeros(size(mu1[i])) .+ anelastic_params["nu1"]
-                nu2[i] = zeros(size(mu1[i])) .+ anelastic_params["nu2"]
-
-            end
-
-        end
-
-        model = Dict("mu1" => mu1,
-                     "mu2" => mu2,
-                     "nu1" => nu1,
-                     "nu2" => nu2)
-
-    else
-
-        error("Not implemented.")
-
-    end
-
-
-
-    return model
 
 end
 
@@ -246,8 +174,9 @@ function spheroidal_rep(args)
     # Read files generated by Python script, relating to matrices.
     # ? Put polynomials here.
     dir_output = args[2]
-    dir_numpy, dir_julia, A0, A2, xx, x, x_V, l, dimension, layers, blk_type,
-        blk_len, Ki, size_K, thickness = read_numpy_files_spheroidal(dir_output)
+    dir_numpy, dir_julia, A_ka, B, xx, x, x_V, l, dimension, layers, blk_type,
+        blk_len, Ki, size_K, thickness =
+            read_numpy_files_spheroidal(dir_output)
 
     # Change units of radius array, and get number of points.
     xx = xx*1000
@@ -257,12 +186,15 @@ function spheroidal_rep(args)
     # is equal to zero.
     temp_A0 = zeros(dimension, dimension)
     
-    # Convert viscosities from SI units to Ouroboros units.
-    anelastic_params = change_anelastic_param_units(anelastic_params)
+    ## Convert viscosities from SI units to Ouroboros units.
+    #anelastic_params = change_anelastic_param_units(anelastic_params)
 
     # Prepare model dictionary.
-    model = prepare_model_dictionary_spheroidal(anelastic_params, dir_numpy,
+    model = prepare_model_dictionary(anelastic_params, dir_numpy,
                                                 layers, blk_type)
+
+    # Convert to correct units.
+    model = change_model_units(model, layers)
 
     # Define linear term in polynomial eigenvalue problem.
     # This is generally zero, however when the individual elements consist of
@@ -278,7 +210,7 @@ function spheroidal_rep(args)
 
     # All other cases have REP terms.
     elseif anelastic_params["model_type"] in ["maxwell_uniform", "SLS_uniform",
-                                              "burgers_uniform"]
+                                              "burgers_uniform", "SLS"]
 
         A1 = (sum(Ki) * Matrix(1.0I, dimension, dimension))
 
@@ -292,7 +224,7 @@ function spheroidal_rep(args)
 
     # Create the NEP with the constant (non-frequency-dependent) parts of the
     # matrices. The coefficients are for terms A0 + A1 s + A2 s^2.
-    nep = PEP([A0, A1, A2])
+    nep = PEP([A_ka, A1, B])
 
     # Prepare loop variables.
     poles = Vector{ComplexF64}()
@@ -307,8 +239,8 @@ function spheroidal_rep(args)
         # Solid layers only.
         if blk_type[i] == 1
 
-            Mmu = npzread(joinpath(dir_numpy, string("Mmu", i - 1, ".npy")))
-            mu  = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
+            A_mu = npzread(joinpath(dir_numpy, string("A_mu", i - 1, ".npy")))
+            mu  = npzread(joinpath(dir_numpy, string( "mu",   i - 1, ".npy")))
 
             # Loop over the elements of this layer.
             num = (num + 1)
@@ -322,8 +254,9 @@ function spheroidal_rep(args)
                 temp_A1 = zeros(dimension, dimension)
                 j1 = count_blk_size
                 j2 = (count_blk_size + (2 * blk_len[i][1]) - 1)
-                temp_A1[j1 : j2, j1 : j2] = Mmu[k, :, :]
-                
+                #j2 = count_blk_size + sum(blk_len[i]) - 1
+                temp_A1[j1 : j2, j1 : j2] = A_mu[k, :, :]
+
                 # Get the parameters for this element.
                 ele_params = Dict()
                 for key in keys(model)
@@ -357,19 +290,27 @@ function spheroidal_rep(args)
     # Build operator ∫𝜑*H*rho*𝜑 from original nep ω^2*∫𝜑*rho*𝜑 - ∫𝜑*H*rho*𝜑 = 0
     # This is used to calculate derivative for normalisation purposes.
     # The negative signs are used to cancel out unwanted terms.
-    nep_h = SumNEP(nep, PEP([-temp_A0, -temp_A0, -A2]))
+    nep_h = SumNEP(nep, PEP([-temp_A0, -temp_A0, -B]))
 
     # Make dictionary of values needed to save output.
     save_params = Dict()
-    save_params["A2"]       = A2
-    save_params["x"]        = x
-    save_params["xx"]       = xx
-    save_params["x_V"]      = x_V
-    save_params["nep_h"]    = nep_h
+    save_params["B"]                = B 
+    save_params["x"]                = x
+    save_params["xx"]               = xx
+    save_params["x_V"]              = x_V
+    save_params["nep_h"]            = nep_h
+    save_params["layers"]           = layers
+    save_params["count_thick"]      = count_thick
+    save_params["thickness"]        = thickness
+    save_params["order"]            = order
+    save_params["order_V"]          = order_V
+    save_params["blk_len"]          = blk_len
+    save_params["blk_type"]         = blk_type
+    save_params["count_blk_size"]   = count_blk_size
 
     # Solve non-linear eigenvalue problem.
     solve_NEP_wrapper(nep, anelastic_params, poles, roots, l, nothing,
-                      dir_julia, save_params)
+                      dir_output, dir_julia, save_params)
 
 end
 

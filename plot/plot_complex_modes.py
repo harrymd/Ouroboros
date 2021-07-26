@@ -90,6 +90,11 @@ def plot_YP1982_data(ax, gamma_scale):
 
     om = np.real(nu)
     ga = np.imag(nu)
+    
+    print("YP1982")
+    print(om)
+    print(ga)
+
 
     ax.scatter(om, ga * gamma_scale, label = 'Yuen and Peltier (1982)')
 
@@ -242,7 +247,7 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
 
     # Set axis limits.
     ax.set_xlim(f_lim)
-    #ax.set_ylim(gamma_lim * gamma_scale)
+    ax.set_ylim(gamma_lim * gamma_scale)
     
     # Label axes.
     font_size_label = 16

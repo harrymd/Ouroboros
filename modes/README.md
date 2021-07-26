@@ -240,11 +240,20 @@ Diagram from Yuen and Peltier (1982).
 
 ```
 model SLS_uniform
-n_eigs 5
-eig_start_mHz 1.0
-eta2 1.0E16
-mu2_factor 75.0
+control_file examples/input/example_control_file.txt
+eta2 1.0E18
+mu2_factor 100.0
 ```
+
+##### Standard Linear Solid (SLS) rheology
+
+```
+model SLS_uniform
+control_file examples/input/example_control_file.txt
+param_file examples/input/example_params_SLS.txt
+```
+
+The `param_file` has two columns which defines the variables `eta2` and `mu2` at each sample point in the model (the same sample points as in the model file).
 
 ##### Uniform Burgers rheology
 

@@ -231,7 +231,7 @@ def Vandermonde1D(N,r):
 class model_para:
     # Can I set default as None? So that I do not need to add the parameters unused
     def __init__(self, mu=None, ka=None, rho=None, x=None, alpha=None, \
-                 beta=None, J=None, rx=None): #rho_p=None, xp=None, xP=None, xV=None):
+                 beta=None, J=None, rx=None, new_anelastic_params = None): 
         self.mu = mu
         self.ka = ka
         self.rho = rho
@@ -244,6 +244,16 @@ class model_para:
         #self.xp = xp
         #self.xP = xP
         #self.xV = xV
+        
+        if new_anelastic_params is not None:
+
+            if 'eta2' in new_anelastic_params.keys():
+
+                self.eta2 = new_anelastic_params['eta2']
+
+            if 'mu2' in new_anelastic_params.keys():
+
+                self.mu2 = new_anelastic_params['mu2']
         
     def add_alpha(self,alpha):
         self.alpha = alpha

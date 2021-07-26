@@ -379,14 +379,16 @@ def read_Ouroboros_homogeneous_input_file(path_input):
 
 def read_Ouroboros_anelastic_input_file(path_input):
 
-    print(path_input)
-    
     anelastic_params = dict()
 
     with open(path_input, 'r') as in_id:
 
         anelastic_params["model_type"]      = in_id.readline().split()[-1]
         anelastic_params["control_file"]    = in_id.readline().split()[-1]
+
+        if anelastic_params["model_type"] == "SLS":
+
+            anelastic_params["path_anelastic_params"] = in_id.readline().split()[-1]
 
     with open(anelastic_params["control_file"], 'r') as in_id:
         

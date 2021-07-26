@@ -435,6 +435,7 @@ def model_para_prime_inv(r, para, x):
     return f
     
 def modelDiv(model,pos):
+
     new_model = copy.deepcopy(model)
     #print (new_model.rho,np.shape(new_model.rho))
     #print (pos)
@@ -456,6 +457,11 @@ def modelDiv(model,pos):
         new_model.beta = new_model.beta[pos]
     new_model.J = new_model.J[:,pos]
     new_model.rx = new_model.rx[:,pos]
+
+    if hasattr(new_model, 'eta2'):
+        new_model.eta2= new_model.eta2[pos]
+    if hasattr(new_model, 'mu2'):
+        new_model.mu2= new_model.mu2[pos]
     
     return new_model
         

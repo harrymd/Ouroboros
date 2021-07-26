@@ -47,6 +47,10 @@ function read_input_anelastic(path_input_anelastic)
             anelastic_params["pressure_GPa"] = parse(Float64, split(readline(f))[2])
             anelastic_params["grain_size_m"] = parse(Float64, split(readline(f))[2])
 
+        elseif anelastic_params["model_type"] == "SLS"
+
+            anelastic_params["param_file"] = split(readline(f))[2]
+
         else
             
             error_str = @sprintf("Model type %s not recognised.\n",
@@ -99,7 +103,8 @@ end
 
 function update_root_pole_list(roots, poles, model_type, root_pole_k)
 
-    if model_type in ["maxwell_uniform", "SLS_uniform", "burgers_uniform"]
+    if model_type in ["maxwell_uniform", "SLS_uniform", "burgers_uniform",
+                        "SLS"]
         
         # Store roots and poles.
         for temp_root in root_pole_k["roots"]
@@ -117,6 +122,26 @@ function update_root_pole_list(roots, poles, model_type, root_pole_k)
     end
 
     return roots, poles
+
+end
+
+function read_extra_anelastic_params(dir_numpy, model_type, suffix)
+
+    if model_type == "SLS"
+
+        extra_params = Dict()
+        extra_params["mu2"]  = npzread(joinpath(dir_numpy,
+                                                join(["mu2", suffix, ".npy"])))
+        extra_params["eta2"] = npzread(joinpath(dir_numpy,
+                                                join(["eta2", suffix, ".npy"])))
+
+    else
+
+        extra_params = nothing
+
+    end
+
+    return extra_params
 
 end
 
@@ -207,7 +232,7 @@ function save_eigvals_poles_roots(dir_output, i_toroidal, l, j_search, num_eigen
 end
 
 # Convert viscosities from SI units to Ouroboros units.
-function change_anelastic_param_units(anelastic_params)
+function old_change_anelastic_param_units(anelastic_params)
 
     nu_SI_to_Ouroboros = 1.0E-9
     for nu in ["nu1", "nu2"]
@@ -221,6 +246,141 @@ function change_anelastic_param_units(anelastic_params)
     end
 
     return anelastic_params
+
+end
+
+function prepare_model_dictionary(anelastic_params, dir_numpy, layers, blk_type)
+
+    if anelastic_params["model_type"] == "maxwell_uniform"
+
+        mu1 = Array{Any}(nothing, layers)
+        nu1 = Array{Any}(nothing, layers)
+
+        for i = 1 : layers
+
+            # Solid layers only.
+            if blk_type[i] == 1
+                
+                mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
+                nu1[i] = zeros(size(mu1[i])) .+ anelastic_params["nu1"]
+
+            end
+
+        end
+
+        model = Dict("mu1" => mu1,
+                     "nu1" => nu1)
+
+    elseif anelastic_params["model_type"] == "SLS_uniform"
+
+        mu1 = Array{Any}(nothing, layers)
+        mu2 = Array{Any}(nothing, layers)
+        nu2 = Array{Any}(nothing, layers)
+
+        for i = 1 : layers
+
+            # Solid layers only.
+            if blk_type[i] == 1
+                
+                mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
+                mu2[i] = mu1[i] * anelastic_params["mu2_factor"] * 1.0E9
+                nu2[i] = zeros(size(mu1[i])) .+ anelastic_params["nu2"]
+
+            end
+
+        end
+
+        model = Dict("mu1" => mu1,
+                     "mu2" => mu2,
+                     "nu2" => nu2)
+
+    elseif anelastic_params["model_type"] == "SLS"
+
+        mu1 = Array{Any}(nothing, layers)
+        mu2 = Array{Any}(nothing, layers)
+        nu2 = Array{Any}(nothing, layers)
+
+        for i = 1 : layers
+
+            # Solid layers only.
+            if blk_type[i] == 1
+                
+                mu1[i]  = npzread(joinpath(dir_numpy, string( "mu",   i - 1, ".npy")))
+                mu2[i]  = npzread(joinpath(dir_numpy, string( "mu2",  i - 1, ".npy")))
+                nu2[i] = npzread(joinpath(dir_numpy, string( "eta2", i - 1, ".npy")))
+
+            end
+
+        end
+
+        model = Dict("mu1" => mu1,
+                     "mu2" => mu2,
+                     "nu2" => nu2)
+
+    elseif anelastic_params["model_type"] == "burgers_uniform"
+
+        mu1 = Array{Any}(nothing, layers)
+        mu2 = Array{Any}(nothing, layers)
+        nu1 = Array{Any}(nothing, layers)
+        nu2 = Array{Any}(nothing, layers)
+
+        for i = 1 : layers
+
+            # Solid layers only.
+            if blk_type[i] == 1
+                
+                mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
+                mu2[i] = mu1[i] * anelastic_params["mu2_factor"] * 1.0E9
+                nu1[i] = zeros(size(mu1[i])) .+ anelastic_params["nu1"]
+                nu2[i] = zeros(size(mu1[i])) .+ anelastic_params["nu2"]
+
+            end
+
+        end
+
+        model = Dict("mu1" => mu1,
+                     "mu2" => mu2,
+                     "nu1" => nu1,
+                     "nu2" => nu2)
+
+    else
+
+        error("Not implemented.")
+
+    end
+
+    return model
+
+end
+
+function change_model_units(model, layers)
+    
+    # Elastic moduli are input in SI units (Pa) and Ouroboros uses units of GPa.
+    # Note that we do not have to change the units of mu1, because this is
+    # handled in the function prep_fem().
+    mu_SI_to_Ouroboros = 1.0E-9
+    # Viscosities are input in SI units (Pa s) and Ouroboros uses units of GPa s.
+    nu_SI_to_Ouroboros = 1.0E-9
+
+    unit_convert_dict = Dict("nu1" => nu_SI_to_Ouroboros,
+                             "nu2" => nu_SI_to_Ouroboros,
+                             "mu2" => mu_SI_to_Ouroboros)
+
+    for (var, scaling) in unit_convert_dict    
+
+        if var in keys(model)
+
+            for i = 1 : layers
+
+                model[var][i] = (model[var][i] * scaling)
+
+            end
+
+        end
+
+    end
+
+    return model
 
 end
 
@@ -258,7 +418,7 @@ function get_element_EP(anelastic_params, temp_A0, temp_A1, ele_params)
     # Next, we treat rheologies which can be expressed as REPs (rational
     # eigenvalue problems).
     elseif anelastic_params["model_type"] in ["maxwell_uniform", "SLS_uniform",
-                                              "burgers_uniform"]
+                                              "burgers_uniform", "SLS"]
 
         # Maxwell solid with uniform viscosity.
         #elseif body_type == -1
@@ -276,7 +436,7 @@ function get_element_EP(anelastic_params, temp_A0, temp_A1, ele_params)
 
         # Standard linear solid.
         #elseif anelastic_params["model_type"] == 1
-        elseif anelastic_params["model_type"] == "SLS_uniform"
+        elseif anelastic_params["model_type"] in ["SLS_uniform", "SLS"]
             
             # Unpack.
             mu1 = ele_params["mu1"]
@@ -450,7 +610,7 @@ function solve_NEP_wrapper(nep, anelastic_params, poles, roots, l, i_toroidal,
 
         if isnothing(i_toroidal)
             
-            save_spheroidal_eigvecs(eigvals, eigvecs, dir_julia, l, n_eigs,
+            save_spheroidal_eigvecs(eigvals, eigvecs, dir_julia, l, j, n_eigs,
                                     save_params)
             #save_spheroidal_eigvecs(eigvals, eigvecs, A2, count_blk_size, blk_type,
             #                        blk_len, layers, x, xx, x_V, thickness, nep_h,

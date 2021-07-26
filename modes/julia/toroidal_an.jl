@@ -25,7 +25,7 @@ include("common.jl")
 #                                                    # frequency (rad/s).
 #conditions["n_samples"] = length(conditions["mineral_id"]) 
 
-function prepare_model_dictionary_toroidal(mu, anelastic_params)
+function prepare_model_dictionary_toroidal(mu, anelastic_params, dir_numpy)
 
     if anelastic_params["model_type"] == "SLS_uniform"
 
@@ -48,6 +48,15 @@ function prepare_model_dictionary_toroidal(mu, anelastic_params)
                         "temp_K"        => zeros(size(mu)) .+ anelastic_params["temp_K"],
                         "pressure_GPa"  => zeros(size(mu)) .+ anelastic_params["pressure_GPa"],
                         "grain_size_m"  => zeros(size(mu)) .+ anelastic_params["grain_size_m"])
+
+    elseif anelastic_params["model_type"] == "SLS"
+
+        mu2  = npzread(joinpath(dir_numpy, "mu2.npy"))
+        nu2 = npzread(joinpath(dir_numpy,  "eta2.npy"))
+
+        model = Dict("mu1" => mu,
+                     "mu2" => mu2,
+                     "nu2" => nu2)
 
     else
 
@@ -119,6 +128,7 @@ function save_toroidal_eigvecs(eigvals, eigvecs, dir_output, dir_julia, l,
 end
 
 function read_numpy_files_toroidal(dir_output, i_toroidal)
+#function read_numpy_files_toroidal(dir_output, i_toroidal, model_type)
 
     dir_numpy = joinpath(dir_output, @sprintf("numpy_%03d", i_toroidal))
     dir_julia = joinpath(dir_output, @sprintf("julia_%03d", i_toroidal))
@@ -134,8 +144,11 @@ function read_numpy_files_toroidal(dir_output, i_toroidal)
     mu  = npzread(joinpath(dir_numpy, "mu.npy"))
     #A2  = npzread(joinpath(dir_numpy, "A2.npy"))
     xx  = npzread(joinpath(dir_numpy, "xx.npy"))
+    
+    #extra_params = read_extra_anelastic_params(dir_numpy, model_type, "")
 
-    return dir_julia, l, Ki, dimension, A, mu, B, xx
+    #return dir_julia, l, Ki, dimension, A, mu, B, xx, extra_params
+    return dir_numpy, dir_julia, l, Ki, dimension, A, mu, B, xx
     
 end
 
@@ -151,8 +164,10 @@ function toroidal_rep(args)
     # ? Put polynomials here.
     dir_output = args[2]
     i_toroidal = parse(Int64, args[3])
-    dir_julia, l, Ki, dimension, A, mu, B, xx = read_numpy_files_toroidal(
-                                                        dir_output, i_toroidal)
+    #dir_julia, l, Ki, dimension, A, mu, B, xx, extra_params = 
+    #    read_numpy_files_toroidal(dir_output, i_toroidal, anelastic_params["model_type"])
+    dir_numpy, dir_julia, l, Ki, dimension, A, mu, B, xx = 
+        read_numpy_files_toroidal(dir_output, i_toroidal)
 
     # Change units of radius array, and get number of points.
     xx  = (xx * 1000.0)
@@ -162,11 +177,12 @@ function toroidal_rep(args)
     # is equal to zero.
     temp_A0 = zeros(dimension, dimension)
 
-    # Convert viscosities from SI units to Ouroboros units.
-    anelastic_params = change_anelastic_param_units(anelastic_params)
+    ## Convert viscosities from SI units to Ouroboros units.
+    #anelastic_params = change_anelastic_param_units(anelastic_params)
 
     # Prepare model dictionary.
-    model = prepare_model_dictionary_toroidal(mu, anelastic_params)
+    #model = prepare_model_dictionary_toroidal(mu, anelastic_params, extra_params)
+    model = prepare_model_dictionary_toroidal(mu, anelastic_params, dir_numpy)
 
     # Define linear term in polynomial eigenvalue problem.
     # This is generally zero, however when the individual elements consist of
@@ -183,7 +199,7 @@ function toroidal_rep(args)
 
     # All other cases have REP terms.
     elseif anelastic_params["model_type"] in ["maxwell_uniform", "SLS_uniform",
-                                              "burgers_uniform"]
+                                              "burgers_uniform", "SLS"]
 
         A1 = (Ki * Matrix(1.0I, dimension, dimension))
 

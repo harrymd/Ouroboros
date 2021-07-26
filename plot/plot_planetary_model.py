@@ -9,7 +9,7 @@ def main():
 
     # 
     var_options = ['rho', 'v_p', 'v_pv', 'v_ph', 'v_s', 'v_sv', 'v_sh', 'Q_ka', 'Q_mu', 'eta', 'mu', 'ka']
-    label_dict = {  'rho'   : 'Density (kg m${^-3}$)',
+    label_dict = {  'rho'   : 'Density (kg m$^{-3}$)',
                     'v_p'   : 'P-wave speed (m s$^{-1}$)',
                     'v_pv'  : 'Vertically-polarised P-wave speed (m s$^{-1}$)',
                     'v_ph'  : 'Horizontally-polarised P-wave speed (m s$^{-1}$)',
