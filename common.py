@@ -72,7 +72,7 @@ def get_Ouroboros_out_dirs(Ouroboros_info, mode_type):
 
         anelastic_params = read_Ouroboros_anelastic_input_file(
                                 Ouroboros_info['path_atten'])
-        attenuation_str = anelastic_params['model_type']
+        attenuation_str = anelastic_params['layer_model'][-1]
 
     else:
 
@@ -383,12 +383,24 @@ def read_Ouroboros_anelastic_input_file(path_input):
 
     with open(path_input, 'r') as in_id:
 
-        anelastic_params["model_type"]      = in_id.readline().split()[-1]
+        #anelastic_params["model_type"]      = in_id.readline().split()[-1]
         anelastic_params["control_file"]    = in_id.readline().split()[-1]
+        anelastic_params["path_anelastic_params"] = in_id.readline().split()[-1]
+        anelastic_params["n_layers"] = int(in_id.readline().split()[-1])
 
-        if anelastic_params["model_type"] == "SLS":
+        anelastic_params["is_layer_elastic"] = []
+        anelastic_params["layer_model"] = []
 
-            anelastic_params["path_anelastic_params"] = in_id.readline().split()[-1]
+        for i in range(anelastic_params["n_layers"]):
+
+            anelastic_params["layer_model"].append(in_id.readline().split()[-1])
+            if anelastic_params["layer_model"][i] == "elastic":
+
+                anelastic_params["is_layer_elastic"].append(True)
+
+            else:
+
+                anelastic_params["is_layer_elastic"].append(False)
 
     with open(anelastic_params["control_file"], 'r') as in_id:
         

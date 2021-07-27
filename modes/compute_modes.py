@@ -82,7 +82,7 @@ def toroidal_modes(run_info):
     dir_eigenfunc_list, path_eigenvalues_list) = \
         prep_fem(model_path, dir_type, num_elmt, switch,
                     anelastic_model = anelastic_model)
-
+    
     # Loop over l-value.
     for l in range(lmin,lmax+1):
     #for l in [2]:    
@@ -112,7 +112,10 @@ def toroidal_modes(run_info):
     # Process the Julia output.
     if run_info['attenuation'] == 'full':
 
-        for i in range(layers):
+        # Currently, only do outermost layer.
+        #for i in range(layers):
+        i_range = list(range(layers))
+        for i in [i_range[-1]]:
 
             if vs[brk_num[i]] != 0:
 
@@ -166,7 +169,10 @@ def solve_toroidal_anelastic(l, nmin, nmax, l_max, model, x, vs, layers, brk_num
     k = np.sqrt(l * (l + 1.0))
     model.set_k(k)
     
-    for i in range(layers):
+    # Currently, only do outermost layer.
+    #for i in range(layers):
+    i_range = list(range(layers))
+    for i in [i_range[-1]]:
 
         if vs[brk_num[i]] != 0:
 
@@ -195,8 +201,8 @@ def solve_toroidal_anelastic(l, nmin, nmax, l_max, model, x, vs, layers, brk_num
             np.save(os.path.join(dir_numpy, 'mu.npy'),  cur_model.mu)
 
             save_extra_numpy_files_for_anelastic(dir_numpy, cur_model,
-                    anelastic_params["model_type"], suffix = '')
-            
+                    anelastic_params["layer_model"][i], suffix = '')
+
             # Save parameters used by Julia code.
             Ki = A.shape[0]
             dimension = A.shape[1]
@@ -1981,6 +1987,194 @@ def build_matrices_spheroidal_noGP_an(
     # Prepare output lists.
     # block_len Length of U,V,p,P, etc.
     # xx    Relative radius of eigenvector.
+    block_len = []
+    block_pos = [0]
+    xx = []
+    
+    # Create output directory.
+    dir_numpy = os.path.join(dir_output, 'numpy')
+    mkdir_if_not_exist(dir_numpy)
+
+    # Open parameter file.
+    f_p = open(os.path.join(dir_numpy, 'parameter_S.txt'), 'w')
+    f_p.write(str(l) + '\n')
+
+    # Get matrices for each layer.
+    for i in range(layers):
+        
+        # Get model for this layer.
+        cur_model = lib.modelDiv(model, np.arange(  count_thick[i],
+                                                    count_thick[i+1]))
+
+        # Case 1: Fluid layer.
+        if block_type[i] == 0:
+
+            if anelastic_params["is_layer_elastic"][i]:
+
+                # Get matrices for this layer.
+                # Note sign convention on A.
+                (   tempA_el, tempB, temp_Ki, temp_dimension, temp_dimension_V,
+                    temp_dimension_p, temp_block_len) = \
+                            FEM.spheroidal_fluid_noG_mixedV(
+                            cur_model, invV, invV_p, invV_V, order, order_p,
+                            order_V, Dr, Dr_p, Dr_V)
+                tempA_el = (tempA_el * -1.0)
+
+                # Record useful information.
+                f_p.write(str(block_type[i])    + ' ')
+                f_p.write(str(temp_Ki)          + ' ')
+                f_p.write(str(temp_dimension)   + ' ')
+                f_p.write(str(temp_dimension_V) + ' ')
+                f_p.write(str(temp_dimension_p) + '\n')
+
+            else:
+
+                raise NotImplementedError("Attenuation in fluid layers is not implemented.")
+
+        # Case 2: Solid layer.
+        else:
+
+            if anelastic_params["is_layer_elastic"][i]:
+
+                # Get elastic matrices.
+                # Note sign convention on A.
+                tempA_el, tempB, temp_Ki, temp_dimension, temp_block_len = \
+                    FEM.spheroidal_solid_noG_or_G(cur_model, invV,
+                                        order, Dr, None, None, g_switch,
+                                        anelastic = False)
+                tempA_el = (tempA_el * -1.0)
+            
+            else:
+
+                # Get matrices for this layer.
+                (   tempA_el, tempA_mu, tempB, temp_Ki, temp_dimension,
+                    temp_block_len) = FEM.spheroidal_solid_noG_or_G(cur_model, invV,
+                                        order, Dr, None, None, g_switch,
+                                        anelastic = True)
+
+                # Save matrices for this layer.
+                np.save(os.path.join(dir_numpy, 'A_mu' + str(i) + '.npy'), tempA_mu)
+                np.save(os.path.join(dir_numpy, 'mu'   + str(i) + '.npy'), cur_model.mu)
+
+            # Record useful information.
+            blk = [str(x) for x in temp_block_len]
+            f_p.write(str(block_type[i]) + ' ')
+            f_p.write(str(temp_Ki) + ' ')
+            f_p.write(" ".join(blk) + '\n')
+
+        if not anelastic_params["is_layer_elastic"][i]:
+
+            save_extra_numpy_files_for_anelastic(dir_numpy, cur_model,
+                    anelastic_params["layer_model"][i], suffix = str(i))
+        
+        # Join the matrices from each layer into a block diagonal.
+        if i == 0:
+
+            A_el = tempA_el
+            B = tempB
+
+        else:
+
+            A_el    = block_diag(A_el,  tempA_el)
+            B       = block_diag(B,     tempB)
+
+        # Update block length, radial coordinate and block position.
+        block_len.append(temp_block_len)
+        xx = np.hstack((xx, lib.sqzx(   x[:, count_thick[i] : count_thick[i + 1]],
+                                        thickness[i], order)))
+        for j in range(len(temp_block_len)):
+
+            block_pos.append(block_pos[-1] + temp_block_len[j])
+
+    # Record useful information.
+    block_pos_new = [str(x) for x in block_pos]
+    f_p.write(" ".join(block_pos_new))
+    f_p.write("\n")
+    f_p.close()
+    
+    # Impose boundary condition
+    # Boundary condition is constant matrix, so it is added into 
+    # the existing constant matrix.
+    C = np.zeros(np.shape(A_el))
+    count_blk_size = 0
+    for i in range(layers - 1):
+
+        # Keep track of cumulative block size.
+        count_blk_size = count_blk_size + np.sum(block_len[i])
+
+        # Manage unit: 1e12/1e15.
+        unit_factor = 1.0E-3
+        bc_term = (brk_radius[i + 1] ** 2.0) * unit_factor
+
+        # Case 1: Solid-fluid boundary.
+        if block_type[i] == 1:
+
+            i0 = count_blk_size + block_len[i + 1][0] + block_len[i + 1][1]
+            i1 = block_len[i][0] - 1
+
+            C[i0, i1] = bc_term
+            C[i1, i0] = bc_term
+        
+        # Case 2: Fluid-solid boundary.
+        else:
+            
+            i0 = count_blk_size - 1
+            i1 = count_blk_size
+
+            C[i0, i1] = -bc_term
+            C[i1, i0] = -bc_term
+
+    # Boundary condition for fluid outer layer.
+    if block_type[-1] == 0:
+        
+        unit_factor = 1.0E-6
+        g_R0 = lib.gravfield(brk_radius[-1], rho, radius)
+        bc_term = -unit_factor * (brk_radius[-1] ** 2.0) / (rho[-1] * g_R0)
+        C[-1, -1] = bc_term
+    
+    # Add the boundary conditions to the constant matrix.
+    # Use a negative sign because there is already a negative sign in the
+    # anelastic matrices.
+    A_el = A_el - C
+    ##elastic matrix
+    #A = A+C
+
+    # No Helmholtz decomposition.
+        
+    # Save matrices for Julia code.
+    np.save(os.path.join(dir_numpy, 'A_el.npy'),        A_el)
+    np.save(os.path.join(dir_numpy, 'B.npy'),           B)
+    #np.save(os.path.join(dir_numpy, 'A.npy'),           A)
+    #np.save(os.path.join(dir_numpy, 'B.npy'),           B)        
+    np.save(os.path.join(dir_numpy, 'xx.npy'),          xx)
+    np.save(os.path.join(dir_numpy, 'x_V.npy'),         x_V)
+    np.save(os.path.join(dir_numpy, 'x.npy'),           x)
+    np.save(os.path.join(dir_numpy, 'thickness.npy'),   thickness)
+    
+    return
+
+def old_build_matrices_spheroidal_noGP_an(
+        l, model, count_thick, thickness,
+        invV, invV_p, invV_V, invV_P,
+        order, order_p, order_V, order_P,
+        Dr, Dr_p, Dr_V, Dr_P,
+        x, x_V,
+        rho, radius,
+        block_type, brk_radius, brk_num, layers, switch,
+        dir_output, anelastic_params):
+    '''
+    Generate matrices A and B such that Ax  =  omega^2*Bx .
+    '''
+
+    g_switch = 0
+
+    # Calculate asymptotic wavenumber.
+    k = np.sqrt(l*(l + 1.0))
+    model.set_k(k)
+
+    # Prepare output lists.
+    # block_len Length of U,V,p,P, etc.
+    # xx    Relative radius of eigenvector.
     A = []
     B = []
     block_len = []
@@ -2165,8 +2359,8 @@ def build_matrices_spheroidal_G_an(
     # Prepare output lists.
     # block_len Length of U,V,p,P, etc.
     # xx    Relative radius of eigenvector.
-    A = []
-    B = []
+    #A = []
+    #B = []
     block_len = []
     block_pos = [0]
     xx = []
@@ -2189,54 +2383,57 @@ def build_matrices_spheroidal_G_an(
         # Case 1: Fluid layer.
         if block_type[i] == 0:
 
-            ## Get elastic matrices.
-            #tempA_e, tempB_e, temp_block_len = FEM.fluid_G_mixedV(cur_model,
-            #        invV, invV_p, invV_V, order, order_p, order_V, Dr, Dr_p,
-            #        Dr_V, rho, radius)
+            if anelastic_params["is_layer_elastic"][i]:
 
-            #tempA, tempB, temp_Ki, temp_block_len = FEM.fluid_G_mixedV_an(cur_model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,rho,radius)
+                # Get matrices for this layer.
+                # Note that for fluid layers, these are the same matrices as for
+                # the elastic case, except for a negative sign on A.
+                tempA_el, tempB, temp_Ki, temp_block_len = \
+                    FEM.spheroidal_fluid_G_mixedV(cur_model, invV, invV_p,
+                        invV_V, order, order_p, order_V, Dr, Dr_p, Dr_V, rho,
+                        radius)
+                tempA_el = (tempA_el * -1.0)
 
-            # Get matrices for this layer.
-            # Note that for fluid layers, these are the same matrices as for
-            # the elastic case, except for a negative sign on A.
-            tempA, tempB, temp_Ki, temp_block_len = \
-                FEM.spheroidal_fluid_G_mixedV(cur_model, invV, invV_p,
-                    invV_V, order, order_p, order_V, Dr, Dr_p, Dr_V, rho,
-                    radius)
-            tempA = (tempA * -1.0)
+            else:
+
+                raise NotImplementedError("Attenuation in fluid layers is not implemented.")
 
         # Case 2: Solid layer.
         else:
 
-            ## Get elastic matrices.
-            #tempA_e, tempB_e, temp_block_len = FEM.solid_G(cur_model, invV,
-            #        order, Dr, rho, radius)
+            if anelastic_params["is_layer_elastic"][i]:
 
-            # Get matrices for this layer.
-            temp_A_ka, temp_A_mu, tempB, temp_Ki, dimension, temp_block_len = \
-                    FEM.spheroidal_solid_noG_or_G(cur_model, invV, order, Dr, rho,
-                        radius, g_switch, anelastic = True)
-                            
-            # Save matrices for this layer.
-            np.save(os.path.join(dir_numpy, 'A_mu'  + str(i) + '.npy'), temp_A_mu)
-            np.save(os.path.join(dir_numpy, 'mu'    + str(i) + '.npy'), cur_model.mu)
+                # Get matrices for this layer.
+                tempA_el, tempB, temp_Ki, temp_dimension, temp_block_len = \
+                        FEM.spheroidal_solid_noG_or_G(cur_model, invV, order, Dr, rho,
+                            radius, g_switch, anelastic = False)
+                tempA_el = (tempA_el * -1.0)
 
-        save_extra_numpy_files_for_anelastic(dir_numpy, cur_model,
-                anelastic_params["model_type"], suffix = str(i))
+            else:
+
+                # Get matrices for this layer.
+                tempA_el, temp_A_mu, tempB, temp_Ki, temp_dimension, temp_block_len = \
+                        FEM.spheroidal_solid_noG_or_G(cur_model, invV, order, Dr, rho,
+                            radius, g_switch, anelastic = True)
+                                
+                # Save matrices for this layer.
+                np.save(os.path.join(dir_numpy, 'A_mu'  + str(i) + '.npy'), temp_A_mu)
+                np.save(os.path.join(dir_numpy, 'mu'    + str(i) + '.npy'), cur_model.mu)
+
+        if not anelastic_params["is_layer_elastic"][i]:
+
+            save_extra_numpy_files_for_anelastic(dir_numpy, cur_model,
+                    anelastic_params["layer_model"][i], suffix = str(i))
         
         # Join the matrices from each layer into a block diagonal.
         if i == 0:
 
-            #A = tempA_e
-            #B = tempB_e
-            A_ka = temp_A_ka
+            A_el = tempA_el
             B = tempB
 
         else:
 
-            #A = block_diag(A,tempA_e)
-            #B = block_diag(B,tempB_e)
-            A_ka    = block_diag(A_ka,  temp_A_ka)
+            A_el    = block_diag(A_el,  tempA_el)
             B       = block_diag(B,     tempB)
         
         # Update number of elements list, block length, and radial coordinate.
@@ -2249,7 +2446,7 @@ def build_matrices_spheroidal_G_an(
     # Impose boundary condition
     # Boundary condition is constant matrix, so it is added into 
     # the existing constant matrix.
-    C = np.zeros(np.shape(A_ka))
+    C = np.zeros(np.shape(A_el))
     count_blk_size = 0
     for i in range(layers - 1):
 
@@ -2299,7 +2496,7 @@ def build_matrices_spheroidal_G_an(
     # Add the boundary conditions to the constant matrix.
     # Use a negative sign because there is already a negative sign in the
     # anelastic matrices.
-    A_ka = A_ka - C
+    A_el = A_el - C
     ##elastic matrix
     #A = A+C
         
@@ -2341,17 +2538,16 @@ def build_matrices_spheroidal_G_an(
         
     if pressure_size == 0:
 
-        #A_eqv_pressure = A
-        #B_eqv_pressure = B
-        A_ka_eqv_pressure = A_ka
+        A_el_eqv_pressure = A_el
         B_eqv_pressure = B
 
     else:
 
-        cut_off_pos_pressure = np.shape(A)[0] - pressure_size
+        #cut_off_pos_pressure = np.shape(A)[0] - pressure_size
+        cut_off_pos_pressure = np.shape(A_el)[0] - pressure_size
         #A_eqv_pressure = lib.equivForm(A,pos_pressure,cut_off_pos_pressure,1)[0]
         #B_eqv_pressure = lib.equivForm(B,pos_pressure,cut_off_pos_pressure,0)[0]
-        A_ka_eqv_pressure   = lib.equivForm(A_ka,   pos_pressure,
+        A_el_eqv_pressure   = lib.equivForm(A_el,   pos_pressure,
                                     cut_off_pos_pressure, 1)[0]
         B_eqv_pressure      = lib.equivForm(B,      pos_pressure,
                                     cut_off_pos_pressure, 0)[0]
@@ -2362,7 +2558,7 @@ def build_matrices_spheroidal_G_an(
     f_p.close()
 
     # Save matrices for Julia code.
-    np.save(os.path.join(dir_numpy, 'A_ka.npy'),        A_ka_eqv_pressure)
+    np.save(os.path.join(dir_numpy, 'A_el.npy'),        A_el_eqv_pressure)
     np.save(os.path.join(dir_numpy, 'B.npy'),           B_eqv_pressure)
     #np.save(os.path.join(dir_numpy, 'A.npy'),A_eqv_pressure)
     #np.save(os.path.join(dir_numpy, 'B.npy'),B_eqv_pressure)   
@@ -2395,8 +2591,8 @@ def build_matrices_spheroidal_GP_an(
     # Prepare output lists.
     # block_len Length of U,V,p,P, etc.
     # xx    Relative radius of eigenvector.
-    A = []
-    B = []
+    #A = []
+    #B = []
     block_len = []
     block_pos = [0]
     xx = []
@@ -2419,40 +2615,54 @@ def build_matrices_spheroidal_GP_an(
         # Case 1: Fluid layer.
         if block_type[i] == 0:
 
-            tempA, tempB, temp_block_len = FEM.fluid_GP_mixedPV(cur_model,
-                    invV, invV_p, invV_P, invV_V, order, order_p, order_P,
-                    order_V, Dr, Dr_p, Dr_P, Dr_V, rho, radius)
-            tempA = (tempA * -1.0)
+            if anelastic_params["is_layer_elastic"][i]:
+
+                tempA_el, tempB, temp_Ki, temp_block_len = \
+                        FEM.spheroidal_fluid_GP_mixedPV(cur_model,
+                        invV, invV_p, invV_P, invV_V, order, order_p, order_P,
+                        order_V, Dr, Dr_p, Dr_P, Dr_V, rho, radius)
+                tempA_el = (tempA_el * -1.0)
+
+            else:
+
+                raise NotImplementedError("Attenuation in fluid layers is not implemented.")
 
         # Case 2: Solid layer.
         else:
+            
+            if anelastic_params["is_layer_elastic"][i]:
 
-            # Get matrices for this layer.
-            temp_A_ka, temp_A_mu, tempB, temp_Ki, dimension, temp_block_len = \
-                    FEM.spheroidal_solid_GPmixed(cur_model, invV, invV_P,
-                            order, order_P, Dr, Dr_P,
-                            rho, radius, anelastic = True)
+                tempA_el, tempB, temp_Ki, temp_dimension, temp_block_len = \
+                        FEM.spheroidal_solid_GPmixed(cur_model, invV, invV_P,
+                                order, order_P, Dr, Dr_P,
+                                rho, radius, anelastic = False)
 
-            # Save matrices for this layer.
-            np.save(os.path.join(dir_numpy, 'A_mu'  + str(i) + '.npy'), temp_A_mu)
-            np.save(os.path.join(dir_numpy, 'mu'    + str(i) + '.npy'), cur_model.mu)
+            else:
 
-        save_extra_numpy_files_for_anelastic(dir_numpy, cur_model,
-                anelastic_params["model_type"], suffix = str(i))
-        
+                # Get matrices for this layer.
+                tempA_el, temp_A_mu, tempB, temp_Ki, temp_dimension, temp_block_len = \
+                        FEM.spheroidal_solid_GPmixed(cur_model, invV, invV_P,
+                                order, order_P, Dr, Dr_P,
+                                rho, radius, anelastic = True)
+
+                # Save matrices for this layer.
+                np.save(os.path.join(dir_numpy, 'A_mu'  + str(i) + '.npy'), temp_A_mu)
+                np.save(os.path.join(dir_numpy, 'mu'    + str(i) + '.npy'), cur_model.mu)
+
+        if not anelastic_params["is_layer_elastic"][i]:
+
+            save_extra_numpy_files_for_anelastic(dir_numpy, cur_model,
+                    anelastic_params["layer_model"][i], suffix = str(i))
+
         # Join the matrices from each layer into a block diagonal.
         if i == 0:
 
-            #A = tempA_e
-            #B = tempB_e
-            A_ka = temp_A_ka
+            A_el = tempA_el
             B = tempB
 
         else:
 
-            #A = block_diag(A,tempA_e)
-            #B = block_diag(B,tempB_e)
-            A_ka    = block_diag(A_ka,  temp_A_ka)
+            A_el    = block_diag(A_el,  tempA_el)
             B       = block_diag(B,     tempB)
         
         # Update number of elements list, block length, and radial coordinate.
@@ -2465,12 +2675,12 @@ def build_matrices_spheroidal_GP_an(
     #boundary condition of the outer bound
     P_end = brk_radius[-1] * (l + 1.0)/(4.0 * np.pi * G)
     # Note negative sign.
-    A_ka[-1, -1] = A_ka[-1,-1] - P_end
+    A_el[-1, -1] = A_el[-1,-1] - P_end
     
     # Impose boundary condition
     # Boundary condition is constant matrix, so it is added into 
     # the existing constant matrix.
-    C = np.zeros(np.shape(A_ka))
+    C = np.zeros(np.shape(A_el))
     count_blk_size = 0
     for i in range(layers - 1):
 
@@ -2523,7 +2733,7 @@ def build_matrices_spheroidal_GP_an(
     # Add the boundary conditions to the constant matrix.
     # Use a negative sign because there is already a negative sign in the
     # anelastic matrices.
-    A_ka = A_ka - C
+    A_el = A_el - C
     ##elastic matrix
     #A = A+C
         
@@ -2568,8 +2778,8 @@ def build_matrices_spheroidal_GP_an(
 
             block_pos.append(block_pos[-1] + block_len[i][j])
         
-    cut_off_pos_pP = np.shape(A_ka)[0] - pP_size
-    A_ka_eqv_pressure = lib.equivForm(A_ka,pos_pP,cut_off_pos_pP,1)[0]
+    cut_off_pos_pP = np.shape(A_el)[0] - pP_size
+    A_el_eqv_pressure = lib.equivForm(A_el,pos_pP,cut_off_pos_pP,1)[0]
     B_eqv_pressure = lib.equivForm(B,pos_pP,cut_off_pos_pP,0)[0]
     #sparse matrix version
     #A_ka_eqv_pressure = lib.sparse_equivForm(A_ka,pos_pP,cut_off_pos_pP,1)[0]
@@ -2581,7 +2791,7 @@ def build_matrices_spheroidal_GP_an(
     f_p.close()
 
     # Save matrices for Julia code.
-    np.save(os.path.join(dir_numpy, 'A_ka.npy'),        A_ka_eqv_pressure)
+    np.save(os.path.join(dir_numpy, 'A_el.npy'),        A_el_eqv_pressure)
     np.save(os.path.join(dir_numpy, 'B.npy'),           B_eqv_pressure)
     #np.save(os.path.join(dir_numpy, 'A.npy'),A_eqv_pressure)
     #np.save(os.path.join(dir_numpy, 'B.npy'),B_eqv_pressure)   
@@ -2804,12 +3014,14 @@ def prep_fem(model_path, dir_output, num_elmt, switch, anelastic_model = None):
 
             if vs[brk_num[i]] != 0:
 
-                path_eigenvalues_i = os.path.join(dir_output, 'eigenvalues_{:03d}.txt'.format(i//2))
+                #path_eigenvalues_i = os.path.join(dir_output, 'eigenvalues_{:03d}.txt'.format(i//2))
+                path_eigenvalues_i = os.path.join(dir_output, 'eigenvalues_{:03d}.txt'.format(i))
                 rm_file_if_exist(path_eigenvalues_i)
                 path_eigenvalues_list.append(path_eigenvalues_i)
 
                 # Create output directories if they don't exist.
-                dir_eigenfunc_i = os.path.join(dir_output, 'eigenfunctions_{:03d}'.format(i//2))
+                #dir_eigenfunc_i = os.path.join(dir_output, 'eigenfunctions_{:03d}'.format(i//2))
+                dir_eigenfunc_i = os.path.join(dir_output, 'eigenfunctions_{:03d}'.format(i))
                 mkdir_if_not_exist(dir_eigenfunc_i)
                 dir_eigenfunc_list.append(dir_eigenfunc_i)
 
@@ -2845,21 +3057,22 @@ def get_anelastic_model(run_info):
     anelastic_params = read_Ouroboros_anelastic_input_file(
                         run_info['path_atten'])
 
-    if anelastic_params['model_type'] == 'SLS':
+    if anelastic_params["path_anelastic_params"] is None:
         
-        data = np.loadtxt(anelastic_params["path_anelastic_params"])
-
-
-        model = dict()
-        model["eta2"], model["mu2"] = data.T
-
-    elif anelastic_params["model_type"] in ["SLS_uniform"]:
-
         model = None
 
     else:
 
-        raise ValueError
+        with open(anelastic_params["path_anelastic_params"], 'r') as in_id:
+
+            headers = in_id.readline().split()[1:]
+
+        data = np.loadtxt(anelastic_params["path_anelastic_params"], skiprows = 1)
+
+        model = dict()
+        for i, var in enumerate(headers):
+
+            model[var] = data[:, i]
 
     return model
 

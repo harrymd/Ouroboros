@@ -95,7 +95,6 @@ def plot_YP1982_data(ax, gamma_scale):
     print(om)
     print(ga)
 
-
     ax.scatter(om, ga * gamma_scale, label = 'Yuen and Peltier (1982)')
 
     return
@@ -240,7 +239,7 @@ def plot_modes_complex_plane(run_info, mode_type, i_toroidal = None, save = True
         ax.scatter(np.real(poles), np.imag(poles) * gamma_scale, marker = 'x', 
                     label = 'Poles', **scatter_kwargs)
     
-    show_YP1982 = True
+    show_YP1982 = False
     if show_YP1982:
 
         plot_YP1982_data(ax, gamma_scale)

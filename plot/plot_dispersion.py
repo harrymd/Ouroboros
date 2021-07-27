@@ -19,6 +19,16 @@ def plot_dispersion_wrapper(run_info, mode_type, ax = None, save = True, show = 
     Gathers the necessary data to plot dispersion.
     '''
 
+    if run_info["code"] == "mineos":
+        
+        if i_toroidal == 0: 
+
+            mode_type = 'I'
+
+        elif i_toroidal == 2:
+
+            mode_type = 'T'
+
     # Get mode information.
     mode_info = load_eigenfreq(run_info, mode_type, i_toroidal = i_toroidal)
     n = mode_info['n']

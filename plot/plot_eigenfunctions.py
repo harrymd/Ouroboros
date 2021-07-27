@@ -217,9 +217,20 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
     if ax is None:
         
         if run_info['attenuation'] == 'full':
+            
+            imag_scaling = 'fixed'
+            if imag_scaling == 'fixed':
+
+                sharex = True
+                imag_scale = 300.0 
+
+            else:
+
+                sharex = False
+                imag_scale = 1.0
 
             fig, ax_arr = plt.subplots(1, 2, figsize = (imag_x, imag_y),
-                            sharey = True)
+                            sharey = True, sharex = sharex)
             ax = ax_arr[0]
             ax_imag = ax_arr[1]
 
@@ -342,11 +353,20 @@ def plot_eigenfunc_wrapper(run_info, mode_type, n, l, i_toroidal = None, ax = No
             if run_info['attenuation'] == 'full':
 
                 common_args['ax'] = ax_imag
-                common_args['x_label'] = 'Imaginary'
 
-                plot_eigenfunc_S(eigfunc_dict['r'], eigfunc_dict['U_im'],
-                        eigfunc_dict['V_im'],
-                        h_lines = None,
+                if imag_scaling == 'fixed':
+
+                    common_args['x_label'] = 'Imaginary $\\times$ {:>d}'.format(
+                                                int(imag_scale))
+
+                else:
+
+                    common_args['x_label'] = 'Imaginary'
+
+                plot_eigenfunc_S(eigfunc_dict['r'],
+                        eigfunc_dict['U_im'] * imag_scale,
+                        eigfunc_dict['V_im'] * imag_scale,
+                        h_lines = r_solid_fluid_boundary,
                         linestyles = [linestyle, linestyle],
                         label_suffix = label_suffix,
                         y_label = None,
@@ -783,13 +803,17 @@ def main():
     # Plot.
     if path_compare is not None:
 
+        if run_info_compare['code'] == 'mineos':
+
+            run_info_compare['attenuation'] = 'none'
+
         if run_info['attenuation'] == 'full' or run_info_compare['attenuation'] == 'full':
 
             no_title = True
         else:
 
             no_title = False
-
+        
         if ((run_info['attenuation'] == 'full') and 
             (run_info_compare['attenuation'] != 'full')):
 

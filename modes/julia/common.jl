@@ -14,7 +14,7 @@ function mkdir_if_not_exist(path_)
 end
 
 # Reads the anelastic input file specified in the modes input file.
-function read_input_anelastic(path_input_anelastic)
+function old_read_input_anelastic(path_input_anelastic)
     
     anelastic_params = Dict()
 
@@ -85,6 +85,79 @@ function read_input_anelastic(path_input_anelastic)
             n_eigs[i]   = parse(Int32,      line[3])
             n_iters[i]  = parse(Int32,      line[4])
             tol[i]      = parse(Float64,    line[5])
+
+        # Store in dictionary.
+        anelastic_params["n_searches"]          = n_searches
+        anelastic_params["eig_start_mHz_list"]  = eig_start_mHz
+        anelastic_params["n_eigs_list"]         = n_eigs
+        anelastic_params["n_iters_list"]        = n_iters
+        anelastic_params["tol_list"]            = tol
+
+        end
+
+    end
+
+    return anelastic_params
+
+end
+
+function read_input_anelastic(path_input_anelastic)
+    
+    anelastic_params = Dict()
+
+    open(path_input_anelastic) do f
+        
+        anelastic_params["control_file"] = split(readline(f))[2]
+        anelastic_params["path_anelastic_params"] = split(readline(f))[2]
+        anelastic_params["n_layers"] = parse(Int64, split(readline(f))[2])
+
+        anelastic_params["is_layer_elastic"] = Array{Bool}(undef,
+                                                anelastic_params["n_layers"])
+        anelastic_params["layer_model"] = Array{String}(undef, 
+                                            anelastic_params["n_layers"])
+
+        for j = 1 : anelastic_params["n_layers"]
+
+            anelastic_params["layer_model"][j] = split(readline(f))[2]
+
+            if anelastic_params["layer_model"][j] == "elastic"
+
+                anelastic_params["is_layer_elastic"][j] = true
+
+            else
+
+                anelastic_params["is_layer_elastic"][j] = false
+
+            end
+
+        end
+
+    end
+
+    # Read the control file.
+    open(anelastic_params["control_file"]) do f
+
+        # Read all lines.
+        lines = readlines(f)
+
+        # Prepare output arrays.
+        n_searches = length(lines)
+        eig_start_mHz   = zeros(Complex,    n_searches)
+        n_eigs          = zeros(Int32,      n_searches)
+        n_iters         = zeros(Int32,      n_searches)
+        tol             = zeros(Float64,    n_searches)
+
+        # Parse lines.
+        for j = 1 : n_searches
+
+            line = split(lines[j])
+            eig_start_mHz_real = parse(Float64, line[1])
+            eig_start_mHz_imag = parse(Float64, line[2])
+            eig_start_mHz[j] = eig_start_mHz_real + (1.0im * eig_start_mHz_imag)
+
+            n_eigs[j]   = parse(Int32,      line[3])
+            n_iters[j]  = parse(Int32,      line[4])
+            tol[j]      = parse(Float64,    line[5])
 
         # Store in dictionary.
         anelastic_params["n_searches"]          = n_searches
@@ -250,13 +323,22 @@ function old_change_anelastic_param_units(anelastic_params)
 end
 
 function prepare_model_dictionary(anelastic_params, dir_numpy, layers, blk_type)
+    
+    mu1 = Array{Any}(nothing, layers)
+    mu2 = Array{Any}(nothing, layers)
+    nu1 = Array{Any}(nothing, layers)
+    nu2 = Array{Any}(nothing, layers)
+    model = Dict()
 
-    if anelastic_params["model_type"] == "maxwell_uniform"
+    for i = 1 : layers
+        
+        model_type = anelastic_params["layer_model"][i]
+    
+        if model_type == "elastic"
 
-        mu1 = Array{Any}(nothing, layers)
-        nu1 = Array{Any}(nothing, layers)
+            # Pass.
 
-        for i = 1 : layers
+        elseif model_type == "maxwell_uniform"
 
             # Solid layers only.
             if blk_type[i] == 1
@@ -266,18 +348,7 @@ function prepare_model_dictionary(anelastic_params, dir_numpy, layers, blk_type)
 
             end
 
-        end
-
-        model = Dict("mu1" => mu1,
-                     "nu1" => nu1)
-
-    elseif anelastic_params["model_type"] == "SLS_uniform"
-
-        mu1 = Array{Any}(nothing, layers)
-        mu2 = Array{Any}(nothing, layers)
-        nu2 = Array{Any}(nothing, layers)
-
-        for i = 1 : layers
+        elseif model_type == "SLS_uniform"
 
             # Solid layers only.
             if blk_type[i] == 1
@@ -288,64 +359,54 @@ function prepare_model_dictionary(anelastic_params, dir_numpy, layers, blk_type)
 
             end
 
-        end
-
-        model = Dict("mu1" => mu1,
-                     "mu2" => mu2,
-                     "nu2" => nu2)
-
-    elseif anelastic_params["model_type"] == "SLS"
-
-        mu1 = Array{Any}(nothing, layers)
-        mu2 = Array{Any}(nothing, layers)
-        nu2 = Array{Any}(nothing, layers)
-
-        for i = 1 : layers
+        elseif model_type == "SLS"
 
             # Solid layers only.
             if blk_type[i] == 1
                 
                 mu1[i]  = npzread(joinpath(dir_numpy, string( "mu",   i - 1, ".npy")))
                 mu2[i]  = npzread(joinpath(dir_numpy, string( "mu2",  i - 1, ".npy")))
-                nu2[i] = npzread(joinpath(dir_numpy, string( "eta2", i - 1, ".npy")))
+                nu2[i]  = npzread(joinpath(dir_numpy, string( "eta2", i - 1, ".npy")))
 
             end
 
+        #elseif model_type == "burgers_uniform"
+
+        #    mu1 = Array{Any}(nothing, layers)
+        #    mu2 = Array{Any}(nothing, layers)
+        #    nu1 = Array{Any}(nothing, layers)
+        #    nu2 = Array{Any}(nothing, layers)
+
+        #    for i = 1 : layers
+
+        #        # Solid layers only.
+        #        if blk_type[i] == 1
+        #            
+        #            mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
+        #            mu2[i] = mu1[i] * anelastic_params["mu2_factor"] * 1.0E9
+        #            nu1[i] = zeros(size(mu1[i])) .+ anelastic_params["nu1"]
+        #            nu2[i] = zeros(size(mu1[i])) .+ anelastic_params["nu2"]
+
+        #        end
+
+        #    end
+
+        #    model = Dict("mu1" => mu1,
+        #                 "mu2" => mu2,
+        #                 "nu1" => nu1,
+        #                 "nu2" => nu2)
+
+        else
+
+            println(model_type)
+            error("Not implemented.")
+
         end
 
-        model = Dict("mu1" => mu1,
-                     "mu2" => mu2,
-                     "nu2" => nu2)
-
-    elseif anelastic_params["model_type"] == "burgers_uniform"
-
-        mu1 = Array{Any}(nothing, layers)
-        mu2 = Array{Any}(nothing, layers)
-        nu1 = Array{Any}(nothing, layers)
-        nu2 = Array{Any}(nothing, layers)
-
-        for i = 1 : layers
-
-            # Solid layers only.
-            if blk_type[i] == 1
-                
-                mu1[i] = npzread(joinpath(dir_numpy, string( "mu", i - 1, ".npy")))
-                mu2[i] = mu1[i] * anelastic_params["mu2_factor"] * 1.0E9
-                nu1[i] = zeros(size(mu1[i])) .+ anelastic_params["nu1"]
-                nu2[i] = zeros(size(mu1[i])) .+ anelastic_params["nu2"]
-
-            end
-
-        end
-
-        model = Dict("mu1" => mu1,
-                     "mu2" => mu2,
-                     "nu1" => nu1,
-                     "nu2" => nu2)
-
-    else
-
-        error("Not implemented.")
+        model["mu1"] = mu1
+        model["mu2"] = mu2
+        model["nu1"] = nu1
+        model["nu2"] = nu2
 
     end
 
@@ -371,8 +432,12 @@ function change_model_units(model, layers)
         if var in keys(model)
 
             for i = 1 : layers
+                
+                if ~isnothing(model[var][i])
 
-                model[var][i] = (model[var][i] * scaling)
+                    model[var][i] = (model[var][i] * scaling)
+
+                end
 
             end
 
@@ -385,21 +450,21 @@ function change_model_units(model, layers)
 end
 
 # Gives matrix function for a single element of a specified model.
-function get_element_EP(anelastic_params, temp_A0, temp_A1, ele_params)
+function get_element_EP(model_type, temp_A0, temp_A1, ele_params)
     
     # First we treat rheologies that can be expressed as PEPs (polynomial
     # eigenvalue problems).
-    if (anelastic_params["model_type"] in [0, -2])
+    if (model_type in [0, -2])
 
         # Elastic case.
-        if anelastic_params["model_type"] == 0
+        if model_type == 0
 
             # The elastic case is a polynomial of order 0, in other words
             # a constant; the elastic case is not frequency dependent.
             temp_EP = PEP([temp_A1])
             
         # Kelvin solid.
-        elseif anelastic_params["model_type"] == -2
+        elseif model_type == -2
 
             # Unpack.
             mu1 = ele_params["mu1"]
@@ -417,12 +482,12 @@ function get_element_EP(anelastic_params, temp_A0, temp_A1, ele_params)
 
     # Next, we treat rheologies which can be expressed as REPs (rational
     # eigenvalue problems).
-    elseif anelastic_params["model_type"] in ["maxwell_uniform", "SLS_uniform",
+    elseif model_type in ["maxwell_uniform", "SLS_uniform",
                                               "burgers_uniform", "SLS"]
 
         # Maxwell solid with uniform viscosity.
         #elseif body_type == -1
-        if anelastic_params["model_type"] == "maxwell_uniform"
+        if model_type == "maxwell_uniform"
             
             # Unpack.
             mu1 = ele_params["mu1"]
@@ -435,8 +500,8 @@ function get_element_EP(anelastic_params, temp_A0, temp_A1, ele_params)
             temp_poles = [-mu1 / nu1]
 
         # Standard linear solid.
-        #elseif anelastic_params["model_type"] == 1
-        elseif anelastic_params["model_type"] in ["SLS_uniform", "SLS"]
+        #elseif model_type == 1
+        elseif model_type in ["SLS_uniform", "SLS"]
             
             # Unpack.
             mu1 = ele_params["mu1"]
@@ -456,8 +521,8 @@ function get_element_EP(anelastic_params, temp_A0, temp_A1, ele_params)
             temp_poles = [-(mu1 + mu2) / nu2]
 
         # Burger's solid with uniform viscosities.
-        #elseif anelastic_params["model_type"] == 2
-        elseif anelastic_params["model_type"] == "burgers_uniform" 
+        #elseif model_type == 2
+        elseif model_type == "burgers_uniform" 
 
             # Unpack.
             mu1 = ele_params["mu1"]
@@ -498,7 +563,7 @@ function get_element_EP(anelastic_params, temp_A0, temp_A1, ele_params)
         # 
         temp_EP = REP([temp_A0, temp_A1], temp_roots, temp_poles)
 
-    elseif (anelastic_params["model_type"] in ["extended_burgers_uniform"])
+    elseif (model_type in ["extended_burgers_uniform"])
 
         mineral_params = py_ebm.define_mineral_params()
 

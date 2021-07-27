@@ -658,7 +658,7 @@ def spheroidal_solid_GPmixed(model, invV, invV_P, order, order_P, Dr, Dr_P,
         A, B = combine_spheroidal_matrix_blocks_elastic_GP(A11, A12, A21, A13,
                 A31, A22, A23, A32, A33, B11, AB0, ABuP, B33)
 
-        return A, B, block_len
+        return A, B, Ki, dimension, block_len
     
     ##calculate average of A12 to avoid small error caused by round off
     #A12_average = (A12+A21.T)/2
@@ -759,7 +759,8 @@ def spheroidal_solid_noG_or_G(model, invV, order, Dr, rho, radius, g_switch,
                 A11, A12, A21, A22,
                 B11, B12)
 
-        return A, B, block_len
+        #return A, B, block_len
+        return A, B, Ki, dimension, block_len
     
     return
 
@@ -1254,7 +1255,7 @@ def combine_spheroidal_mass_matrix_blocks(B11, B12):
 
     return B
 
-def fluid_GP_mixedPV(model,invV,invV_p,invV_P,invV_V,order,order_p,order_P,order_V,Dr,Dr_p,Dr_P,Dr_V,rho,radius):
+def spheroidal_fluid_GP_mixedPV(model,invV,invV_p,invV_P,invV_V,order,order_p,order_P,order_V,Dr,Dr_p,Dr_P,Dr_V,rho,radius):
     '''
     Create A and B matrices.
     For the spheroidal modes in a fluid region.
@@ -1422,9 +1423,9 @@ def fluid_GP_mixedPV(model,invV,invV_p,invV_P,invV_V,order,order_p,order_P,order
                     np.hstack((ABup.T, ABvp.T, ABPp.T, B44))))
     block_len = [dimension,dimension_V,dimension_P,dimension_p]
     
-    return A,B,block_len
+    return A, B, Ki, block_len
 
-def fluid_G_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,rho,radius):
+def spheroidal_fluid_G_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,rho,radius):
     '''
     Create A and B matrices.
     For the spheroidal modes in a fluid region.
@@ -1542,7 +1543,7 @@ def fluid_G_mixedV(model,invV,invV_p,invV_V,order,order_p,order_V,Dr,Dr_p,Dr_V,r
                     np.hstack((ABup.T, ABvp.T, B33))))
     block_len = [dimension,dimension_V,dimension_p]
     
-    return A,B,block_len
+    return A, B, Ki, block_len
 
 def spheroidal_fluid_noG_mixedV(model, invV, invV_p, invV_V, order, order_p,
         order_V, Dr, Dr_p, Dr_V):
@@ -1659,7 +1660,7 @@ def spheroidal_fluid_noG_mixedV(model, invV, invV_p, invV_V, order, order_p,
                     np.hstack((ABup.T, ABvp.T, B33))))
     block_len = [dimension,dimension_V,dimension_p]
     
-    return A, B, block_len
+    return A, B, Ki, dimension, dimension_V, dimension_p, block_len
 
 # Toroidal modes. -------------------------------------------------------------
 def toroidal(model, invV, order, Dr, anelastic = False):
